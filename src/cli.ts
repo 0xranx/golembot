@@ -3,8 +3,16 @@
 import { Command } from 'commander';
 import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { resolve } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createAssistant } from './index.js';
+
+// Read version from package.json at runtime
+const __filename_cli = fileURLToPath(import.meta.url);
+const __dirname_cli = dirname(__filename_cli);
+const pkgVersion: string = JSON.parse(
+  readFileSync(join(__dirname_cli, '..', 'package.json'), 'utf-8'),
+).version;
 
 // Auto-load .env from cwd (no dependencies, does not overwrite existing vars)
 try {
@@ -14,20 +22,61 @@ try {
     const eqIdx = trimmed.indexOf('=');
     if (eqIdx < 1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
-    const val = trimmed.slice(eqIdx + 1).trim();
+    let val = trimmed.slice(eqIdx + 1).trim();
+    // Strip surrounding quotes: "value" → value, 'value' → value
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
     if (val && !process.env[key]) process.env[key] = val;
   }
 } catch { /* .env not found — rely on existing env vars */ }
 
 const DIM = '\x1b[2m';
+const YELLOW = '\x1b[33m';
 const RESET = '\x1b[0m';
+
+// ── Spinner (zero-dependency, stderr-only) ──────────────
+class Spinner {
+  private frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  private idx = 0;
+  private timer: ReturnType<typeof setInterval> | null = null;
+
+  start(label = 'Thinking') {
+    if (this.timer) return;
+    this.idx = 0;
+    this.timer = setInterval(() => {
+      const frame = this.frames[this.idx % this.frames.length];
+      process.stderr.write(`\r${DIM}${frame} ${label}${RESET}  `);
+      this.idx++;
+    }, 80);
+  }
+
+  stop() {
+    if (!this.timer) return;
+    clearInterval(this.timer);
+    this.timer = null;
+    process.stderr.write('\r\x1b[K'); // clear line
+  }
+}
 
 const program = new Command();
 
 program
   .name('golembot')
   .description('Local-first AI assistant powered by Coding Agent engines')
-  .version('0.1.0');
+  .version(pkgVersion)
+  .action(() => {
+    console.log(`
+  GolemBot v${pkgVersion}
+  Local-first AI assistant powered by Coding Agent engines
+
+  Quick Start:
+    golembot init          Create a new assistant
+    golembot run           Start chatting (REPL)
+    golembot doctor        Check system prerequisites
+    golembot --help        Show all commands
+`);
+  });
 
 program
   .command('init')
@@ -84,20 +133,31 @@ program
   .option('-d, --dir <dir>', 'assistant directory', '.')
   .option('--api-key <key>', 'Agent API key (CURSOR_API_KEY / ANTHROPIC_API_KEY / OPENROUTER_API_KEY etc.)')
   .action(async (opts) => {
+    const { formatToolCall } = await import('./cli-utils.js');
     const dir = resolve(opts.dir);
     const assistant = createAssistant({ dir, apiKey: opts.apiKey });
 
-    console.log('🤖 GolemBot assistant started (type /reset to reset session, /quit to exit)\n');
+    console.log('GolemBot assistant started (type /help for commands)\n');
+
+    const SLASH_CMDS = ['/help', '/reset', '/quit', '/exit'];
+    const completer = (line: string): [string[], string] => {
+      const hits = SLASH_CMDS.filter(c => c.startsWith(line));
+      return [hits.length ? hits : SLASH_CMDS, line];
+    };
 
     const rl = createInterface({
       input: process.stdin,
       output: process.stdout,
+      historySize: 200,
+      completer,
     });
 
-    const prompt = () => {
+    const spinner = new Spinner();
+
+    const doPrompt = () => {
       rl.question('> ', async (input) => {
         const trimmed = input.trim();
-        if (!trimmed) return prompt();
+        if (!trimmed) return doPrompt();
 
         if (trimmed === '/quit' || trimmed === '/exit') {
           console.log('Bye!');
@@ -105,25 +165,64 @@ program
           process.exit(0);
         }
 
+        if (trimmed === '/help') {
+          console.log(`\n  Available commands:`);
+          console.log(`    /help    Show this help`);
+          console.log(`    /reset   Reset the conversation session`);
+          console.log(`    /quit    Exit the REPL`);
+          console.log(`    """      Start/end multi-line input\n`);
+          return doPrompt();
+        }
+
         if (trimmed === '/reset') {
           await assistant.resetSession();
           console.log('Session reset.\n');
-          return prompt();
+          return doPrompt();
+        }
+
+        // Multi-line input mode
+        let userMessage = trimmed;
+        if (trimmed === '"""') {
+          const lines: string[] = [];
+          const collectLine = (): Promise<string> =>
+            new Promise(r => rl.question('... ', r));
+          while (true) {
+            const line = await collectLine();
+            if (line.trim() === '"""') break;
+            lines.push(line);
+          }
+          userMessage = lines.join('\n');
+          if (!userMessage.trim()) return doPrompt();
         }
 
         try {
-          for await (const event of assistant.chat(trimmed)) {
+          spinner.start();
+          for await (const event of assistant.chat(userMessage)) {
             switch (event.type) {
               case 'text':
+                spinner.stop();
                 process.stdout.write(event.content);
                 break;
               case 'tool_call':
-                process.stdout.write(`\n🔧 ${event.name}\n`);
+                spinner.stop();
+                process.stdout.write(`\n${DIM}🔧 ${formatToolCall(event.name, event.args)}${RESET}\n`);
+                spinner.start();
+                break;
+              case 'tool_result':
+                spinner.stop();
+                process.stdout.write(`${DIM}  ✓ done${RESET}\n`);
+                spinner.start();
+                break;
+              case 'warning':
+                spinner.stop();
+                process.stdout.write(`${YELLOW}⚠ ${event.message}${RESET}\n`);
                 break;
               case 'error':
+                spinner.stop();
                 console.error(`\n❌ ${event.message}`);
                 break;
               case 'done': {
+                spinner.stop();
                 const parts: string[] = [];
                 if (event.durationMs) parts.push(`${(event.durationMs / 1000).toFixed(1)}s`);
                 if (event.costUsd != null) parts.push(`$${event.costUsd.toFixed(4)}`);
@@ -137,15 +236,16 @@ program
             }
           }
         } catch (e: unknown) {
+          spinner.stop();
           console.error(`\n❌ Error: ${(e as Error).message}`);
         }
 
         console.log();
-        prompt();
+        doPrompt();
       });
     };
 
-    prompt();
+    doPrompt();
   });
 
 program
@@ -316,6 +416,15 @@ skill
     const { scanSkills, generateAgentsMd } = await import('./workspace.js');
     const skills = await scanSkills(dir);
     await generateAgentsMd(dir, skills);
+  });
+
+program
+  .command('doctor')
+  .description('Check system prerequisites for running GolemBot')
+  .option('-d, --dir <dir>', 'assistant directory', '.')
+  .action(async (opts) => {
+    const { runDoctor } = await import('./doctor.js');
+    await runDoctor(resolve(opts.dir));
   });
 
 program.parse();

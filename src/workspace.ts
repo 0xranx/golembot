@@ -18,6 +18,7 @@ export interface WecomChannelConfig {
   secret: string;
   token: string;
   encodingAESKey: string;
+  port?: number;
 }
 
 export interface ChannelsConfig {
@@ -36,6 +37,7 @@ export interface GolemConfig {
   name: string;
   engine: string;
   model?: string;
+  skipPermissions?: boolean;
   channels?: ChannelsConfig;
   gateway?: GatewayConfig;
 }
@@ -83,6 +85,9 @@ export async function loadConfig(dir: string): Promise<GolemConfig> {
     model: typeof doc.model === 'string' ? doc.model : undefined,
   };
 
+  if (typeof doc.skipPermissions === 'boolean') {
+    config.skipPermissions = doc.skipPermissions;
+  }
   if (doc.channels && typeof doc.channels === 'object') {
     config.channels = resolveEnvPlaceholders(doc.channels as ChannelsConfig);
   }
@@ -100,6 +105,7 @@ export async function writeConfig(dir: string, config: GolemConfig): Promise<voi
     engine: config.engine,
   };
   if (config.model) content.model = config.model;
+  if (typeof config.skipPermissions === 'boolean') content.skipPermissions = config.skipPermissions;
   if (config.channels) content.channels = config.channels;
   if (config.gateway) content.gateway = config.gateway;
   await writeFile(configPath, yaml.dump(content, { lineWidth: -1 }), 'utf-8');

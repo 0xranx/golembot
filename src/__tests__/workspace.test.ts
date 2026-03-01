@@ -50,6 +50,18 @@ describe('workspace', () => {
       await writeFile(join(dir, 'golem.yaml'), '');
       await expect(loadConfig(dir)).rejects.toThrow();
     });
+
+    it('reads skipPermissions field', async () => {
+      await writeFile(join(dir, 'golem.yaml'), 'name: bot\nengine: cursor\nskipPermissions: false\n');
+      const cfg = await loadConfig(dir);
+      expect(cfg.skipPermissions).toBe(false);
+    });
+
+    it('skipPermissions defaults to undefined when not set', async () => {
+      await writeFile(join(dir, 'golem.yaml'), 'name: bot\nengine: cursor\n');
+      const cfg = await loadConfig(dir);
+      expect(cfg.skipPermissions).toBeUndefined();
+    });
   });
 
   // ── writeConfig ───────────────────────────────────
@@ -65,6 +77,18 @@ describe('workspace', () => {
       await writeConfig(dir, { name: 'test', engine: 'cursor' });
       const raw = await readFile(join(dir, 'golem.yaml'), 'utf-8');
       expect(raw).not.toContain('model');
+    });
+
+    it('round-trips skipPermissions', async () => {
+      await writeConfig(dir, { name: 'test', engine: 'cursor', skipPermissions: false });
+      const cfg = await loadConfig(dir);
+      expect(cfg.skipPermissions).toBe(false);
+    });
+
+    it('omits skipPermissions when undefined', async () => {
+      await writeConfig(dir, { name: 'test', engine: 'cursor' });
+      const raw = await readFile(join(dir, 'golem.yaml'), 'utf-8');
+      expect(raw).not.toContain('skipPermissions');
     });
   });
 

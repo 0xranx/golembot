@@ -138,7 +138,7 @@ export class WecomAdapter implements ChannelAdapter {
       res.end();
     });
 
-    const port = 9000;
+    const port = this.config.port ?? 9000;
     this.server.listen(port, () => {
       console.log(`[wecom] Webhook server started on port ${port}, callback path: /wecom`);
     });

@@ -98,6 +98,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
       sessionId,
       model,
       apiKey,
+      skipPermissions: config.skipPermissions,
     })) {
       if (event.type === 'done' && event.sessionId) {
         lastSessionId = event.sessionId;
@@ -119,6 +120,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
         errorMessage.toLowerCase().includes('session');
       if (isResumeFail) {
         await clearSession(dir, sessionKey);
+        yield { type: 'warning' as const, message: 'Session could not be resumed. Starting fresh conversation.' };
         yield* doChat(message, sessionKey, true);
       }
     }

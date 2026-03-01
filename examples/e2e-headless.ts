@@ -36,7 +36,10 @@ try {
     const eqIdx = trimmed.indexOf('=');
     if (eqIdx < 1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
-    const val = trimmed.slice(eqIdx + 1).trim();
+    let val = trimmed.slice(eqIdx + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
     if (val && !process.env[key]) process.env[key] = val;
   }
 } catch { /* .env not found, rely on env vars */ }
@@ -257,6 +260,8 @@ async function main() {
         if (event.type === 'text') {
           process.stdout.write(`${DIM}${event.content}${RESET}`);
           fullText += event.content;
+        } else if (event.type === 'warning') {
+          console.log(`\n  ${YELLOW}⚠ ${event.message}${RESET}`);
         } else if (event.type === 'done') {
           durationMs = event.durationMs;
           const durStr = durationMs != null ? ` ${(durationMs / 1000).toFixed(1)}s` : '';

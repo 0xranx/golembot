@@ -4,6 +4,32 @@ import { createGolemServer, type ServerOpts } from './server.js';
 import { loadConfig, type GolemConfig, type ChannelsConfig } from './workspace.js';
 import { buildSessionKey, stripMention, type ChannelAdapter, type ChannelMessage } from './channel.js';
 
+// ── IM channel message limits ───────────────────────────
+const CHANNEL_LIMITS: Record<string, number> = {
+  feishu: 4000,
+  dingtalk: 4000,
+  wecom: 2048,
+};
+
+export function splitMessage(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > maxLen) {
+    let splitIdx = remaining.lastIndexOf('\n\n', maxLen);
+    if (splitIdx <= 0) splitIdx = remaining.lastIndexOf('\n', maxLen);
+    if (splitIdx <= 0) splitIdx = remaining.lastIndexOf(' ', maxLen);
+    if (splitIdx <= 0) splitIdx = maxLen;
+
+    chunks.push(remaining.slice(0, splitIdx));
+    remaining = remaining.slice(splitIdx).replace(/^\n+/, '');
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
+
 interface GatewayOpts {
   dir?: string;
   port?: number;
@@ -90,6 +116,8 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
             for await (const event of assistant.chat(fullText, { sessionKey })) {
               if (event.type === 'text') {
                 reply += event.content;
+              } else if (event.type === 'warning') {
+                log(verbose, `[${type}] warning: ${event.message}`);
               } else if (event.type === 'error') {
                 hasError = true;
                 console.error(`[${type}] Engine error: ${event.message}`);
@@ -101,8 +129,12 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
             }
 
             if (reply.trim()) {
-              await adapter.reply(msg, reply.trim());
-              log(verbose, `[${type}] replied to ${msg.senderName || msg.senderId}: "${reply.trim().slice(0, 80)}..."`);
+              const maxLen = CHANNEL_LIMITS[type] ?? 4000;
+              const chunks = splitMessage(reply.trim(), maxLen);
+              for (const chunk of chunks) {
+                await adapter.reply(msg, chunk);
+              }
+              log(verbose, `[${type}] replied to ${msg.senderName || msg.senderId}: "${reply.trim().slice(0, 80)}..." (${chunks.length} chunk(s))`);
             }
           } catch (e) {
             console.error(`[${type}] Failed to process message:`, e);

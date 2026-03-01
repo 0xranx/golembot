@@ -8,6 +8,7 @@ export type StreamEvent =
   | { type: 'text'; content: string }
   | { type: 'tool_call'; name: string; args: string }
   | { type: 'tool_result'; content: string }
+  | { type: 'warning'; message: string }
   | { type: 'error'; message: string }
   | { type: 'done'; sessionId?: string; durationMs?: number; costUsd?: number; numTurns?: number };
 
@@ -17,6 +18,7 @@ export interface InvokeOpts {
   sessionId?: string;
   model?: string;
   apiKey?: string;
+  skipPermissions?: boolean;
 }
 
 export interface AgentEngine {
@@ -368,6 +370,8 @@ export function parseClaudeStreamLine(line: string): StreamEvent[] {
 
 // ── ClaudeCodeEngine ────────────────────────────────────
 
+let _warnedSkipPermissions = false;
+
 export async function injectClaudeSkills(
   workspace: string,
   skillPaths: string[],
@@ -399,21 +403,17 @@ export async function injectClaudeSkills(
     }
   }
 
-  const skillList = skillDescriptions && skillDescriptions.length > 0
-    ? skillDescriptions.map(s => `- ${s.name}: ${s.description}`).join('\n')
-    : '- (no skills installed)';
-
-  const claudeMd = `# Assistant Context (managed by Golem)
-
-## Installed Skills
-${skillList}
-
-## Conventions
-- Write persistent information to notes.md
-- Save generated reports/files in the appropriate directory
-`;
-
-  await writeFile(join(workspace, 'CLAUDE.md'), claudeMd, 'utf-8');
+  // Symlink CLAUDE.md → AGENTS.md to avoid maintaining duplicate content
+  const claudeMdPath = join(workspace, 'CLAUDE.md');
+  try {
+    const existing = await lstat(claudeMdPath).catch(() => null);
+    if (existing) await unlink(claudeMdPath);
+  } catch { /* doesn't exist yet */ }
+  try {
+    await symlink('AGENTS.md', claudeMdPath);
+  } catch (e: unknown) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+  }
 }
 
 function findClaudeBin(): string {
@@ -437,8 +437,17 @@ export class ClaudeCodeEngine implements AgentEngine {
       '-p', prompt,
       '--output-format', 'stream-json',
       '--verbose',
-      '--dangerously-skip-permissions',
     ];
+    if (opts.skipPermissions !== false) {
+      args.push('--dangerously-skip-permissions');
+      if (!_warnedSkipPermissions) {
+        _warnedSkipPermissions = true;
+        process.stderr.write(
+          '\x1b[33mWarning: running Claude Code with --dangerously-skip-permissions. ' +
+          'Set skipPermissions: false in golem.yaml to require manual approval.\x1b[0m\n',
+        );
+      }
+    }
     if (opts.sessionId) args.push('--resume', opts.sessionId);
     if (opts.model) args.push('--model', opts.model);
 
@@ -447,6 +456,9 @@ export class ClaudeCodeEngine implements AgentEngine {
       PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
     };
     if (opts.apiKey) env.ANTHROPIC_API_KEY = opts.apiKey;
+    // Allow spawning Claude Code from within a Claude Code session
+    delete env.CLAUDECODE;
+    delete env.CLAUDE_CODE_ENTRYPOINT;
 
     const child = spawn(claudeBin, args, {
       cwd: opts.workspace,

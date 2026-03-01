@@ -37,12 +37,24 @@ describe('CLI integration', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  // ── golembot (bare command — welcome banner) ────
+
+  it('shows welcome banner when invoked without subcommand', async () => {
+    const { stdout, exitCode } = await runCli([]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('GolemBot');
+    expect(stdout).toContain('Quick Start');
+    expect(stdout).toMatch(/v\d+\.\d+\.\d+/);
+  });
+
   // ── golembot --version ────────────────────────
 
-  it('shows version', async () => {
+  it('shows version from package.json', async () => {
+    const { readFileSync } = await import('node:fs');
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'));
     const { stdout, exitCode } = await runCli(['--version']);
     expect(exitCode).toBe(0);
-    expect(stdout.trim()).toMatch(/\d+\.\d+\.\d+/);
+    expect(stdout.trim()).toBe(pkg.version);
   });
 
   // ── golembot --help ───────────────────────────
@@ -57,6 +69,17 @@ describe('CLI integration', () => {
     expect(stdout).toContain('onboard');
     expect(stdout).toContain('status');
     expect(stdout).toContain('skill');
+    expect(stdout).toContain('doctor');
+  });
+
+  // ── golembot doctor ───────────────────────────
+
+  it('doctor runs and reports checks', async () => {
+    await runCli(['init', '-e', 'cursor', '-n', 'doc-bot'], dir);
+    const { stdout, exitCode } = await runCli(['doctor', '-d', dir]);
+    // May exit 0 or 1 depending on env, but should produce output
+    expect(stdout).toContain('Node.js');
+    expect(stdout).toContain('golem.yaml');
   });
 
   // ── golembot init (non-interactive) ───────────

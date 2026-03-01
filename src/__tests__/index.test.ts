@@ -282,7 +282,7 @@ describe('createAssistant', () => {
   // ── resume auto-fallback ──────────────────────────
 
   describe('resume auto-fallback', () => {
-    it('resume fails → clears session and retries', async () => {
+    it('resume fails → emits warning, clears session and retries', async () => {
       const assistant = createAssistant({ dir });
       const { saveSession } = await import('../session.js');
       await saveSession(dir, 'expired-session');
@@ -293,8 +293,45 @@ describe('createAssistant', () => {
       for await (const evt of assistant.chat('Resume conversation')) events.push(evt);
 
       expect(events.some(e => e.type === 'error')).toBe(true);
+      expect(events.some(e => e.type === 'warning' && e.message.includes('could not be resumed'))).toBe(true);
       expect(events.some(e => e.type === 'text' && e.content === 'New session started')).toBe(true);
       expect(events.some(e => e.type === 'done' && e.sessionId === 'fresh-session-999')).toBe(true);
+    });
+  });
+
+  // ── skipPermissions passthrough ──────────────────────
+
+  describe('skipPermissions passthrough', () => {
+    it('passes skipPermissions from config to engine', async () => {
+      await writeFile(join(dir, 'golem.yaml'), 'name: test-bot\nengine: cursor\nskipPermissions: false\n');
+
+      let capturedSkipPermissions: boolean | undefined;
+      mockedCreateEngine.mockReturnValue({
+        async *invoke(_p: string, opts: InvokeOpts) {
+          capturedSkipPermissions = opts.skipPermissions;
+          yield { type: 'done', sessionId: 'sess-sp' } as StreamEvent;
+        },
+      });
+
+      const assistant = createAssistant({ dir });
+      for await (const _ of assistant.chat('hello')) {}
+
+      expect(capturedSkipPermissions).toBe(false);
+    });
+
+    it('skipPermissions undefined when not in config', async () => {
+      let capturedSkipPermissions: boolean | undefined = true; // sentinel
+      mockedCreateEngine.mockReturnValue({
+        async *invoke(_p: string, opts: InvokeOpts) {
+          capturedSkipPermissions = opts.skipPermissions;
+          yield { type: 'done', sessionId: 'sess-sp2' } as StreamEvent;
+        },
+      });
+
+      const assistant = createAssistant({ dir });
+      for await (const _ of assistant.chat('hello')) {}
+
+      expect(capturedSkipPermissions).toBeUndefined();
     });
   });
 

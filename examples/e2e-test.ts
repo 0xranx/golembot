@@ -31,7 +31,10 @@ try {
     const eqIdx = trimmed.indexOf('=');
     if (eqIdx < 1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
-    const val = trimmed.slice(eqIdx + 1).trim();
+    let val = trimmed.slice(eqIdx + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
     if (val && !process.env[key]) process.env[key] = val;
   }
 } catch { /* .env not found, rely on env vars */ }
@@ -79,6 +82,9 @@ async function collectChat(
         break;
       case 'tool_result':
         console.log(`  ${DIM}   ↳ result${RESET}`);
+        break;
+      case 'warning':
+        console.log(`\n  ${YELLOW}⚠ ${event.message}${RESET}`);
         break;
       case 'error':
         console.log(`\n  ${RED}❌ ${event.message}${RESET}`);

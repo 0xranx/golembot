@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir, readFile, lstat, readlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generateAgentsMd, initWorkspace, writeConfig, loadConfig, type GolemConfig } from '../workspace.js';
@@ -110,7 +110,7 @@ describe('generated file consistency', () => {
   // ── CLAUDE.md generation ──────────────────────
 
   describe('CLAUDE.md', () => {
-    it('generates correct structure with skills', async () => {
+    it('creates symlink to AGENTS.md', async () => {
       const workspace = dir;
       await mkdir(join(workspace, '.claude', 'skills'), { recursive: true });
       await injectClaudeSkills(workspace, [], [
@@ -118,21 +118,20 @@ describe('generated file consistency', () => {
         { name: 'faq', description: 'FAQ support' },
       ]);
 
-      const claudeMd = await readFile(join(workspace, 'CLAUDE.md'), 'utf-8');
-      expect(claudeMd).toMatch(/^# Assistant Context/m);
-      expect(claudeMd).toContain('managed by Golem');
-      expect(claudeMd).toContain('general: General assistant');
-      expect(claudeMd).toContain('faq: FAQ support');
-      expect(claudeMd).toMatch(/^## Conventions/m);
+      const claudeMdPath = join(workspace, 'CLAUDE.md');
+      const s = await lstat(claudeMdPath);
+      expect(s.isSymbolicLink()).toBe(true);
+      const target = await readlink(claudeMdPath);
+      expect(target).toBe('AGENTS.md');
     });
 
-    it('generates fallback when no skills', async () => {
+    it('symlink works with empty skill list', async () => {
       const workspace = dir;
       await mkdir(join(workspace, '.claude', 'skills'), { recursive: true });
       await injectClaudeSkills(workspace, [], []);
 
-      const claudeMd = await readFile(join(workspace, 'CLAUDE.md'), 'utf-8');
-      expect(claudeMd).toContain('no skills installed');
+      const s = await lstat(join(workspace, 'CLAUDE.md'));
+      expect(s.isSymbolicLink()).toBe(true);
     });
   });
 

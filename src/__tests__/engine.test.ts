@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, readlink, readdir, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readlink, readdir, mkdir, writeFile, readFile, lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseStreamLine, stripAnsi, injectSkills, parseClaudeStreamLine, injectClaudeSkills, parseOpenCodeStreamLine, resolveOpenCodeEnv, injectOpenCodeSkills, ensureOpenCodeConfig, createEngine, CursorEngine, ClaudeCodeEngine, OpenCodeEngine } from '../engine.js';
@@ -706,23 +706,27 @@ describe('injectClaudeSkills', () => {
     expect(target1).toBe(skill1);
   });
 
-  it('generates CLAUDE.md in workspace root', async () => {
+  it('creates CLAUDE.md as symlink to AGENTS.md', async () => {
     await injectClaudeSkills(workspace, [], [
       { name: 'general', description: 'General assistant' },
       { name: 'devops', description: 'DevOps operations' },
     ]);
 
-    const claudeMd = await readFile(join(workspace, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).toContain('general: General assistant');
-    expect(claudeMd).toContain('devops: DevOps operations');
-    expect(claudeMd).toContain('managed by Golem');
+    const claudeMdPath = join(workspace, 'CLAUDE.md');
+    const s = await lstat(claudeMdPath);
+    expect(s.isSymbolicLink()).toBe(true);
+    const target = await readlink(claudeMdPath);
+    expect(target).toBe('AGENTS.md');
   });
 
-  it('generates CLAUDE.md with empty skill list', async () => {
+  it('recreates CLAUDE.md symlink on re-inject', async () => {
+    // First inject
+    await injectClaudeSkills(workspace, []);
+    // Second inject should not throw
     await injectClaudeSkills(workspace, []);
 
-    const claudeMd = await readFile(join(workspace, 'CLAUDE.md'), 'utf-8');
-    expect(claudeMd).toContain('no skills installed');
+    const s = await lstat(join(workspace, 'CLAUDE.md'));
+    expect(s.isSymbolicLink()).toBe(true);
   });
 
   it('cleans old symlinks before re-injecting', async () => {

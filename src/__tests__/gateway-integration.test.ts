@@ -43,6 +43,49 @@ function createMockAdapter(name: string): ChannelAdapter & {
   };
 }
 
+// ── splitMessage tests ──────────────────────────────
+
+describe('splitMessage', () => {
+  // Import dynamically since gateway.ts has side-effect-free exports
+  let splitMessage: (text: string, maxLen: number) => string[];
+
+  beforeEach(async () => {
+    const mod = await import('../gateway.js');
+    splitMessage = mod.splitMessage;
+  });
+
+  it('returns single chunk when text fits', () => {
+    expect(splitMessage('short text', 100)).toEqual(['short text']);
+  });
+
+  it('splits at paragraph boundary', () => {
+    const text = 'Part one.\n\nPart two.\n\nPart three.';
+    const chunks = splitMessage(text, 20);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(c => c.length <= 20)).toBe(true);
+  });
+
+  it('splits at newline when no paragraph boundary', () => {
+    const text = 'Line one\nLine two\nLine three\nLine four';
+    const chunks = splitMessage(text, 20);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every(c => c.length <= 20)).toBe(true);
+  });
+
+  it('hard-cuts when no natural boundary', () => {
+    const text = 'x'.repeat(50);
+    const chunks = splitMessage(text, 20);
+    expect(chunks.length).toBe(3);
+    expect(chunks[0].length).toBe(20);
+    expect(chunks[1].length).toBe(20);
+    expect(chunks[2].length).toBe(10);
+  });
+
+  it('handles empty string', () => {
+    expect(splitMessage('', 100)).toEqual(['']);
+  });
+});
+
 describe('gateway integration', () => {
   // ── Message routing logic ─────────────────────
 
