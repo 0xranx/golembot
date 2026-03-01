@@ -1,10 +1,10 @@
-# Golem — Local-First AI Assistant Platform
+# GolemBot — Local-First AI Assistant Platform
 
-> **Coding Agent = the soul, Golem = the body of clay.**
+> **Coding Agent = the soul, GolemBot = the body of clay.**
 >
 > Use the Coding Agents you already have (Cursor / Claude Code / OpenCode) as the brain — so they can do more than just chat, they can actually get things done.
 
-Golem is a TypeScript library + CLI that wraps Coding Agent CLIs into a unified AI assistant engine. One command spins up an intelligent assistant connected to Feishu, DingTalk, or WeCom — running locally, fully transparent, and engine-swappable.
+GolemBot is a TypeScript library + CLI that wraps Coding Agent CLIs into a unified AI assistant engine. One command spins up an intelligent assistant connected to Feishu, DingTalk, or WeCom — running locally, fully transparent, and engine-swappable.
 
 ## Features
 
@@ -21,25 +21,25 @@ Golem is a TypeScript library + CLI that wraps Coding Agent CLIs into a unified 
 
 ```bash
 # Install
-npm install -g golem-ai
+npm install -g golembot
 
 # Guided setup (recommended)
 mkdir my-assistant && cd my-assistant
-golem-ai onboard
+golembot onboard
 
 # Or initialize manually
-golem-ai init
+golembot init
 
 # Start the gateway (IM channels + HTTP service)
-golem-ai gateway
+golembot gateway
 ```
 
 Try it in 30 seconds:
 
 ```bash
 mkdir my-bot && cd my-bot
-golem-ai init -e claude-code -n my-bot
-golem-ai run
+golembot init -e claude-code -n my-bot
+golembot run
 # > Write a Python script to calculate file sizes in the current directory
 ```
 
@@ -81,16 +81,16 @@ The exposed `StreamEvent` interface is identical across engines — switching en
 ### Option 1: CLI (fastest way to get started)
 
 ```bash
-golem-ai init         # Initialize an assistant
-golem-ai run          # REPL conversation
-golem-ai gateway      # Start IM + HTTP service
-golem-ai onboard      # Guided setup
+golembot init         # Initialize an assistant
+golembot run          # REPL conversation
+golembot gateway      # Start IM + HTTP service
+golembot onboard      # Guided setup
 ```
 
 ### Option 2: Library Import
 
 ```typescript
-import { createAssistant } from 'golem-ai';
+import { createAssistant } from 'golembot';
 
 const assistant = createAssistant({ dir: './my-agent' });
 
@@ -102,7 +102,7 @@ for await (const event of assistant.chat('Analyze the competitor data')) {
 ### Option 3: Embed Anywhere
 
 ```typescript
-import { createAssistant } from 'golem-ai';
+import { createAssistant } from 'golembot';
 const bot = createAssistant({ dir: './slack-bot' });
 
 slackApp.message(async ({ message, say }) => {
@@ -168,18 +168,18 @@ Or use a Dockerfile:
 
 ```dockerfile
 FROM node:22-slim
-RUN npm install -g golem-ai
+RUN npm install -g golembot
 WORKDIR /assistant
 COPY . .
 EXPOSE 3000
-CMD ["golem-ai", "gateway"]
+CMD ["golembot", "gateway"]
 ```
 
 ## Development
 
 ```bash
-git clone https://github.com/user/golem-ai.git
-cd golem-ai
+git clone https://github.com/0xranx/golembot.git
+cd golembot
 pnpm install
 pnpm run build
 pnpm run test          # Unit tests

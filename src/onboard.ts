@@ -19,7 +19,7 @@ const TEMPLATES: TemplateInfo[] = [
 ];
 
 export function generateEnvExample(engine: string, channels: string[]): string {
-  const lines: string[] = ['# Golem environment variables', ''];
+  const lines: string[] = ['# GolemBot environment variables', ''];
 
   lines.push('# AI Engine API Key');
   if (engine === 'claude-code') {
@@ -115,7 +115,7 @@ export async function runOnboard(opts: { dir?: string; template?: string } = {})
   const inquirer = await import('inquirer');
   const dir = resolve(opts.dir || '.');
 
-  console.log('\n🧙 Golem Setup Wizard\n');
+  console.log('\n🧙 GolemBot Setup Wizard\n');
 
   // Step 1: Choose engine
   const { engine } = await inquirer.default.prompt([{
@@ -256,7 +256,7 @@ export async function runOnboard(opts: { dir?: string; template?: string } = {})
     try {
       await stat(envPath);
       const existing = await readFile(envPath, 'utf-8');
-      await writeFile(envPath, existing.trimEnd() + '\n\n# Golem onboard\n' + envLines.join('\n') + '\n', 'utf-8');
+      await writeFile(envPath, existing.trimEnd() + '\n\n# GolemBot onboard\n' + envLines.join('\n') + '\n', 'utf-8');
     } catch {
       await writeFile(envPath, envLines.join('\n') + '\n', 'utf-8');
     }
@@ -294,7 +294,7 @@ export async function runOnboard(opts: { dir?: string; template?: string } = {})
 
   // Summary
   console.log('\n' + '─'.repeat(40));
-  console.log(`\n✅ Golem assistant '${name}' configured!\n`);
+  console.log(`\n✅ GolemBot assistant '${name}' configured!\n`);
   console.log(`   Engine:    ${engine}`);
   if (channels.length > 0) {
     console.log(`   Channels:  ${channels.join(', ')}`);
@@ -317,6 +317,6 @@ export async function runOnboard(opts: { dir?: string; template?: string } = {})
     const { startGateway } = await import('./gateway.js');
     await startGateway({ dir, verbose: true });
   } else {
-    console.log('\nRun: golem-ai gateway\n');
+    console.log('\nRun: golembot gateway\n');
   }
 }

@@ -1,12 +1,12 @@
 /**
- * Golem E2E — Cursor engine headless deployment verification
+ * GolemBot E2E — Cursor engine headless deployment verification
  *
  * Simulates: On cloud servers (Alibaba ECS / AWS EC2 etc),
  * no Cursor IDE, no `agent login`, fully API Key auth,
  * exposing AI capabilities as HTTP service.
  *
- * This is Golem's typical production deployment:
- *   CURSOR_API_KEY=xxx GOLEM_TOKEN=secret golem-ai serve --port 3000
+ * This is GolemBot's typical production deployment:
+ *   CURSOR_API_KEY=xxx GOLEM_TOKEN=secret golembot serve --port 3000
  *
  * Prerequisites:
  *   - CURSOR_API_KEY configured (.env or env var, skip if missing)
@@ -192,8 +192,8 @@ async function main() {
 
   console.log(`${CYAN}${BOLD}`);
   console.log(`╔══════════════════════════════════════════════════════════════╗`);
-  console.log(`║  Golem E2E — Headless deployment verification               ║`);
-  console.log(`║  Simulate: Golem deployed via API Key on cloud server       ║`);
+  console.log(`║  GolemBot E2E — Headless deployment verification               ║`);
+  console.log(`║  Simulate: GolemBot deployed via API Key on cloud server       ║`);
   console.log(`╚══════════════════════════════════════════════════════════════╝${RESET}`);
 
   info(`CURSOR_API_KEY: ${apiKey.slice(0, 8)}...(hidden)`);
@@ -215,7 +215,7 @@ async function main() {
     console.log(`${MAGENTA}${BOLD}  PART 1: Init deployment — apiKey auth + Skill config${RESET}`);
     console.log(`${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
 
-    step('Init — deploy Golem with createAssistant({ apiKey })');
+    step('Init — deploy GolemBot with createAssistant({ apiKey })');
 
     const assistant = createAssistant({ dir: workDir, apiKey });
 
@@ -278,11 +278,11 @@ async function main() {
     }
 
     // ╔═══════════════════════════════════════════════════════╗
-    // ║  PART 3: HTTP service — simulate golem serve prod    ║
+    // ║  PART 3: HTTP service — simulate golembot serve prod   ║
     // ╚═══════════════════════════════════════════════════════╝
 
     console.log(`\n${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
-    console.log(`${MAGENTA}${BOLD}  PART 3: HTTP service — simulate golem serve production${RESET}`);
+    console.log(`${MAGENTA}${BOLD}  PART 3: HTTP service — simulate golembot serve production${RESET}`);
     console.log(`${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
 
     step('Start HTTP service (Bearer token protected)');
@@ -341,7 +341,7 @@ async function main() {
     step('Ops scenario — analyze app log via HTTP');
 
     try {
-      console.log(`  ${YELLOW}Simulate: monitoring alert → call Golem HTTP API to analyze log${RESET}\n`);
+      console.log(`  ${YELLOW}Simulate: monitoring alert → call GolemBot HTTP API to analyze log${RESET}\n`);
 
       const res = await httpChat(
         port,
@@ -367,7 +367,7 @@ async function main() {
     step('Ops scenario — analyze CSV monitor data and identify bottlenecks');
 
     try {
-      console.log(`  ${YELLOW}Simulate: cron hourly check calls Golem for inspection${RESET}\n`);
+      console.log(`  ${YELLOW}Simulate: cron hourly check calls GolemBot for inspection${RESET}\n`);
 
       const res = await httpChat(
         port,

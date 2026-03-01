@@ -1,5 +1,5 @@
 /**
- * Golem E2E Test — OpenCode engine full real-world scenario verification
+ * GolemBot E2E Test — OpenCode engine full real-world scenario verification
  *
  * Verifies OpenCode engine in real user scenarios:
  *   PART 1: Core engine (chat, file I/O, Skill script, memory, metadata)
@@ -354,7 +354,7 @@ const defaultApiKey = process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_AP
 
 console.log(`${CYAN}${BOLD}`);
 console.log(`╔══════════════════════════════════════════════════════════════╗`);
-console.log(`║  Golem E2E — OpenCode engine full real scenario verification        ║`);
+console.log(`║  GolemBot E2E — OpenCode engine full real scenario verification        ║`);
 console.log(`╚══════════════════════════════════════════════════════════════╝${RESET}`);
 
 info(`OpenCode CLI: ${opencodeBin}`);
@@ -621,7 +621,7 @@ try {
   }
 
   // ╔════════════════════════════════════════════════════════╗
-  // ║  PART 3: HTTP service — golem serve end-to-end        ║
+  // ║  PART 3: HTTP service — golembot serve end-to-end      ║
   // ╚════════════════════════════════════════════════════════╝
 
   console.log(`\n${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
@@ -713,7 +713,7 @@ try {
 
   console.log(`\n  ${color}${BOLD}Result: ${passed}/${total} passed (${pct}%)${RESET}`);
   console.log(`\n${DIM}  Core verified:`);
-  console.log(`    OpenCode engine × Golem framework = full Agent experience`);
+  console.log(`    OpenCode engine × GolemBot framework = full Agent experience`);
   console.log(`    File I/O + Skill script + memory + IM Bot + CI/CD + HTTP service${RESET}\n`);
 
   process.exit(passed === total ? 0 : 1);

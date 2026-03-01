@@ -1,5 +1,5 @@
 /**
- * Golem E2E Test — Cursor engine full real-world scenario verification
+ * GolemBot E2E Test — Cursor engine full real-world scenario verification
  *
  * Core narrative: Your Coding Agent is no longer just a code-writing tool —
  * The same createAssistant() API can directly become an IM bot,
@@ -372,7 +372,7 @@ const PRODUCT_FAQ = `# Product FAQ
 async function main() {
   console.log(`${CYAN}${BOLD}`);
   console.log(`╔════════════════════════════════════════════════════════════════╗`);
-  console.log(`║  Golem E2E — Your Coding Agent, Everywhere                   ║`);
+  console.log(`║  GolemBot E2E — Your Coding Agent, Everywhere                   ║`);
   console.log(`║  Same createAssistant() → IM bot / CI review / data pipeline ║`);
   console.log(`╚════════════════════════════════════════════════════════════════╝${RESET}`);
 
@@ -391,7 +391,7 @@ async function main() {
 
     // ╔════════════════════════════════════════════════════════╗
     // ║  PART 1: Core engine capability verification         ║
-    // ║  Prove Golem fully exposes Coding Agent capabilities  ║
+    // ║  Prove GolemBot fully exposes Coding Agent capabilities  ║
     // ╚════════════════════════════════════════════════════════╝
 
     console.log(`\n${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
@@ -765,12 +765,12 @@ async function main() {
     }
 
     // ╔════════════════════════════════════════════════════════╗
-    // ║  PART 4: HTTP service — golem serve end-to-end        ║
-    // ║  Verify IM webhook can hit Golem HTTP service          ║
+    // ║  PART 4: HTTP service — golembot serve end-to-end     ║
+    // ║  Verify IM webhook can hit GolemBot HTTP service       ║
     // ╚════════════════════════════════════════════════════════╝
 
     console.log(`\n${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
-    console.log(`${MAGENTA}${BOLD}  PART 4: HTTP service — golem serve + multi-user sessionKey${RESET}`);
+    console.log(`${MAGENTA}${BOLD}  PART 4: HTTP service — golembot serve + multi-user sessionKey${RESET}`);
     console.log(`${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
 
     const httpDir = await mkdtemp(join(tmpdir(), 'golem-http-'));
@@ -918,7 +918,7 @@ async function main() {
     console.log(`\n  ${color}${BOLD}Result: ${passed}/${total} passed (${pct}%)${RESET}`);
     console.log(`\n${DIM}  Core narrative verified:`);
     console.log(`    createAssistant({ dir })              → library import, embed in any scenario`);
-    console.log(`    golem serve --port 3000               → HTTP service, any webhook direct`);
+    console.log(`    golembot serve --port 3000            → HTTP service, any webhook direct`);
     console.log(`    chat(msg, { sessionKey: "user:X" })   → multi-user isolation, no extra config`);
     console.log(`    Same engine × different Skills × different integrations = infinite possibilities.${RESET}\n`);
 

@@ -1,21 +1,21 @@
-# Golem Architecture Design
+# GolemBot Architecture Design
 
-> **Why "Golem"?** A Golem is a body shaped from clay in legend — write a true name (shem) on it and it comes to life.
+> **Why "GolemBot"?** A Golem is a body shaped from clay in legend — write a true name (shem) on it and it comes to life.
 > Our project works the same way: inject a Coding Agent as the soul into a directory, and it becomes your AI assistant.
 
-> This document is the core architecture reference for the Golem project. All implementations should stay consistent with this document.
+> This document is the core architecture reference for the GolemBot project. All implementations should stay consistent with this document.
 > When implementation conflicts with the architecture, or changes and optimizations are needed, **this document must be updated first**, before modifying code.
 
 ## 1. Product Positioning
 
-**Golem is a local-first personal AI assistant — it uses the Coding Agent you already have as its brain, enabling it to not just chat, but actually get things done.**
+**GolemBot is a local-first personal AI assistant — it uses the Coding Agent you already have as its brain, enabling it to not just chat, but actually get things done.**
 
 The use case aligns with OpenClaw (personal assistant, multi-channel access, skill extensions), with the core difference being the brain:
 
 - OpenClaw: directly calls LLM APIs + custom tool system → the brain is a stateless API
-- Golem: uses Coding Agent CLI as the engine → **the brain is a stateful Coding Agent that lives inside a directory**
+- GolemBot: uses Coding Agent CLI as the engine → **the brain is a stateful Coding Agent that lives inside a directory**
 
-This leads to a key experience difference: **OpenClaw's assistant is global, while Golem's assistant is directory-bound.** Because a Coding Agent naturally works within a directory — skills, scripts, memory, and work artifacts all live inside it.
+This leads to a key experience difference: **OpenClaw's assistant is global, while GolemBot's assistant is directory-bound.** Because a Coding Agent naturally works within a directory — skills, scripts, memory, and work artifacts all live inside it.
 
 Unique advantages:
 
@@ -26,9 +26,9 @@ Unique advantages:
 
 ## 2. Core Philosophy
 
-**Coding Agent = Soul, Golem = Body of Clay.**
+**Coding Agent = Soul, GolemBot = Body of Clay.**
 
-Golem does not implement LLM reasoning, tool invocation, or context management. It only does three things:
+GolemBot does not implement LLM reasoning, tool invocation, or context management. It only does three things:
 
 1. Prepare the workspace (inject skills)
 2. Invoke the Coding Agent CLI (pass in the user's message)
@@ -38,10 +38,10 @@ All the complex work (decision-making, planning, execution) is delegated to the 
 
 ### Library-First, CLI Is Just a Thin Shell
 
-Golem's core is an **importable TypeScript library**, not a CLI tool. The CLI is just one consumer of this library.
+GolemBot's core is an **importable TypeScript library**, not a CLI tool. The CLI is just one consumer of this library.
 
 ```
-              golem-ai core library (index.ts)
+              golembot core library (index.ts)
              createAssistant() → Assistant
             /        |         \         \
        CLI thin    library    HTTP       Bot
@@ -49,7 +49,7 @@ Golem's core is an **importable TypeScript library**, not a CLI tool. The CLI is
       (cli.ts)  (3rd-party) (3rd-party) (3rd-party)
 ```
 
-All invocation methods share the same core logic with zero duplication. This makes Golem easy to **embed in any scenario**, serving as the core engine for Agent solutions across various domains.
+All invocation methods share the same core logic with zero duplication. This makes GolemBot easy to **embed in any scenario**, serving as the core engine for Agent solutions across various domains.
 
 ## 3. Two Core Concepts
 
@@ -57,7 +57,7 @@ The entire framework has only two concepts — no more:
 
 ### 1. Assistant Directory
 
-A directory is an assistant (a Golem). Directory structure:
+A directory is an assistant (a GolemBot). Directory structure:
 
 ```
 ~/my-assistant/
@@ -118,11 +118,11 @@ All methods internally share the same core logic (`createAssistant` → `assista
 ### Method 1: CLI (Quickest Start)
 
 ```bash
-npm install -g golem-ai
+npm install -g golembot
 
 mkdir ~/my-assistant && cd ~/my-assistant
-golem-ai init         # Interactive: choose engine, pick a name, generate config, copy default skills
-golem-ai run          # REPL conversation
+golembot init         # Interactive: choose engine, pick a name, generate config, copy default skills
+golembot run          # REPL conversation
 ```
 
 Want to add a skill? Just drop the Skill folder into the `skills/` directory — no commands needed.
@@ -130,7 +130,7 @@ Want to add a skill? Just drop the Skill folder into the `skills/` directory —
 ### Method 2: Library Import (Developer Embedding)
 
 ```typescript
-import { createAssistant } from 'golem-ai';
+import { createAssistant } from 'golembot';
 
 const assistant = createAssistant({ dir: './my-agent' });
 
@@ -144,7 +144,7 @@ for await (const event of assistant.chat('Analyze the competitor data')) {
 Slack Bot:
 
 ```typescript
-import { createAssistant } from 'golem-ai';
+import { createAssistant } from 'golembot';
 const assistant = createAssistant({ dir: './slack-agent' });
 
 slackApp.message(async ({ message, say }) => {
@@ -159,7 +159,7 @@ slackApp.message(async ({ message, say }) => {
 HTTP API:
 
 ```typescript
-import { createAssistant } from 'golem-ai';
+import { createAssistant } from 'golembot';
 const agent = createAssistant({ dir: './api-agent' });
 
 app.post('/api/chat', async (req, res) => {
@@ -175,9 +175,9 @@ Electron desktop apps, Telegram bots, cron scheduled tasks... all follow the sam
 ### Method 4: Gateway (IM + HTTP Unified Service)
 
 ```bash
-golem-ai gateway              # Reads channels config from golem.yaml, starts IM adapters + HTTP service
-golem-ai gateway --port 3000  # Override port
-golem-ai gateway --verbose    # Verbose logging
+golembot gateway              # Reads channels config from golem.yaml, starts IM adapters + HTTP service
+golembot gateway --port 3000  # Override port
+golembot gateway --verbose    # Verbose logging
 ```
 
 Gateway is a **long-running service** that internally reuses `createAssistant()` + `server.ts`, with an IM channel adapter layer on top. Whichever channels are configured in `golem.yaml`, Gateway automatically connects to the corresponding IM platforms at startup:
@@ -192,7 +192,7 @@ IM channels and HTTP API work in parallel. One channel crashing does not affect 
 
 ```bash
 mkdir my-bot && cd my-bot
-golem-ai onboard
+golembot onboard
 ```
 
 Interactive guided setup (7 steps): choose engine → pick a name → select IM channels → configure channel credentials → choose scenario template → generate config → start Gateway. Automatically generates `golem.yaml`, `.env`, `.env.example`, and `.gitignore`.
@@ -285,12 +285,12 @@ Design principles:
 - Lock granularity changed from "one global lock" to **per-sessionKey locking**: same key queues, different keys run in parallel
 - `resetSession(key?)` clears the session for the specified key; omitting it clears `"default"`
 
-### HTTP Service (`golem serve`)
+### HTTP Service (`golembot serve`)
 
 Built-in lightweight HTTP service, allowing any IM webhook to connect:
 
 ```bash
-golem-ai serve --port 3000 --token my-secret
+golembot serve --port 3000 --token my-secret
 ```
 
 **Endpoint design:**
@@ -329,7 +329,7 @@ Slack event   → your 3-line forwarding script → POST localhost:3000/chat →
 **You can also import the library directly (no HTTP):**
 
 ```typescript
-import { createAssistant } from 'golem-ai';
+import { createAssistant } from 'golembot';
 const bot = createAssistant({ dir: './my-bot' });
 
 slackApp.message(async ({ message, say }) => {
@@ -344,7 +344,7 @@ slackApp.message(async ({ message, say }) => {
 ### `init` Workflow
 
 ```
-golem-ai init (or assistant.init())
+golembot init (or assistant.init())
 1. Check if directory already has golem.yaml → error if yes
 2. Interactive prompts: engine type (cursor/claude-code/opencode), assistant name
 3. Create golem.yaml
@@ -358,7 +358,7 @@ golem-ai init (or assistant.init())
 ### Gateway Workflow
 
 ```
-golem-ai gateway
+golembot gateway
 1. Auto-load .env (at CLI entry layer)
 2. Read golem.yaml (channels + gateway config)
 3. resolveEnvPlaceholders() resolves ${ENV_VAR} placeholders
@@ -405,7 +405,7 @@ Caller → assistant.chat(message)
 
 ## Directory Structure
 - skills/ — Skills directory (each subdirectory is a skill, containing SKILL.md and optional scripts)
-- AGENTS.md — This file, auto-generated by Golem
+- AGENTS.md — This file, auto-generated by GolemBot
 
 ## Conventions
 - Information that needs to be remembered persistently should be written to notes.md
@@ -418,7 +418,7 @@ This lets the Coding Agent understand its environment and capabilities from the 
 
 - **Engine-native first**: Multi-turn context relies on the Coding Agent CLI's native session mechanism (both Cursor and Claude Code support `--resume`)
 - **Engines without resume support are treated as single-turn**: Files in the workspace serve as the only cross-turn memory
-- **No TTL**: Golem does not proactively expire sessions; the engine manages session lifecycle itself
+- **No TTL**: GolemBot does not proactively expire sessions; the engine manages session lifecycle itself
 - **Auto-fallback on resume failure**: If the engine's `--resume` fails (engine-side expiration/corruption), a new session is automatically started, transparent to the user
 - **Manual reset**: Users can explicitly clear sessions via `/reset` (CLI) or `assistant.resetSession()` (API)
 - **Session storage**: `.golem/sessions.json`, stores only `{ engineSessionId }`
@@ -500,7 +500,7 @@ But the externally exposed `StreamEvent` is completely consistent.
 
 ## 8. Key Design Decisions
 
-1. **Library-first, CLI is a thin shell**: The core is an importable library (`createAssistant`); the CLI is just one consumer. This makes Golem embeddable in any scenario.
+1. **Library-first, CLI is a thin shell**: The core is an importable library (`createAssistant`); the CLI is just one consumer. This makes GolemBot embeddable in any scenario.
 2. **Directory is the assistant**: The assistant lives in a directory, and the directory is the single source of truth. Coding Agents naturally work within directories — this is a deliberate difference from OpenClaw (global config).
 3. **Directory is the skill list**: Whatever is in `skills/` gets loaded — skills are not declared in a config file, eliminating config-vs-reality mismatches.
 4. **Only two concepts**: assistant directory + Skill. No Tools, no Blueprints, no Registry.
@@ -514,7 +514,7 @@ But the externally exposed `StreamEvent` is completely consistent.
 
 **Phase 1 — CLI Assistant (Current)**
 
-- `golem-ai init` + `golem-ai run` two commands
+- `golembot init` + `golembot run` two commands
 - Cursor Engine (child_process.spawn + Skill injection)
 - Skills directory scanning
 - Session management (resume + auto-fallback)
@@ -526,7 +526,7 @@ But the externally exposed `StreamEvent` is completely consistent.
 - Session routing: `chat(msg, { sessionKey })` supports multi-user isolation
 - Concurrency lock isolated by sessionKey: different users can run in parallel
 - `server.ts`: built-in HTTP service + SSE streaming response + Bearer token authentication
-- `golem-ai serve` CLI command
+- `golembot serve` CLI command
 - Session storage upgraded to per-key indexed multi-user structure
 
 **Phase 3 — Multi-Engine** ✅
@@ -541,14 +541,14 @@ But the externally exposed `StreamEvent` is completely consistent.
 - ~~Feishu adapter (WebSocket long-connection, `@larksuiteoapi/node-sdk`)~~ ✅
 - ~~DingTalk adapter (Stream, `dingtalk-stream`)~~ ✅
 - ~~WeCom adapter (Webhook, `@wecom/crypto`)~~ ✅
-- ~~Gateway long-running service (`golem-ai gateway`)~~ ✅
+- ~~Gateway long-running service (`golembot gateway`)~~ ✅
 - ~~`golem.yaml` extended with `channels` + `gateway` fields~~ ✅
 - ~~`${ENV_VAR}` placeholder resolution~~ ✅
 - ~~CLI `.env` auto-loading~~ ✅
 
 **Phase 5 — Out-of-the-Box** ✅
 
-- ~~Onboard setup wizard (`golem-ai onboard`, 7-step interactive)~~ ✅
+- ~~Onboard setup wizard (`golembot onboard`, 7-step interactive)~~ ✅
 - ~~Built-in Skills: `general` (enhanced, with persistent memory conventions) + `im-adapter` (IM reply conventions)~~ ✅
 - ~~Template system (6 scenario templates: customer-support, data-analyst, code-reviewer, ops-assistant, meeting-notes, research)~~ ✅
 - ~~Docker deployment (Dockerfile + docker-compose.yml)~~ ✅
@@ -556,7 +556,7 @@ But the externally exposed `StreamEvent` is completely consistent.
 
 **Phase 6 — Ecosystem Expansion (To Be Implemented)**
 
-- Skill repository (`golem-ai skill search/install`, community skill discovery and installation)
+- Skill repository (`golembot skill search/install`, community skill discovery and installation)
 - Codex Engine
 - Permissions integration (`golem.yaml` project-level permission config)
 - WebSocket support (bidirectional communication)

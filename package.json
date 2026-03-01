@@ -1,7 +1,7 @@
 {
-  "name": "golem-ai",
+  "name": "golembot",
   "version": "0.1.0",
-  "description": "Local-first AI assistant powered by Coding Agent CLI engines",
+  "description": "GolemBot - Local-first AI assistant powered by Coding Agent CLI engines",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "golem-ai": "./dist/cli.js"
+    "golembot": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -44,11 +44,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/user/golem-ai"
+    "url": "https://github.com/0xranx/golembot"
   },
-  "homepage": "https://github.com/user/golem-ai#readme",
+  "homepage": "https://github.com/0xranx/golembot#readme",
   "bugs": {
-    "url": "https://github.com/user/golem-ai/issues"
+    "url": "https://github.com/0xranx/golembot/issues"
   },
   "dependencies": {
     "commander": "^13.0.0",

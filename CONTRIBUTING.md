@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thanks for your interest in Golem! Here's how to get involved.
+Thanks for your interest in GolemBot! Here's how to get involved.
 
 ## Development Environment
 

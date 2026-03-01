@@ -1,10 +1,10 @@
 # Meeting Notes Template
 
-A Golem-based meeting notes assistant that automatically organizes meeting content, extracts action items, and tracks progress.
+A GolemBot-based meeting notes assistant that automatically organizes meeting content, extracts action items, and tracks progress.
 
 ## Quick Start
 
-1. Run `golem-ai run`
+1. Run `golembot run`
 2. Paste meeting content (transcript or notes)
 3. The assistant will automatically generate structured minutes and extract action items
 

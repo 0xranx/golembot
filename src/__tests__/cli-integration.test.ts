@@ -37,7 +37,7 @@ describe('CLI integration', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  // ── golem-ai --version ────────────────────────
+  // ── golembot --version ────────────────────────
 
   it('shows version', async () => {
     const { stdout, exitCode } = await runCli(['--version']);
@@ -45,7 +45,7 @@ describe('CLI integration', () => {
     expect(stdout.trim()).toMatch(/\d+\.\d+\.\d+/);
   });
 
-  // ── golem-ai --help ───────────────────────────
+  // ── golembot --help ───────────────────────────
 
   it('shows help', async () => {
     const { stdout, exitCode } = await runCli(['--help']);
@@ -59,12 +59,12 @@ describe('CLI integration', () => {
     expect(stdout).toContain('skill');
   });
 
-  // ── golem-ai init (non-interactive) ───────────
+  // ── golembot init (non-interactive) ───────────
 
   it('init creates assistant directory with -n and -e flags', async () => {
     const { stdout, exitCode } = await runCli(['init', '-e', 'cursor', '-n', 'test-bot'], dir);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('Golem assistant created');
+    expect(stdout).toContain('GolemBot assistant created');
 
     const configRaw = await readFile(join(dir, 'golem.yaml'), 'utf-8');
     expect(configRaw).toContain('name: test-bot');
@@ -99,7 +99,7 @@ describe('CLI integration', () => {
     expect(config).toContain('engine: opencode');
   });
 
-  // ── golem-ai status ───────────────────────────
+  // ── golembot status ───────────────────────────
 
   it('status shows assistant info', async () => {
     await runCli(['init', '-e', 'cursor', '-n', 'status-bot'], dir);
@@ -116,7 +116,7 @@ describe('CLI integration', () => {
     expect(stderr).toContain('Failed to read assistant status');
   });
 
-  // ── golem-ai skill list ───────────────────────
+  // ── golembot skill list ───────────────────────
 
   it('skill list shows installed skills', async () => {
     await runCli(['init', '-e', 'cursor', '-n', 'skill-bot'], dir);
@@ -133,7 +133,7 @@ describe('CLI integration', () => {
     expect(stdout).toContain('no skills installed');
   });
 
-  // ── golem-ai skill add ────────────────────────
+  // ── golembot skill add ────────────────────────
 
   it('skill add copies skill and updates AGENTS.md', async () => {
     await runCli(['init', '-e', 'cursor', '-n', 'add-bot'], dir);
@@ -177,7 +177,7 @@ describe('CLI integration', () => {
     expect(stderr).toContain('does not exist or does not contain SKILL.md');
   });
 
-  // ── golem-ai skill remove ────────────────────
+  // ── golembot skill remove ────────────────────
 
   it('skill remove deletes skill and updates AGENTS.md', async () => {
     await runCli(['init', '-e', 'cursor', '-n', 'rm-bot'], dir);

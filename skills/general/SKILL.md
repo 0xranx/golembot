@@ -45,7 +45,7 @@ You have a long-term memory file `notes.md` for retaining important information 
 - [2026-02-27] Common tech stack: TypeScript, React, Node.js
 
 ## Project Info
-- [2026-02-27] Current project: Golem, an AI assistant platform
+- [2026-02-27] Current project: GolemBot, an AI assistant platform
 
 ## To-Do
 - [ ] Complete the data analysis report

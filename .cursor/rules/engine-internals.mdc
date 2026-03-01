@@ -68,13 +68,13 @@ Cursor result event includes `duration_ms` (integer, milliseconds). `parseStream
 
 - Flag: `--resume <sessionId>`
 - On resume failure, Agent process may exit with error (exit code != 0) or return is_error in result event
-- Golem fallback: on resume-related error → clearSession → retry once without --resume
+- GolemBot fallback: on resume-related error → clearSession → retry once without --resume
 - Resume failure keywords: error message contains "resume" or "session" (case-insensitive)
 
 ## Skill Injection
 
 - Cursor discovers Skills from `.cursor/skills/` directory
-- Golem strategy: symlink `skills/<name>` to `.cursor/skills/<name>`
+- GolemBot strategy: symlink `skills/<name>` to `.cursor/skills/<name>`
 - Before each invoke, remove old symlinks (only those that are isSymbolicLink), then recreate
 - Ensures Skill list always matches `skills/` directory
 

@@ -1,5 +1,5 @@
 ---
-description: Golem architecture hard constraints — must check before modifying any src/ code
+description: GolemBot architecture hard constraints — must check before modifying any src/ code
 globs: src/**/*.ts
 alwaysApply: false
 ---
@@ -10,7 +10,7 @@ When modifying code under `src/`, the following constraints must not be violated
 
 ## Things You Must Never Do
 
-1. **Don't do what the Agent should do** — Golem does not manage context window, dispatch tools, reason, or set session TTL. All "intelligent" behavior is delegated to the underlying Coding Agent.
+1. **Don't do what the Agent should do** — GolemBot does not manage context window, dispatch tools, reason, or set session TTL. All "intelligent" behavior is delegated to the underlying Coding Agent.
 2. **Don't add new core concepts** — The framework has only two concepts: assistant directory + Skill. Do not introduce Tool, Blueprint, Registry, Pipeline, or other abstractions.
 3. **Don't put CLI logic in the core library** — `cli.ts` is a thin shell; it only parses arguments and formats output. All business logic must live in `index.ts` / `workspace.ts` / `engine.ts` / `session.ts` / `server.ts`.
 4. **Don't declare Skills in config** — The `skills/` directory is the single source of truth. `golem.yaml` only configures engine and name.

@@ -1,5 +1,5 @@
 /**
- * Golem E2E Test — Claude Code engine full real-world scenario verification
+ * GolemBot E2E Test — Claude Code engine full real-world scenario verification
  *
  * Verifies Claude Code engine in real user scenarios:
  *   PART 1: Core engine (chat, file I/O, Skill script, memory, metadata)
@@ -355,7 +355,7 @@ if (authOk && process.env.ANTHROPIC_API_KEY) {
 
 console.log(`${CYAN}${BOLD}`);
 console.log(`╔══════════════════════════════════════════════════════════════╗`);
-console.log(`║  Golem E2E — Claude Code engine full real scenario verification    ║`);
+console.log(`║  GolemBot E2E — Claude Code engine full real scenario verification    ║`);
 console.log(`╚══════════════════════════════════════════════════════════════╝${RESET}`);
 
 info(`Claude Code CLI: ${claudeBin}`);
@@ -610,7 +610,7 @@ try {
   }
 
   // ╔════════════════════════════════════════════════════════╗
-  // ║  PART 3: HTTP service — golem serve end-to-end        ║
+  // ║  PART 3: HTTP service — golembot serve end-to-end      ║
   // ╚════════════════════════════════════════════════════════╝
 
   console.log(`\n${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
@@ -702,7 +702,7 @@ try {
 
   console.log(`\n  ${color}${BOLD}Result: ${passed}/${total} passed (${pct}%)${RESET}`);
   console.log(`\n${DIM}  Core verified:`);
-  console.log(`    Claude Code engine × Golem framework = full Agent experience`);
+  console.log(`    Claude Code engine × GolemBot framework = full Agent experience`);
   console.log(`    File I/O + Skill script + memory + IM Bot + CI/CD + HTTP service${RESET}\n`);
 
   process.exit(passed === total ? 0 : 1);

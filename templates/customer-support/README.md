@@ -1,12 +1,12 @@
 # Customer Support Bot Template
 
-A Golem-based IM customer support assistant that automatically answers common questions when connected to Lark / DingTalk / WeCom.
+A GolemBot-based IM customer support assistant that automatically answers common questions when connected to Lark / DingTalk / WeCom.
 
 ## Quick Start
 
 1. Edit `faq.md` to add your FAQ content
 2. Configure IM channel credentials in `.env`
-3. Run `golem-ai gateway` to start the service
+3. Run `golembot gateway` to start the service
 
 ## File Overview
 

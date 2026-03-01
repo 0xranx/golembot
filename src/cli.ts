@@ -25,13 +25,13 @@ const RESET = '\x1b[0m';
 const program = new Command();
 
 program
-  .name('golem-ai')
+  .name('golembot')
   .description('Local-first AI assistant powered by Coding Agent engines')
   .version('0.1.0');
 
 program
   .command('init')
-  .description('Initialize a new Golem assistant in the current directory')
+  .description('Initialize a new GolemBot assistant in the current directory')
   .option('-e, --engine <engine>', 'engine type (cursor | claude-code | opencode)', 'cursor')
   .option('-n, --name <name>', 'assistant name')
   .action(async (opts) => {
@@ -67,11 +67,11 @@ program
     const assistant = createAssistant({ dir });
     try {
       await assistant.init({ engine, name });
-      console.log(`\n✅ Golem assistant created!`);
+      console.log(`\n✅ GolemBot assistant created!`);
       console.log(`   Directory: ${dir}`);
       console.log(`   Engine: ${engine}`);
       console.log(`   Name: ${name}`);
-      console.log(`\nRun golem-ai run to start chatting.`);
+      console.log(`\nRun golembot run to start chatting.`);
     } catch (e: unknown) {
       console.error(`❌ Initialization failed: ${(e as Error).message}`);
       process.exit(1);
@@ -87,7 +87,7 @@ program
     const dir = resolve(opts.dir);
     const assistant = createAssistant({ dir, apiKey: opts.apiKey });
 
-    console.log('🤖 Golem assistant started (type /reset to reset session, /quit to exit)\n');
+    console.log('🤖 GolemBot assistant started (type /reset to reset session, /quit to exit)\n');
 
     const rl = createInterface({
       input: process.stdin,
@@ -208,7 +208,7 @@ program
     try {
       const config = await loadConfig(dir);
       const skills = await scanSkills(dir);
-      console.log(`\n🤖 Golem Assistant Status\n`);
+      console.log(`\n🤖 GolemBot Assistant Status\n`);
       console.log(`   Name:       ${config.name}`);
       console.log(`   Engine:     ${config.engine}`);
       if (config.model) console.log(`   Model:      ${config.model}`);
@@ -279,7 +279,7 @@ skill
 
     try {
       await fsStat(destPath);
-      console.error(`❌ Skill ${skillName} already exists. Run golem-ai skill remove ${skillName} first.`);
+      console.error(`❌ Skill ${skillName} already exists. Run golembot skill remove ${skillName} first.`);
       process.exit(1);
     } catch {
       // dest doesn't exist — good

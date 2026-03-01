@@ -7,7 +7,7 @@
 - ~~Support for `CURSOR_API_KEY` environment variable and `--api-key` parameter pass-through~~
 - ~~Enables CI/CD headless environments without requiring `agent login` in advance~~
 - Full chain: `CreateAssistantOpts.apiKey → InvokeOpts.apiKey → CursorEngine (--api-key + env) / ClaudeCodeEngine (env ANTHROPIC_API_KEY)`
-- CLI: `golem-ai run --api-key xxx` / `golem-ai serve --api-key xxx`
+- CLI: `golembot run --api-key xxx` / `golembot serve --api-key xxx`
 - e2e verification: `examples/e2e-headless.ts` 28/28 all passed (Cursor), `examples/e2e-claude-code.ts` 15/16 passed (Claude Code)
 
 ### ~~P2: Expose Conversation Duration~~ ✅ Completed
@@ -50,12 +50,12 @@
 
 ## CLI Layer
 
-### P2: `golem-ai status`
+### P2: `golembot status`
 
 - Display current assistant status: name, engine, installed skill list, active session count
 - Quickly understand the state of an assistant directory
 
-### P3: `golem-ai log`
+### P3: `golembot log`
 
 - View historical conversation logs
 - Implement using Cursor's `agent ls` + session files

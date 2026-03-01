@@ -1,4 +1,4 @@
-# Golem TODO Tracking
+# GolemBot TODO Tracking
 
 This directory tracks all known to-do items, technical debt, and future feature plans.
 

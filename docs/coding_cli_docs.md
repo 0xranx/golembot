@@ -47,7 +47,7 @@ agent --version
 
 ---
 
-### Actual Invocation Method (Verified in Golem)
+### Actual Invocation Method (Verified in GolemBot)
 
 **Binary name**: `agent` (not `cursor`)
 **Binary path**: `~/.local/bin/agent`
@@ -64,7 +64,7 @@ agent \
   [--model <model-name>]
 ```
 
-**PTY is not needed** (as of CLI version 2026.02+). Verified that `child_process.spawn` produces clean NDJSON on stdout with zero ANSI escape sequences. Golem has migrated `CursorEngine` from `node-pty` to standard `child_process.spawn`, eliminating the only native C++ dependency. `stripAnsi()` is retained as a safety net but is not expected to be triggered.
+**PTY is not needed** (as of CLI version 2026.02+). Verified that `child_process.spawn` produces clean NDJSON on stdout with zero ANSI escape sequences. GolemBot has migrated `CursorEngine` from `node-pty` to standard `child_process.spawn`, eliminating the only native C++ dependency. `stripAnsi()` is retained as a safety net but is not expected to be triggered.
 
 ---
 
@@ -89,9 +89,9 @@ One JSON object per line (NDJSON). With `child_process.spawn` (verified in CLI v
 Without this parameter, `assistant` events contain the **complete text** between two tool calls (output all at once).
 With this parameter, `assistant` events become **character-level incremental deltas** — multiple `assistant` events must be concatenated to form the complete text.
 
-**Key gotcha**: After all deltas for each segment (text between tool calls), Cursor sends an additional **summary event** whose content = concatenation of all deltas in that segment. If the summary is not skipped, **the user sees every segment repeated twice**. Golem detects and skips summaries at the CursorEngine layer through accumulated text comparison.
+**Key gotcha**: After all deltas for each segment (text between tool calls), Cursor sends an additional **summary event** whose content = concatenation of all deltas in that segment. If the summary is not skipped, **the user sees every segment repeated twice**. GolemBot detects and skips summaries at the CursorEngine layer through accumulated text comparison.
 
-**Golem has this parameter enabled**, achieving true character-by-character streaming.
+**GolemBot has this parameter enabled**, achieving true character-by-character streaming.
 
 #### tool_call Structure
 
@@ -152,7 +152,7 @@ With this parameter, `assistant` events become **character-level incremental del
 }
 ```
 
-**Golem's parsing strategy:**
+**GolemBot's parsing strategy:**
 - `subtype: "started"` or no subtype → yield `{ type: 'tool_call', name, args }`
 - `subtype: "completed"` → yield `{ type: 'tool_result', content }` (extract result field)
 - Handles both `*ToolCall` and `function` structures
@@ -168,7 +168,7 @@ With this parameter, `assistant` events become **character-level incremental del
 - Resume failure manifests as: Agent process exits with a non-zero exit code, or the result event returns `is_error: true`
 - Failure messages typically contain "resume" or "session" keywords
 
-**Golem's fallback strategy**: On detecting resume failure → clear the saved session → retry once without `--resume`
+**GolemBot's fallback strategy**: On detecting resume failure → clear the saved session → retry once without `--resume`
 
 ---
 
@@ -193,7 +193,7 @@ When Cursor Agent starts, it reads:
 
 The Agent **autonomously decides** when to use which Skill — no need for the user to specify in the prompt.
 
-Golem's approach is to symlink `skills/<name>` to `.cursor/skills/<name>`, refreshing symlinks before each invoke.
+GolemBot's approach is to symlink `skills/<name>` to `.cursor/skills/<name>`, refreshing symlinks before each invoke.
 
 ---
 
@@ -216,7 +216,7 @@ Deny rules take precedence over allow rules. Valuable for security-sensitive sce
 ### MCP Support
 
 The Agent automatically detects and uses MCP servers configured in `.cursor/mcp.json`.
-- `--approve-mcps` parameter skips the MCP approval prompt (required for headless — **Golem has this enabled**)
+- `--approve-mcps` parameter skips the MCP approval prompt (required for headless — **GolemBot has this enabled**)
 - `agent mcp list` shows configured MCP servers
 - `agent mcp list-tools <server>` shows tools provided by a specific MCP server
 
@@ -284,7 +284,7 @@ Two autonomy levels supported:
 4. **`--sandbox disabled` is required** — Otherwise the Agent fails on certain operations (like writing files) due to permission issues
 5. **`--force --trust` are required** — Skip interactive confirmations; otherwise the Agent waits for user input and hangs
 6. **`--approve-mcps` should always be included** — Otherwise, when MCP config exists, it interactively asks whether to approve, causing headless hangs
-7. **`--stream-partial-output` causes summary duplication** — After each segment's deltas, an additional summary event is sent (content = all deltas concatenated). The consumer must deduplicate, or text will be doubled. Golem detects summaries via accumulated comparison and skips them
+7. **`--stream-partial-output` causes summary duplication** — After each segment's deltas, an additional summary event is sent (content = all deltas concatenated). The consumer must deduplicate, or text will be doubled. GolemBot detects summaries via accumulated comparison and skips them
 8. **tool_call has both started/completed events** — If not differentiated, each tool call gets processed twice
 9. **tool_call key names are not fixed** — You can't hardcode `readToolCall`; you must dynamically match the `*ToolCall` suffix, and some tools use the `function` structure
 10. **The `result` event's `result` field is a full-text concatenation** — Not just the last segment, but a concatenation of all assistant text
@@ -351,7 +351,7 @@ claude --version
 
 ---
 
-### Actual Invocation Method (Verified in Golem)
+### Actual Invocation Method (Verified in GolemBot)
 
 **Binary path**: `~/.local/bin/claude` (same directory as Cursor Agent's `agent`)
 
@@ -441,7 +441,7 @@ With this parameter, additional `stream_event` type events are output, containin
 
 **Streaming event sequence**: `message_start` → `content_block_start` → `content_block_delta` (multiple) → `content_block_stop` → `message_delta` → `message_stop` → finally the complete `assistant` message is output.
 
-**Golem Phase 1 does not use** `--include-partial-messages` — the complete message mode is sufficient. Character-level streaming will be added in future iterations.
+**GolemBot Phase 1 does not use** `--include-partial-messages` — the complete message mode is sufficient. Character-level streaming will be added in future iterations.
 
 ---
 
@@ -489,7 +489,7 @@ Claude Code's Skill system differs significantly from Cursor's:
 - Supports frontmatter configuration: `name`, `description`, `disable-model-invocation`, `allowed-tools`, `context: fork`, etc.
 - Users can manually trigger via `/skill-name`, or Claude automatically determines when to use them
 
-**Golem's skill injection strategy:**
+**GolemBot's skill injection strategy:**
 
 | Engine | Injection Method |
 |--------|-----------------|
@@ -507,7 +507,7 @@ Claude Code's Skill system differs significantly from Cursor's:
 | `--disallowedTools "Edit"` | Disable specified tools |
 | `permissions.allow/deny` in settings.json | Persistent permission rules |
 
-**Golem uses `--dangerously-skip-permissions`** (equivalent to Cursor's `--force --trust --sandbox disabled`).
+**GolemBot uses `--dangerously-skip-permissions`** (equivalent to Cursor's `--force --trust --sandbox disabled`).
 
 ---
 
@@ -545,7 +545,7 @@ The CLI supports `--mcp-config ./mcp.json` to load additional MCP configurations
 
 ---
 
-### Known Pitfalls & Golem Adaptation Notes
+### Known Pitfalls & GolemBot Adaptation Notes
 
 1. **PTY is not needed** — The biggest difference from Cursor; simple `child_process.spawn` works
 2. **No ANSI stripping needed** — stdout is pure JSON, unlike Cursor's PTY output which mixes in ANSI sequences
@@ -556,7 +556,7 @@ The CLI supports `--mcp-config ./mcp.json` to load additional MCP configurations
 7. **result provides more metadata** — `total_cost_usd`, `num_turns`, `duration_api_ms`, `usage` can all be exposed to users
 8. **`--dangerously-skip-permissions` is a single parameter** — Unlike Cursor which needs three parameters: `--force --trust --sandbox disabled`
 9. **Permission bypass must be explicitly enabled** — You must first enable the option with `--allow-dangerously-skip-permissions`, then activate with `--dangerously-skip-permissions` or `--permission-mode bypassPermissions`. Or use `--dangerously-skip-permissions` directly, which implicitly allows it
-10. **Skill paths differ** — Cursor uses `.cursor/skills/`, Claude Code uses `.claude/skills/`; Golem must choose the injection method based on the engine
+10. **Skill paths differ** — Cursor uses `.cursor/skills/`, Claude Code uses `.claude/skills/`; GolemBot must choose the injection method based on the engine
 
 ## OpenCode CLI
 
@@ -636,7 +636,7 @@ opencode --version
 
 ---
 
-### Actual Invocation Method (Verified in Golem)
+### Actual Invocation Method (Verified in GolemBot)
 
 **Binary path**: Depends on the Node version manager, e.g., `~/.nvm/versions/node/v22.10.0/bin/opencode`
 
@@ -747,13 +747,13 @@ opencode run "user message" \
 | Metadata | `duration_ms` | `duration_ms`, `total_cost_usd`, `num_turns` | `cost`, `tokens` (with reasoning + cache breakdown) |
 | ANSI | No (clean stdout since 2026.02+) | No | No |
 
-**Note**: The streaming event structure above has been verified through real-world testing with OpenRouter + Anthropic models. The `OpenCodeEngine` in Golem has been fully implemented and passes e2e tests. Key observation: OpenCode sends text content in full chunks (not character-level deltas), similar to Claude Code's behavior without `--include-partial-messages`.
+**Note**: The streaming event structure above has been verified through real-world testing with OpenRouter + Anthropic models. The `OpenCodeEngine` in GolemBot has been fully implemented and passes e2e tests. Key observation: OpenCode sends text content in full chunks (not character-level deltas), similar to Claude Code's behavior without `--include-partial-messages`.
 
 ---
 
 ### Alternative: Integration via HTTP Server API
 
-OpenCode provides a full HTTP Server (OpenAPI 3.1 spec), giving Golem **two integration approaches**:
+OpenCode provides a full HTTP Server (OpenAPI 3.1 spec), giving GolemBot **two integration approaches**:
 
 **Approach A: CLI mode** (same as Cursor/Claude Code)
 ```bash
@@ -824,7 +824,7 @@ OpenCode supports 75+ LLM Providers; the authentication method depends on the ch
 | OpenRouter | `OPENROUTER_API_KEY` | `openrouter/anthropic/claude-sonnet-4-5` |
 | Amazon Bedrock | `AWS_*` series | `amazon-bedrock/...` |
 
-**Difference from Cursor/Claude Code**: Cursor only needs `CURSOR_API_KEY`, Claude Code only needs `ANTHROPIC_API_KEY`. Because OpenCode supports multiple Providers, you must set the environment variable **corresponding to the chosen Provider**. When integrating with Golem's `InvokeOpts.apiKey`, you need to know the target Provider to set the correct environment variable name.
+**Difference from Cursor/Claude Code**: Cursor only needs `CURSOR_API_KEY`, Claude Code only needs `ANTHROPIC_API_KEY`. Because OpenCode supports multiple Providers, you must set the environment variable **corresponding to the chosen Provider**. When integrating with GolemBot's `InvokeOpts.apiKey`, you need to know the target Provider to set the correct environment variable name.
 
 ---
 
@@ -858,7 +858,7 @@ metadata:                  # Optional, string-to-string map
 ---
 ```
 
-**Golem's injection strategy options:**
+**GolemBot's injection strategy options:**
 - Option 1: symlink to `.opencode/skills/` (most canonical)
 - Option 2: symlink to `.agents/skills/` (universal standard, other Agents can read it in the future)
 - Option 3: reuse Claude Code's `.claude/skills/` symlink (OpenCode reads it compatibly)
@@ -867,7 +867,7 @@ metadata:                  # Optional, string-to-string map
 
 ### Rules / AGENTS.md
 
-OpenCode's rules system is perfectly compatible with Golem's `AGENTS.md` generation mechanism:
+OpenCode's rules system is perfectly compatible with GolemBot's `AGENTS.md` generation mechanism:
 
 | Location | Priority | Description |
 |----------|----------|-------------|
@@ -882,7 +882,7 @@ OpenCode's rules system is perfectly compatible with Golem's `AGENTS.md` generat
 { "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"] }
 ```
 
-**Implications for Golem**: The `AGENTS.md` generated by Golem during `init` is automatically consumed by OpenCode — no additional configuration needed.
+**Implications for GolemBot**: The `AGENTS.md` generated by GolemBot during `init` is automatically consumed by OpenCode — no additional configuration needed.
 
 ---
 
@@ -915,7 +915,7 @@ Three levels: `"allow"` (auto-execute), `"ask"` (request approval), `"deny"` (fo
 
 ### Agent System
 
-OpenCode has a built-in Agent hierarchy (Golem can leverage it via the `--agent` parameter):
+OpenCode has a built-in Agent hierarchy (GolemBot can leverage it via the `--agent` parameter):
 
 **Primary Agents:**
 - `build` — Default, full-featured (can read/write files, execute commands)
@@ -1001,15 +1001,15 @@ Configuration precedence (later overrides earlier): remote config → global →
 
 ---
 
-### Known Pitfalls & Golem Adaptation Notes
+### Known Pitfalls & GolemBot Adaptation Notes
 
 1. **Slow cold start (5-10s)** — OpenCode loads Provider configs, MCP servers, etc. at startup, much slower than Cursor/Claude Code. For production, use `opencode serve` + `--attach` mode to reuse a server instance
 2. **`--format json` event structure is completely different from Cursor/Claude Code** — Cannot reuse `parseStreamLine()` or `parseClaudeStreamLine()`; requires an independent `parseOpenCodeStreamLine()`
 3. **Headless mode has known bugs** — In v1.1.28, `opencode run`'s question tool may hang, and `"ask"` permissions auto-reject. Recommend explicitly setting `permission: "allow"` as a workaround
-4. **Multi-Provider authentication is complex** — Unlike Cursor/Claude Code which each need only one environment variable, OpenCode requires the API Key corresponding to the chosen Provider. When integrating with Golem's `InvokeOpts.apiKey`, you need to know the target Provider to set the correct environment variable name
-5. **Skill multi-path auto-discovery** — OpenCode simultaneously reads `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`. If Golem injects skills for both Claude Code and OpenCode, there's no conflict (identical Skills are only loaded once)
-6. **AGENTS.md auto-consumption** — The AGENTS.md generated by Golem during init is automatically consumed by OpenCode — a positive compatibility feature
-7. **Session ID format is different** — `ses_XXXXXXXX` instead of UUID; Golem's session storage layer needs to accommodate this
+4. **Multi-Provider authentication is complex** — Unlike Cursor/Claude Code which each need only one environment variable, OpenCode requires the API Key corresponding to the chosen Provider. When integrating with GolemBot's `InvokeOpts.apiKey`, you need to know the target Provider to set the correct environment variable name
+5. **Skill multi-path auto-discovery** — OpenCode simultaneously reads `.opencode/skills/`, `.claude/skills/`, `.agents/skills/`. If GolemBot injects skills for both Claude Code and OpenCode, there's no conflict (identical Skills are only loaded once)
+6. **AGENTS.md auto-consumption** — The AGENTS.md generated by GolemBot during init is automatically consumed by OpenCode — a positive compatibility feature
+7. **Session ID format is different** — `ses_XXXXXXXX` instead of UUID; GolemBot's session storage layer needs to accommodate this
 8. **HTTP Server API is a better integration approach** — Compared to CLI spawn mode, HTTP mode eliminates cold start, supports abort operations (`POST /session/:id/abort`), and may be a better Engine implementation
 9. **`opencode.json` needs to be generated during init** — Similar to Cursor's `.cursor/cli.json`, OpenCode's project config needs to be generated during workspace initialization
 10. **OpenCode iterates extremely fast** — As of 2026-03, it's at v1.1.28; the API may change frequently, so keep an eye on the changelog
@@ -1083,7 +1083,7 @@ Configuration precedence (later overrides earlier): remote config → global →
 | GitHub Actions | Supported (`curl https://cursor.com/install`) | Supported (official Action) | Supported (official Action) |
 | HTTP Server API | Not supported | Not supported | Full OpenAPI (`opencode serve`) |
 
-### Golem Engine Integration Methods
+### GolemBot Engine Integration Methods
 
 | Dimension | CursorEngine | ClaudeCodeEngine | OpenCodeEngine |
 |-----------|-------------|-----------------|----------------------|

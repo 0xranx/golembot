@@ -24,16 +24,16 @@ See [docs/architecture.md](../architecture.md) Chapter 9 "Evolution Roadmap" for
 
 ### P1: Skill Repository (Discover + Install)
 
-- `golem-ai skill search <keyword>` — Search community skills
-- `golem-ai skill install <name>` — Install to the current assistant's `skills/` directory
+- `golembot skill search <keyword>` — Search community skills
+- `golembot skill install <name>` — Install to the current assistant's `skills/` directory
 - Repository format design needed (GitHub repo? npm package? Standalone registry?)
 
 ### ~~P2: Assistant Templates~~ ✅ Completed
 
-- ~~`golem-ai init --template <name>` — Create an assistant from a preconfigured template~~
+- ~~`golembot init --template <name>` — Create an assistant from a preconfigured template~~
 - ~~Template = a directory with pre-installed specific skill combinations + golem.yaml + example data~~
 - Implemented 6 scenario templates: customer-support, data-analyst, code-reviewer, ops-assistant, meeting-notes, research
-- `golem-ai onboard` wizard supports template selection
+- `golembot onboard` wizard supports template selection
 - Templates stored in the `templates/` directory, published with the npm package
 
 ## Cloud Agent Integration

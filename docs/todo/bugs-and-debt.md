@@ -15,7 +15,7 @@
 ### P2: `result.result` Field Not Exposed
 
 - **File**: `src/engine.ts` parseStreamLine
-- **Current state**: Successful result events have a `result` field (concatenation of all assistant text), but Golem only extracts `session_id`
+- **Current state**: Successful result events have a `result` field (concatenation of all assistant text), but GolemBot only extracts `session_id`
 - **Impact**: If callers need the final complete reply text (without concatenating text deltas themselves), it's currently not possible
 - **Proposal**: Add `fullText?: string` to the `done` event
 
@@ -29,6 +29,6 @@
 ### P2: Permissions Not Utilized
 
 - **File**: N/A
-- **Current state**: Cursor supports project-level permissions via `.cursor/cli.json` (Shell/Read/Write/WebFetch/Mcp), but Golem does not leverage this
+- **Current state**: Cursor supports project-level permissions via `.cursor/cli.json` (Shell/Read/Write/WebFetch/Mcp), but GolemBot does not leverage this
 - **Impact**: Cannot provide fine-grained control for security-sensitive scenarios (e.g., a CI/CD bot that should not have write permissions)
 - **Proposal**: Add optional permissions config in `golem.yaml`, generate `.cursor/cli.json` during `init`
