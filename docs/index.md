@@ -164,6 +164,10 @@ Connect to your team's chat platform — no public URL needed for any channel.
   padding: 24px;
   text-align: center;
   transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+a.engine-card,
+a.channel-card {
   text-decoration: none;
   color: inherit;
 }
