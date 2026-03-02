@@ -1,3 +1,15 @@
+# [0.4.0-beta.1](https://github.com/0xranx/golembot/compare/v0.3.0...v0.4.0-beta.1) (2026-03-02)
+
+
+### Bug Fixes
+
+* **feishu:** only respond in group chats when [@mentioned](https://github.com/mentioned) ([229adcb](https://github.com/0xranx/golembot/commit/229adcbd7cacefc419629171a62d8fc9fa40d07a))
+
+
+### Features
+
+* inject systemPrompt into AGENTS.md instead of prepending to every message ([a4ecd0a](https://github.com/0xranx/golembot/commit/a4ecd0aabd29fd7221c180cecf4cd3e1b036eb7b))
+
 # [0.3.0](https://github.com/0xranx/golembot/compare/v0.2.3...v0.3.0) (2026-03-02)
 
 
