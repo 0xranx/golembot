@@ -28,13 +28,17 @@ export class FeishuAdapter implements ChannelAdapter {
 
     this.client = new lark.Client(baseConfig);
 
-    // Bot's own open_id — fetched lazily and cached. Used to filter @mentions in group chats.
+    // Bot's own open_id — fetched lazily via raw HTTP (client.bot namespace doesn't exist in SDK).
     let botOpenId: string | undefined;
     const fetchBotOpenId = async (): Promise<string | undefined> => {
       if (botOpenId) return botOpenId;
       try {
-        const botInfo = await this.client.bot.v3.info.get({});
-        botOpenId = (botInfo as any).data?.bot?.open_id;
+        const token = await this.client.tokenManager.getTenantAccessToken();
+        const resp = await fetch('https://open.feishu.cn/open-apis/bot/v3/info', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = (await resp.json()) as any;
+        botOpenId = json?.bot?.open_id;
         if (botOpenId) console.log(`[feishu] Bot open_id resolved: ${botOpenId}`);
       } catch {
         // Will retry on the next group message.
@@ -51,12 +55,16 @@ export class FeishuAdapter implements ChannelAdapter {
 
         if (message.message_type !== 'text') return;
 
-        let content: { text: string; mentions?: Array<{ key: string; id: { open_id: string } }> };
+        let content: { text: string };
         try {
           content = JSON.parse(message.content);
         } catch {
           return;
         }
+
+        // Mentions are on message.mentions (not inside content JSON).
+        type Mention = { key: string; id: { open_id: string } };
+        const mentions: Mention[] = message.mentions ?? [];
 
         const chatType: 'dm' | 'group' = message.chat_type === 'p2p' ? 'dm' : 'group';
 
@@ -64,19 +72,18 @@ export class FeishuAdapter implements ChannelAdapter {
         if (chatType === 'group') {
           const resolvedId = await fetchBotOpenId();
           if (resolvedId) {
-            // Precise check: bot's open_id must appear in the mention list.
-            const isMentioned = content.mentions?.some(m => m.id?.open_id === resolvedId) ?? false;
+            const isMentioned = mentions.some(m => m.id?.open_id === resolvedId);
             if (!isMentioned) return;
           } else {
             // Last-resort fallback: require at least one @mention in the message.
-            if ((content.mentions?.length ?? 0) === 0) return;
+            if (mentions.length === 0) return;
           }
         }
 
         // Strip the bot's @mention key from the text before passing to the assistant.
         let text = content.text || '';
-        if (chatType === 'group' && content.mentions?.length) {
-          for (const m of content.mentions) {
+        if (chatType === 'group' && mentions.length) {
+          for (const m of mentions) {
             const isBot = botOpenId ? m.id?.open_id === botOpenId : true;
             if (isBot) {
               text = text.replace(m.key, '').trim();
