@@ -54,16 +54,23 @@ export class FeishuAdapter implements ChannelAdapter {
 
         // In group chats, only respond when the bot is @mentioned.
         if (chatType === 'group') {
-          if (!botOpenId) return;
-          const isMentioned = content.mentions?.some(m => m.id?.open_id === botOpenId) ?? false;
-          if (!isMentioned) return;
+          if (botOpenId) {
+            // Precise check: bot's open_id must appear in the mention list.
+            const isMentioned = content.mentions?.some(m => m.id?.open_id === botOpenId) ?? false;
+            if (!isMentioned) return;
+          } else {
+            // Fallback: if we couldn't fetch the bot's open_id, require at least one mention.
+            const hasMention = (content.mentions?.length ?? 0) > 0;
+            if (!hasMention) return;
+          }
         }
 
         // Strip the bot's @mention key from the text before passing to the assistant.
         let text = content.text || '';
         if (chatType === 'group' && content.mentions?.length) {
           for (const m of content.mentions) {
-            if (m.id?.open_id === botOpenId) {
+            const isBot = botOpenId ? m.id?.open_id === botOpenId : true;
+            if (isBot) {
               text = text.replace(m.key, '').trim();
             }
           }
