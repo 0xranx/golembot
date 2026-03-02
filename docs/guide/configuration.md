@@ -12,6 +12,11 @@ model: claude-sonnet         # optional, preferred model
 # Optional: bypass agent permission prompts
 skipPermissions: true
 
+# Optional: role definition — prepended to every user message before engine invocation
+systemPrompt: |
+  You are a marketing assistant named Aria. Never introduce yourself as OpenCode
+  or any coding assistant. Reply in the same language the user uses.
+
 # Optional: production hardening
 timeout: 120                 # engine timeout in seconds (default: 300)
 maxConcurrent: 20            # max parallel chats (default: 10)
@@ -60,6 +65,7 @@ gateway:
 | `maxConcurrent` | `number` | `10` | Maximum number of parallel `chat()` calls across all sessions |
 | `maxQueuePerSession` | `number` | `3` | Maximum number of requests that can be queued per session key |
 | `sessionTtlDays` | `number` | `30` | Sessions not used for this many days are pruned at next startup |
+| `systemPrompt` | `string` | — | Role/persona instructions prepended to every user message before engine invocation. Use this to define the assistant's identity and constrain its behavior |
 | `channels` | `object` | — | IM channel configurations |
 | `gateway` | `object` | — | Gateway service settings |
 

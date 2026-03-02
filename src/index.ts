@@ -146,8 +146,12 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     let fullReply = '';
     let doneEvt: Extract<StreamEvent, { type: 'done' }> | undefined;
 
+    const effectivePrompt = config.systemPrompt
+      ? `${config.systemPrompt}\n\n${message}`
+      : message;
+
     try {
-      for await (const event of engine.invoke(message, {
+      for await (const event of engine.invoke(effectivePrompt, {
         workspace: dir,
         skillPaths,
         sessionId,

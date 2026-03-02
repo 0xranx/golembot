@@ -102,6 +102,30 @@ describe('createAssistant', () => {
     });
   });
 
+  // ── systemPrompt prepending ─────────────────────
+
+  describe('systemPrompt', () => {
+    it('systemPrompt in golem.yaml is prepended to every user message', async () => {
+      await writeFile(
+        join(dir, 'golem.yaml'),
+        'name: test-bot\nengine: cursor\nsystemPrompt: "You are a helpful assistant."\n',
+      );
+      const assistant = createAssistant({ dir });
+      const events: StreamEvent[] = [];
+      for await (const evt of assistant.chat('Hello')) events.push(evt);
+      const textEvt = events.find(e => e.type === 'text') as Extract<StreamEvent, { type: 'text' }>;
+      expect(textEvt.content).toBe('Reply: You are a helpful assistant.\n\nHello');
+    });
+
+    it('without systemPrompt the message is passed through unchanged', async () => {
+      const assistant = createAssistant({ dir });
+      const events: StreamEvent[] = [];
+      for await (const evt of assistant.chat('Hello')) events.push(evt);
+      const textEvt = events.find(e => e.type === 'text') as Extract<StreamEvent, { type: 'text' }>;
+      expect(textEvt.content).toBe('Reply: Hello');
+    });
+  });
+
   // ── apiKey passthrough ──────────────────────────
 
   describe('apiKey passthrough', () => {

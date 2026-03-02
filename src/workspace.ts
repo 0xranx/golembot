@@ -48,6 +48,8 @@ export interface GolemConfig {
   maxQueuePerSession?: number;
   /** Days before inactive sessions are pruned. Default: 30. */
   sessionTtlDays?: number;
+  /** System-level instructions prepended to every user message before engine invocation. */
+  systemPrompt?: string;
 }
 
 export interface SkillInfo {
@@ -106,6 +108,7 @@ export async function loadConfig(dir: string): Promise<GolemConfig> {
   if (typeof doc.maxConcurrent === 'number') config.maxConcurrent = doc.maxConcurrent;
   if (typeof doc.maxQueuePerSession === 'number') config.maxQueuePerSession = doc.maxQueuePerSession;
   if (typeof doc.sessionTtlDays === 'number') config.sessionTtlDays = doc.sessionTtlDays;
+  if (typeof doc.systemPrompt === 'string') config.systemPrompt = doc.systemPrompt;
 
   return config;
 }

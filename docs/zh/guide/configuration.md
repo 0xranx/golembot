@@ -12,6 +12,12 @@ model: claude-sonnet         # 可选，首选模型
 # 可选：跳过 Agent 权限确认
 skipPermissions: true
 
+# 可选：角色定义 — 在每次调用前拼接到用户消息前面
+systemPrompt: |
+  你是「运营小助手」，团队的专属运营伙伴，专注用户运营、内容运营和活动策划。
+  你不是 OpenCode，不是编程助手，永远不要用 OpenCode 的身份介绍自己。
+  在 IM 场景中回复时，不要在消息中包含原始 URL。
+
 # 可选：生产可用性配置
 timeout: 120                 # 引擎超时（秒，默认：300）
 maxConcurrent: 20            # 最大并发 chat() 数（默认：10）
@@ -60,6 +66,7 @@ gateway:
 | `maxConcurrent` | `number` | `10` | 全局最大并发 `chat()` 调用数 |
 | `maxQueuePerSession` | `number` | `3` | 每个 sessionKey 最大排队请求数 |
 | `sessionTtlDays` | `number` | `30` | 闲置会话超过此天数后在下次启动时清理 |
+| `systemPrompt` | `string` | — | 角色/人设指令，在每次 invoke 前拼接到用户消息前面。用于定义助手身份、约束行为风格 |
 | `channels` | `object` | — | IM 通道配置 |
 | `gateway` | `object` | — | Gateway 服务设置 |
 
