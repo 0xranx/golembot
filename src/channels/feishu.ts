@@ -31,7 +31,7 @@ export class FeishuAdapter implements ChannelAdapter {
     // Fetch the bot's own open_id so we can filter @mentions in group chats.
     let botOpenId: string | undefined;
     try {
-      const botInfo = await this.client.bot.v3.botInfo.get({});
+      const botInfo = await this.client.bot.v3.info.get({});
       botOpenId = (botInfo as any).data?.bot?.open_id;
     } catch {
       console.warn('[feishu] Could not fetch bot open_id; group messages will be ignored');
