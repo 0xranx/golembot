@@ -88,7 +88,7 @@ export function parseCodexStreamLine(
     // before it falls back to HTTPS. Fatal failures arrive via 'turn.failed' or a non-zero
     // process exit code, both of which are handled separately.
     if (/^Reconnecting\.\.\. \d+\/\d+/.test(message)) return [];
-    return [{ type: 'warning', message }];
+    return [{ type: 'error', message }];
   }
 
   return [];

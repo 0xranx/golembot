@@ -1378,16 +1378,16 @@ describe('parseCodexStreamLine', () => {
     expect(events).toEqual([{ type: 'error', message: 'Codex turn failed' }]);
   });
 
-  it('top-level error — returns warning event for non-reconnection errors (e.g. auth failure)', () => {
+  it('top-level error — returns error event for non-reconnection errors (e.g. auth failure)', () => {
     const state: { threadId?: string } = {};
     const events = parseCodexStreamLine(CODEX_SAMPLES.topLevelError, state);
-    expect(events).toEqual([{ type: 'warning', message: 'Invalid API key' }]);
+    expect(events).toEqual([{ type: 'error', message: 'Invalid API key' }]);
   });
 
-  it('top-level error without message — returns fallback warning', () => {
+  it('top-level error without message — returns fallback error', () => {
     const state: { threadId?: string } = {};
     const events = parseCodexStreamLine(CODEX_SAMPLES.topLevelErrorNoMessage, state);
-    expect(events).toEqual([{ type: 'warning', message: 'Codex error' }]);
+    expect(events).toEqual([{ type: 'error', message: 'Codex error' }]);
   });
 
   it('top-level error — suppresses WebSocket reconnection notices (returns [])', () => {
