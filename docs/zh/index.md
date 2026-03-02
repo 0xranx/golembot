@@ -93,36 +93,42 @@ for await (const ev of bot.chat('分析上个月的销售数据'))
 接入团队的聊天平台 — 所有通道均无需公网 URL。
 
 <div class="channels-grid">
-  <a class="channel-card" href="/zh/channels/slack">
+  <div class="channel-card">
+    <a class="card-link" href="/zh/channels/slack" aria-label="Slack"></a>
     <img class="channel-icon" src="/icons/slack.svg" alt="Slack" />
     <div class="channel-name">Slack</div>
     <div class="channel-transport">Socket Mode</div>
-  </a>
-  <a class="channel-card" href="/zh/channels/telegram">
+  </div>
+  <div class="channel-card">
+    <a class="card-link" href="/zh/channels/telegram" aria-label="Telegram"></a>
     <img class="channel-icon" src="/icons/telegram.svg" alt="Telegram" />
     <div class="channel-name">Telegram</div>
     <div class="channel-transport">长轮询</div>
-  </a>
-  <a class="channel-card" href="/zh/channels/feishu">
+  </div>
+  <div class="channel-card">
+    <a class="card-link" href="/zh/channels/feishu" aria-label="飞书"></a>
     <img class="channel-icon" src="/icons/feishu.svg" alt="飞书" />
     <div class="channel-name">飞书</div>
     <div class="channel-transport">WebSocket</div>
-  </a>
-  <a class="channel-card" href="/zh/channels/dingtalk">
+  </div>
+  <div class="channel-card">
+    <a class="card-link" href="/zh/channels/dingtalk" aria-label="钉钉"></a>
     <img class="channel-icon" src="/icons/dingtalk.svg" alt="钉钉" />
     <div class="channel-name">钉钉</div>
     <div class="channel-transport">Stream</div>
-  </a>
-  <a class="channel-card" href="/zh/channels/wecom">
+  </div>
+  <div class="channel-card">
+    <a class="card-link" href="/zh/channels/wecom" aria-label="企业微信"></a>
     <img class="channel-icon" src="/icons/wecom.svg" alt="企业微信" />
     <div class="channel-name">企业微信</div>
     <div class="channel-transport">Webhook</div>
-  </a>
-  <a class="channel-card" href="/zh/api/http-api">
+  </div>
+  <div class="channel-card">
+    <a class="card-link" href="/zh/api/http-api" aria-label="HTTP API"></a>
     <svg class="channel-icon channel-icon-http" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M3 15a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><circle cx="7" cy="8" r=".5" fill="currentColor"/><circle cx="7" cy="16" r=".5" fill="currentColor"/></svg>
     <div class="channel-name">HTTP API</div>
     <div class="channel-transport">SSE</div>
-  </a>
+  </div>
 </div>
 
 </div>
@@ -158,7 +164,7 @@ for await (const ev of bot.chat('分析上个月的销售数据'))
 
 .engine-card,
 .channel-card {
-  display: block;
+  position: relative;
   border: 1px solid var(--vp-c-divider);
   border-radius: 12px;
   padding: 24px;
@@ -166,16 +172,16 @@ for await (const ev of bot.chat('分析上个月的销售数据'))
   transition: border-color 0.25s, box-shadow 0.25s;
 }
 
-a.engine-card,
-a.channel-card {
-  text-decoration: none;
-  color: inherit;
-}
-
 .engine-card:hover,
 .channel-card:hover {
   border-color: var(--vp-c-brand-1);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.card-link {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
 }
 
 .engine-icon {
