@@ -28,20 +28,70 @@ export class FeishuAdapter implements ChannelAdapter {
 
     this.client = new lark.Client(baseConfig);
 
+    // Bot's own open_id — fetched lazily via raw HTTP (client.bot namespace doesn't exist in SDK).
+    let botOpenId: string | undefined;
+    const fetchBotOpenId = async (): Promise<string | undefined> => {
+      if (botOpenId) return botOpenId;
+      try {
+        const token = await this.client.tokenManager.getTenantAccessToken();
+        const resp = await fetch('https://open.feishu.cn/open-apis/bot/v3/info', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = (await resp.json()) as any;
+        botOpenId = json?.bot?.open_id;
+        if (botOpenId) console.log(`[feishu] Bot open_id resolved: ${botOpenId}`);
+      } catch {
+        // Will retry on the next group message.
+      }
+      return botOpenId;
+    };
+
+    // Best-effort initial fetch (non-blocking).
+    fetchBotOpenId().catch(() => {});
+
     const eventDispatcher = new lark.EventDispatcher({}).register({
       'im.message.receive_v1': async (data: any) => {
         const { message, sender } = data;
 
         if (message.message_type !== 'text') return;
 
-        let text = '';
+        let content: { text: string };
         try {
-          text = JSON.parse(message.content).text;
+          content = JSON.parse(message.content);
         } catch {
           return;
         }
 
+        // Mentions are on message.mentions (not inside content JSON).
+        type Mention = { key: string; id: { open_id: string } };
+        const mentions: Mention[] = message.mentions ?? [];
+
         const chatType: 'dm' | 'group' = message.chat_type === 'p2p' ? 'dm' : 'group';
+
+        // In group chats, only respond when the bot is @mentioned.
+        if (chatType === 'group') {
+          const resolvedId = await fetchBotOpenId();
+          if (resolvedId) {
+            const isMentioned = mentions.some(m => m.id?.open_id === resolvedId);
+            if (!isMentioned) return;
+          } else {
+            // Last-resort fallback: require at least one @mention in the message.
+            if (mentions.length === 0) return;
+          }
+        }
+
+        // Strip the bot's @mention key from the text before passing to the assistant.
+        let text = content.text || '';
+        if (chatType === 'group' && mentions.length) {
+          for (const m of mentions) {
+            const isBot = botOpenId ? m.id?.open_id === botOpenId : true;
+            if (isBot) {
+              text = text.replace(m.key, '').trim();
+            }
+          }
+        }
+
+        if (!text) return;
 
         const channelMsg: ChannelMessage = {
           channelType: 'feishu',

@@ -12,7 +12,8 @@ model: claude-sonnet         # optional, preferred model
 # Optional: bypass agent permission prompts
 skipPermissions: true
 
-# Optional: role definition — prepended to every user message before engine invocation
+# Optional: role/persona definition — injected into AGENTS.md as a System Instructions
+# section, read by the engine once per session (not prepended to every message)
 systemPrompt: |
   You are a marketing assistant named Aria. Never introduce yourself as OpenCode
   or any coding assistant. Reply in the same language the user uses.
@@ -65,7 +66,7 @@ gateway:
 | `maxConcurrent` | `number` | `10` | Maximum number of parallel `chat()` calls across all sessions |
 | `maxQueuePerSession` | `number` | `3` | Maximum number of requests that can be queued per session key |
 | `sessionTtlDays` | `number` | `30` | Sessions not used for this many days are pruned at next startup |
-| `systemPrompt` | `string` | — | Role/persona instructions prepended to every user message before engine invocation. Use this to define the assistant's identity and constrain its behavior |
+| `systemPrompt` | `string` | — | Role/persona instructions injected into `AGENTS.md` as a `## System Instructions` section. The engine reads this once as system-level context — it is **not** prepended to every message, so token cost stays flat across multi-turn conversations |
 | `channels` | `object` | — | IM channel configurations |
 | `gateway` | `object` | — | Gateway service settings |
 

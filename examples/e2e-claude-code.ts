@@ -693,6 +693,41 @@ try {
     }
   }
 
+  // ╔════════════════════════════════════════════════════════╗
+  // ║  PART 4: systemPrompt injection                         ║
+  // ╚════════════════════════════════════════════════════════╝
+
+  console.log(`\n${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
+  console.log(`${MAGENTA}${BOLD}  PART 4: systemPrompt — injected into AGENTS.md, not prepended to message${RESET}`);
+  console.log(`${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
+
+  const spDir = await mkdtemp(join(tmpdir(), 'golem-cc-sp-'));
+  dirsToClean.push(spDir);
+
+  step('systemPrompt — injected into AGENTS.md as System Instructions section');
+
+  try {
+    const spBot = makeAssistant(spDir);
+    await spBot.init({ engine: 'claude-code', name: 'sp-test-bot' });
+
+    // Write golem.yaml with systemPrompt
+    await writeFile(
+      join(spDir, 'golem.yaml'),
+      'name: sp-test-bot\nengine: claude-code\nsystemPrompt: "You are a specialized bot named GolemTest."\n',
+    );
+
+    // One chat call triggers ensureReady() which regenerates AGENTS.md
+    await collectChat(spBot, 'Reply OK in one word');
+
+    const agentsMd = await readFile(join(spDir, 'AGENTS.md'), 'utf-8');
+    record('AGENTS.md contains System Instructions section', agentsMd.includes('## System Instructions'));
+    record('AGENTS.md contains systemPrompt content', agentsMd.includes('GolemTest'));
+    record('systemPrompt does NOT appear in skills section', !agentsMd.includes('GolemTest: '));
+  } catch (e) {
+    record('systemPrompt injection', false);
+    console.error(e);
+  }
+
   // ═══════════════════════════════════════════════════════
   // Summary
   // ═══════════════════════════════════════════════════════
@@ -711,7 +746,7 @@ try {
   console.log(`\n  ${color}${BOLD}Result: ${passed}/${total} passed (${pct}%)${RESET}`);
   console.log(`\n${DIM}  Core verified:`);
   console.log(`    Claude Code engine × GolemBot framework = full Agent experience`);
-  console.log(`    File I/O + Skill script + memory + IM Bot + CI/CD + HTTP service${RESET}\n`);
+  console.log(`    File I/O + Skill script + memory + IM Bot + CI/CD + HTTP service + systemPrompt${RESET}\n`);
 
   process.exit(passed === total ? 0 : 1);
 

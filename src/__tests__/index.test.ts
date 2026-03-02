@@ -47,7 +47,8 @@ vi.mock('../engine.js', async (importOriginal) => {
 
 import { createAssistant } from '../index.js';
 import { createEngine } from '../engine.js';
-import { loadSession, appendHistory } from '../session.js';
+import { loadSession } from '../session.js';
+import { readFile as fsReadFile } from 'node:fs/promises';
 
 const mockedCreateEngine = vi.mocked(createEngine);
 
@@ -102,19 +103,43 @@ describe('createAssistant', () => {
     });
   });
 
-  // ── systemPrompt prepending ─────────────────────
+  // ── systemPrompt injection ──────────────────────
 
   describe('systemPrompt', () => {
-    it('systemPrompt in golem.yaml is prepended to every user message', async () => {
+    it('systemPrompt in golem.yaml is injected into AGENTS.md as System Instructions section', async () => {
       await writeFile(
         join(dir, 'golem.yaml'),
         'name: test-bot\nengine: cursor\nsystemPrompt: "You are a helpful assistant."\n',
       );
       const assistant = createAssistant({ dir });
-      const events: StreamEvent[] = [];
-      for await (const evt of assistant.chat('Hello')) events.push(evt);
-      const textEvt = events.find(e => e.type === 'text') as Extract<StreamEvent, { type: 'text' }>;
-      expect(textEvt.content).toBe('Reply: You are a helpful assistant.\n\nHello');
+      for await (const _ of assistant.chat('Hello')) {}
+      const agentsMd = await fsReadFile(join(dir, 'AGENTS.md'), 'utf-8');
+      expect(agentsMd).toContain('## System Instructions');
+      expect(agentsMd).toContain('You are a helpful assistant.');
+    });
+
+    it('systemPrompt in golem.yaml does NOT alter the message passed to the engine', async () => {
+      await writeFile(
+        join(dir, 'golem.yaml'),
+        'name: test-bot\nengine: cursor\nsystemPrompt: "You are a helpful assistant."\n',
+      );
+      let capturedPrompt = '';
+      mockedCreateEngine.mockReturnValue({
+        async *invoke(prompt: string): AsyncIterable<StreamEvent> {
+          capturedPrompt = prompt;
+          yield { type: 'done', sessionId: 'sp-sess' } as StreamEvent;
+        },
+      });
+      const assistant = createAssistant({ dir });
+      for await (const _ of assistant.chat('Hello')) {}
+      expect(capturedPrompt).toBe('Hello');
+    });
+
+    it('without systemPrompt, AGENTS.md has no System Instructions section', async () => {
+      const assistant = createAssistant({ dir });
+      for await (const _ of assistant.chat('Hello')) {}
+      const agentsMd = await fsReadFile(join(dir, 'AGENTS.md'), 'utf-8');
+      expect(agentsMd).not.toContain('## System Instructions');
     });
 
     it('without systemPrompt the message is passed through unchanged', async () => {

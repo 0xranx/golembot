@@ -895,6 +895,38 @@ async function main() {
       }
     }
 
+    // ╔════════════════════════════════════════════════════════╗
+    // ║  PART 5: systemPrompt injection                         ║
+    // ╚════════════════════════════════════════════════════════╝
+
+    console.log(`\n${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
+    console.log(`${MAGENTA}${BOLD}  PART 5: systemPrompt — injected into AGENTS.md, not prepended to message${RESET}`);
+    console.log(`${MAGENTA}${BOLD}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
+
+    const spDir = await mkdtemp(join(tmpdir(), 'golem-cur-sp-'));
+    dirsToClean.push(spDir);
+
+    step('systemPrompt — injected into AGENTS.md as System Instructions section');
+
+    try {
+      const spBot = createAssistant({ dir: spDir });
+      await spBot.init({ engine: 'cursor', name: 'sp-test-bot' });
+
+      await writeFile(
+        join(spDir, 'golem.yaml'),
+        'name: sp-test-bot\nengine: cursor\nsystemPrompt: "You are a specialized bot named GolemTest."\n',
+      );
+
+      await collectChat(spBot, 'Reply OK in one word');
+
+      const agentsMd = await readFile(join(spDir, 'AGENTS.md'), 'utf-8');
+      record('AGENTS.md contains System Instructions section', agentsMd.includes('## System Instructions'));
+      record('AGENTS.md contains systemPrompt content', agentsMd.includes('GolemTest'));
+    } catch (e) {
+      record('systemPrompt injection', false);
+      console.error(e);
+    }
+
   } finally {
     // ── Cleanup ────────────────────────────────────
 

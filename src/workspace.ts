@@ -167,14 +167,18 @@ export async function scanSkills(dir: string): Promise<SkillInfo[]> {
   return skills;
 }
 
-export async function generateAgentsMd(dir: string, skills: SkillInfo[]): Promise<void> {
+export async function generateAgentsMd(dir: string, skills: SkillInfo[], systemPrompt?: string): Promise<void> {
   const skillList = skills.length > 0
     ? skills.map(s => `- ${s.name}: ${s.description}`).join('\n')
     : '- (no skills installed)';
 
+  const systemPromptSection = systemPrompt
+    ? `## System Instructions\n${systemPrompt}\n\n`
+    : '';
+
   const content = `# Assistant Context
 
-## Installed Skills
+${systemPromptSection}## Installed Skills
 ${skillList}
 
 ## Directory Structure
@@ -195,7 +199,7 @@ export async function ensureReady(dir: string): Promise<{
 }> {
   const config = await loadConfig(dir);
   const skills = await scanSkills(dir);
-  await generateAgentsMd(dir, skills);
+  await generateAgentsMd(dir, skills, config.systemPrompt);
   return { config, skills };
 }
 

@@ -18,6 +18,7 @@ pnpm add @larksuiteoapi/node-sdk
 4. Under **Permissions**, add:
    - `im:message` — send messages
    - `im:message:readonly` — receive messages
+   - `im:message.group_at_msg:readonly` — receive group messages where the bot is @mentioned
 5. Publish the app version and have an admin approve it
 
 ## Configuration
@@ -42,6 +43,7 @@ FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxx
 - **Events**: Listens for `im.message.receive_v1` events (text messages only)
 - **Reply**: Sends messages via `client.im.v1.message.create()` using the `chat_id`
 - **Chat types**: Supports both DMs and group chats
+- **Group @mention filter**: In group chats the bot only responds when directly @mentioned. The @mention key is automatically stripped from the message text before it is passed to the engine
 
 ## Start
 
@@ -56,3 +58,4 @@ The adapter connects to Feishu via WebSocket on startup. Messages appear in logs
 - WebSocket mode means the bot works behind NAT/firewalls without port forwarding
 - Only text messages are processed; images, files, and other types are ignored
 - The adapter automatically handles connection lifecycle
+- In group chats, the bot only responds to messages that directly @mention it — it ignores all other group traffic

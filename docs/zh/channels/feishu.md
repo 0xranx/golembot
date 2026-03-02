@@ -18,6 +18,7 @@ pnpm add @larksuiteoapi/node-sdk
 4. 在**权限管理**中，添加：
    - `im:message` — 发送消息
    - `im:message:readonly` — 接收消息
+   - `im:message.group_at_msg:readonly` — 接收群聊中 @机器人 的消息
 5. 发布应用版本并由管理员审批
 
 ## 配置
@@ -36,6 +37,14 @@ FEISHU_APP_ID=cli_xxxxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxx
 ```
 
+## 工作原理
+
+- **传输**：通过 `@larksuiteoapi/node-sdk` 的 `WSClient` 建立 WebSocket 长连接
+- **事件**：监听 `im.message.receive_v1` 事件（仅文本消息）
+- **回复**：通过 `client.im.v1.message.create()` 使用 `chat_id` 发送消息
+- **聊天类型**：支持单聊（私信）和群聊
+- **群聊 @mention 过滤**：群聊中机器人只在被直接 @提及时才响应，@mention 的 key 会在传给引擎前自动从消息文本中剥除
+
 ## 启动
 
 ```bash
@@ -48,3 +57,4 @@ golembot gateway --verbose
 
 - WebSocket 模式意味着机器人可以在 NAT/防火墙后运行，无需端口转发
 - 仅处理文本消息；图片、文件等类型被忽略
+- 群聊中，机器人只响应直接 @它 的消息，其余群消息一律忽略
