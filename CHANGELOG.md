@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/0xranx/golembot/compare/v0.2.3...v0.3.0) (2026-03-02)
+
+
+### Features
+
+* add systemPrompt field to golem.yaml for hardened persona definition ([df60b5a](https://github.com/0xranx/golembot/commit/df60b5aac34f1b2051ba7d5060f44a13f3cbcff6))
+
 ## [0.2.3](https://github.com/0xranx/golembot/compare/v0.2.2...v0.2.3) (2026-03-02)
 
 
