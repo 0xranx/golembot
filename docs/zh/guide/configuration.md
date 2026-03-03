@@ -86,6 +86,7 @@ gateway:
 - `channels.wecom` — 见[企业微信配置](/zh/channels/wecom)
 - `channels.slack` — 见[Slack 配置](/zh/channels/slack)
 - `channels.telegram` — 见[Telegram 配置](/zh/channels/telegram)
+- `channels.discord` — 见[Discord 配置](/zh/channels/discord)
 - 任意 key 加 `_adapter: <路径>` — 见[自定义 Adapter](/zh/channels/overview#自定义-adapter)
 
 ### `groupChat`
@@ -195,6 +196,7 @@ interface GolemConfig {
     };
     slack?: { botToken: string; appToken: string };
     telegram?: { botToken: string };
+    discord?: { botToken: string; botName?: string };
     // 自定义 adapter：任意 key，需包含 _adapter 字段
     [key: string]: { _adapter: string; [k: string]: unknown } | undefined;
   };

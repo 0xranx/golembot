@@ -19,13 +19,18 @@ interface ChannelAdapter {
 
 ```typescript
 interface ChannelMessage {
-  channelType: string;     // 'feishu' | 'dingtalk' | 'wecom'
+  channelType: string;     // 'feishu' | 'dingtalk' | 'wecom' | 'slack' | 'telegram' | 'discord' | …
   senderId: string;        // 平台上的用户 ID
   senderName?: string;     // 显示名称
   chatId: string;          // 会话/群组 ID
   chatType: 'dm' | 'group';
   text: string;            // 消息文本
   raw: unknown;            // 原始 SDK 事件对象
+  /**
+   * 由能通过平台原生方式检测到 @mention 的 Adapter 设置（如 Discord 的 <@userId> token）。
+   * 设置后，Gateway 将该消息视为 @mention，无需依赖文本模式匹配。
+   */
+  mentioned?: boolean;
 }
 ```
 
@@ -41,7 +46,7 @@ interface ChannelMessage {
 
 ## 通过 golem.yaml 配置自定义 Adapter
 
-不需要修改框架代码，任何消息源（邮件、GitHub Issue、Discord、Cron 触发等）都可以接入 GolemBot。在 `golem.yaml` 里声明自定义 channel，并用 `_adapter` 字段指向你的适配器文件或 npm 包：
+不需要修改框架代码，任何消息源（邮件、GitHub Issue、Cron 触发等）都可以接入 GolemBot。在 `golem.yaml` 里声明自定义 channel，并用 `_adapter` 字段指向你的适配器文件或 npm 包：
 
 ```yaml
 name: my-assistant
@@ -60,9 +65,10 @@ channels:
     token: ${EMAIL_TOKEN}
 
   # 自定义 channel — npm 包
-  discord:
-    _adapter: golembot-discord-adapter
-    token: ${DISCORD_TOKEN}
+  my-teams:
+    _adapter: golembot-teams-adapter
+    tenantId: ${TEAMS_TENANT_ID}
+    clientSecret: ${TEAMS_CLIENT_SECRET}
 ```
 
 **路径解析规则：**
@@ -154,6 +160,7 @@ await adapter.start(async (msg) => {
 | `DingtalkAdapter` | `dingtalk` | `dingtalk-stream` |
 | `WecomAdapter` | `wecom` | `@wecom/crypto` + `xml2js` |
 | `SlackAdapter` | `slack` | `@slack/bolt` |
-| `TelegramAdapter` | `telegram` | `node-telegram-bot-api` |
+| `TelegramAdapter` | `telegram` | `grammy` |
+| `DiscordAdapter` | `discord` | `discord.js` |
 
 内置 Adapter 由 gateway 服务内部使用。在 `golem.yaml` 里配置对应的 channel 类型即可，无需写 `_adapter` 字段。

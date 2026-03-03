@@ -85,6 +85,7 @@ Configure one or more IM platforms. Only configured channels are started by the 
 - `channels.wecom` — see [WeCom setup](/channels/wecom)
 - `channels.slack` — see [Slack setup](/channels/slack)
 - `channels.telegram` — see [Telegram setup](/channels/telegram)
+- `channels.discord` — see [Discord setup](/channels/discord)
 - Any other key with `_adapter: <path>` — see [Custom Adapters](/channels/overview#custom-adapters)
 
 ### `groupChat`
@@ -219,6 +220,7 @@ interface GolemConfig {
     };
     slack?: { botToken: string; appToken: string };
     telegram?: { botToken: string };
+    discord?: { botToken: string; botName?: string };
     // Custom adapter: any key with _adapter field
     [key: string]: { _adapter: string; [k: string]: unknown } | undefined;
   };

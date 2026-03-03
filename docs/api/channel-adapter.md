@@ -27,13 +27,19 @@ interface ChannelAdapter {
 
 ```typescript
 interface ChannelMessage {
-  channelType: string;     // 'feishu' | 'dingtalk' | 'wecom'
+  channelType: string;     // 'feishu' | 'dingtalk' | 'wecom' | 'slack' | 'telegram' | 'discord' | …
   senderId: string;        // User ID on the platform
   senderName?: string;     // Display name (if available)
   chatId: string;          // Chat/conversation ID
   chatType: 'dm' | 'group';
   text: string;            // Message text content
   raw: unknown;            // Raw SDK event object
+  /**
+   * Set to `true` by adapters that can detect a bot @mention through
+   * platform-native means (e.g. Discord's `<@userId>` token). When set,
+   * the gateway treats the message as an @mention regardless of text matching.
+   */
+  mentioned?: boolean;
 }
 ```
 
@@ -64,7 +70,7 @@ Handles:
 
 ## Custom Adapters via golem.yaml
 
-You can plug any message source into GolemBot — email, GitHub Issues, Discord, cron triggers, or anything else — without touching the framework code. Declare a custom channel in `golem.yaml` with an `_adapter` field pointing to your adapter file or npm package:
+You can plug any message source into GolemBot — email, GitHub Issues, cron triggers, or anything else — without touching the framework code. Declare a custom channel in `golem.yaml` with an `_adapter` field pointing to your adapter file or npm package:
 
 ```yaml
 name: my-assistant
@@ -83,9 +89,10 @@ channels:
     token: ${EMAIL_TOKEN}
 
   # Custom channel — npm package
-  discord:
-    _adapter: golembot-discord-adapter
-    token: ${DISCORD_TOKEN}
+  my-teams:
+    _adapter: golembot-teams-adapter
+    tenantId: ${TEAMS_TENANT_ID}
+    clientSecret: ${TEAMS_CLIENT_SECRET}
 ```
 
 **Path resolution rules:**
@@ -183,6 +190,7 @@ await adapter.start(async (msg) => {
 | `DingtalkAdapter` | `dingtalk` | `dingtalk-stream` |
 | `WecomAdapter` | `wecom` | `@wecom/crypto` + `xml2js` |
 | `SlackAdapter` | `slack` | `@slack/bolt` |
-| `TelegramAdapter` | `telegram` | `node-telegram-bot-api` |
+| `TelegramAdapter` | `telegram` | `grammy` |
+| `DiscordAdapter` | `discord` | `discord.js` |
 
 These are used internally by the gateway service. To use them, configure the corresponding channel type in `golem.yaml` — no `_adapter` field needed.
