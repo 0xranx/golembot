@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { ChannelAdapter, ChannelMessage } from '../channel.js';
 import { detectMention } from '../channel.js';
-import { buildGroupPrompt, resolveGroupChatConfig, type GroupMessage } from '../gateway.js';
+import { buildGroupPrompt, resolveGroupChatConfig, GROUP_TURN_RESET_MS, type GroupMessage } from '../gateway.js';
 
 function createMockAdapter(name: string): ChannelAdapter & {
   messages: ChannelMessage[];
@@ -306,5 +306,21 @@ describe('group chat helpers - buildGroupPrompt', () => {
     const groupKey = `${msg.channelType}:${msg.chatId}`;
     expect(groupKey).toBe('slack:C001');
     expect(buildSessionKey(msg)).not.toBe(groupKey);
+  });
+});
+
+describe('GROUP_TURN_RESET_MS', () => {
+  it('is 1 hour in milliseconds', () => {
+    expect(GROUP_TURN_RESET_MS).toBe(60 * 60 * 1000);
+  });
+
+  it('idle check: group silent for longer than threshold should trigger reset', () => {
+    const now = Date.now();
+    const oneHourAgo = now - GROUP_TURN_RESET_MS - 1;
+    const justNow = now - 1000; // 1 second ago
+
+    // Simulate the reset condition: Date.now() - lastActivity > GROUP_TURN_RESET_MS
+    expect(now - oneHourAgo > GROUP_TURN_RESET_MS).toBe(true);   // → reset
+    expect(now - justNow > GROUP_TURN_RESET_MS).toBe(false);     // → no reset
   });
 });

@@ -66,6 +66,15 @@ const groupHistories = new Map<string, GroupMessage[]>();
 /** Total bot replies sent per group — used as a safety valve against runaway chains. */
 const groupTurnCounters = new Map<string, number>();
 
+/** Timestamp of the last human (non-bot) message per group — used to reset turn counters. */
+const groupLastActivity = new Map<string, number>();
+
+/**
+ * After this many milliseconds of silence in a group, reset the turn counter.
+ * This ensures maxTurns is a per-conversation limit, not a permanent lifetime ban.
+ */
+export const GROUP_TURN_RESET_MS = 60 * 60 * 1000; // 1 hour
+
 export function resolveGroupChatConfig(config: GolemConfig): Required<GroupChatConfig> {
   const gc = config.groupChat ?? {};
   return {
@@ -216,6 +225,14 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
 
             // Skip messages sent by this bot itself (prevents feedback loops in broadcast adapters)
             if (msg.senderName === config.name) return;
+
+            // Reset turn counter if the group has been idle for longer than GROUP_TURN_RESET_MS.
+            // This makes maxTurns a per-conversation limit rather than a permanent process-lifetime ban.
+            const lastActivity = groupLastActivity.get(groupKey) ?? 0;
+            if (Date.now() - lastActivity > GROUP_TURN_RESET_MS) {
+              groupTurnCounters.delete(groupKey);
+            }
+            groupLastActivity.set(groupKey, Date.now());
 
             // Always update history buffer, regardless of policy
             const hist = groupHistories.get(groupKey) ?? [];
