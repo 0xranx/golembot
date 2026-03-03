@@ -1,3 +1,17 @@
+# [0.6.0-beta.1](https://github.com/0xranx/golembot/compare/v0.5.0...v0.6.0-beta.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* load groupChat config from golem.yaml + tune multi-bot demo timeout ([6bf1a52](https://github.com/0xranx/golembot/commit/6bf1a52e30e4a50a373e083286e3c64aa76e53f0))
+* persist and parse groupChat in writeConfig/loadConfig ([c037f3c](https://github.com/0xranx/golembot/commit/c037f3c5c6dad431ff97a80d2b255b76bbe81bb9))
+
+
+### Features
+
+* add group chat support with configurable response policy ([445d4c2](https://github.com/0xranx/golembot/commit/445d4c27cacd0203d9433c007573ed8671a06c6a))
+* support custom channel adapters via _adapter field in golem.yaml ([0b0ef3d](https://github.com/0xranx/golembot/commit/0b0ef3decb722a6df783b429c4f20e7c0fa162a3))
+
 # [0.5.0](https://github.com/0xranx/golembot/compare/v0.4.0...v0.5.0) (2026-03-02)
 
 
