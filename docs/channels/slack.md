@@ -54,7 +54,9 @@ golem gateway
 | Channel @mention (`@YourBot message`) | Strips `<@BOT_ID>` prefix, then responds |
 | Channel message without @mention | Ignored |
 
-Each conversation thread (DM or channel) maintains its own session context.
+DM conversations maintain a per-user session. Channel messages share a per-channel session — all users in the same channel share one context.
+
+> **Note:** Thread replies are delivered to the top-level channel, not inside the thread.
 
 ## Message Limits
 

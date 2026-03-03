@@ -28,13 +28,13 @@ npm install discord.js
 ## 配置 golem.yaml
 
 ```yaml
-name: my-assistant       # 必须和下面的 botName 保持一致，才能正确检测 @mention
+name: my-assistant
 engine: claude-code
 
 channels:
   discord:
     botToken: ${DISCORD_BOT_TOKEN}
-    botName: my-assistant  # 与上面的 name 字段保持一致
+    botName: my-assistant  # 可选，详见下文
 ```
 
 运行前设置环境变量：
@@ -46,11 +46,9 @@ golembot gateway
 
 ### `botName` 字段
 
-**服务器频道中的 @mention 检测需要 `botName`**。Discord 的消息内容中用内部用户 ID（`<@12345678>`）而非名字来标记 @mention。适配器会将这些 token 替换为 `@botName`，从而使 GolemBot 的 mention 检测正常工作。
+`botName` 是**可选的**。Discord 消息内容中使用内部用户 ID（`<@12345678>`）而非名字来标记 @mention，适配器通过原生 token 检测 mention——**即使不设置 `botName`，mention 检测也能正常工作**。
 
-将 `botName` 设置为与 `golem.yaml` 中 `name` 字段相同的值。
-
-不设置 `botName` 时，Bot 在私信中仍然正常工作（始终响应），群组中使用 `groupPolicy: always` 也没有问题，但 `mention-only` 和 `smart` 策略无法识别 @mention。
+设置 `botName` 后，适配器会额外将 `<@userId>` token 替换为 `@botName`，让引擎看到可读的 mention 名称。建议与 `golem.yaml` 中的 `name` 字段保持一致。
 
 ## 工作方式
 

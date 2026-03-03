@@ -122,7 +122,7 @@ channels:
     botToken: ${TELEGRAM_BOT_TOKEN}
   discord:
     botToken: ${DISCORD_BOT_TOKEN}
-    botName: my-assistant        # must match `name` above for @mention detection
+    botName: my-assistant        # optional — normalizes @mention tokens in channel messages
   feishu:
     appId: ${FEISHU_APP_ID}
     appSecret: ${FEISHU_APP_SECRET}

@@ -28,13 +28,13 @@ npm install discord.js
 ## Configure golem.yaml
 
 ```yaml
-name: my-assistant       # must match botName below for @mention detection
+name: my-assistant
 engine: claude-code
 
 channels:
   discord:
     botToken: ${DISCORD_BOT_TOKEN}
-    botName: my-assistant  # set to the same value as `name` above
+    botName: my-assistant  # optional — see below
 ```
 
 Set environment variables before running:
@@ -46,11 +46,9 @@ golembot gateway
 
 ### `botName` field
 
-`botName` is **required for @mention detection in server channels**. Discord uses internal user IDs (`<@12345678>`) rather than names in message content. The adapter replaces these tokens with `@botName` so that GolemBot's mention detection works correctly.
+`botName` is **optional**. Discord uses internal user IDs (`<@12345678>`) in message content rather than names. The adapter detects @mentions natively via these tokens — mention detection works correctly even without `botName`.
 
-Set `botName` to the same value as your `name` field in `golem.yaml`.
-
-Without `botName`, the bot still works in DMs (always responds) and in groups if `groupPolicy: always` is set, but `mention-only` and `smart` policies won't detect @mentions.
+When `botName` is set, the adapter additionally replaces the `<@userId>` token with `@botName` before passing text to the engine, so the engine sees a human-readable mention. Set it to the same value as `name` in `golem.yaml`.
 
 ## How It Works
 
