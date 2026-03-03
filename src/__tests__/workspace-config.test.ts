@@ -119,6 +119,40 @@ channels:
   });
 });
 
+describe('loadConfig groupChat field', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), 'golem-gc-'));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('parses groupChat from golem.yaml', async () => {
+    await writeFile(
+      join(tmpDir, 'golem.yaml'),
+      'name: bot\nengine: cursor\ngroupChat:\n  groupPolicy: smart\n  historyLimit: 30\n  maxTurns: 5\n',
+      'utf-8',
+    );
+    const config = await loadConfig(tmpDir);
+    expect(config.groupChat?.groupPolicy).toBe('smart');
+    expect(config.groupChat?.historyLimit).toBe(30);
+    expect(config.groupChat?.maxTurns).toBe(5);
+  });
+
+  it('leaves groupChat undefined when absent', async () => {
+    await writeFile(
+      join(tmpDir, 'golem.yaml'),
+      'name: bot\nengine: cursor\n',
+      'utf-8',
+    );
+    const config = await loadConfig(tmpDir);
+    expect(config.groupChat).toBeUndefined();
+  });
+});
+
 describe('writeConfig with channels + gateway', () => {
   let tmpDir: string;
 
@@ -146,5 +180,20 @@ describe('writeConfig with channels + gateway', () => {
     expect(loaded.channels?.feishu?.appId).toBe('cli_abc');
     expect(loaded.gateway?.port).toBe(5000);
     expect(loaded.gateway?.token).toBe('tok');
+  });
+
+  it('round-trips groupChat config', async () => {
+    const config: GolemConfig = {
+      name: 'bot',
+      engine: 'cursor',
+      groupChat: { groupPolicy: 'smart', historyLimit: 25, maxTurns: 8 },
+    };
+
+    await writeConfig(tmpDir, config);
+    const loaded = await loadConfig(tmpDir);
+
+    expect(loaded.groupChat?.groupPolicy).toBe('smart');
+    expect(loaded.groupChat?.historyLimit).toBe(25);
+    expect(loaded.groupChat?.maxTurns).toBe(8);
   });
 });

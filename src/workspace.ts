@@ -155,6 +155,7 @@ export async function writeConfig(dir: string, config: GolemConfig): Promise<voi
   if (typeof config.skipPermissions === 'boolean') content.skipPermissions = config.skipPermissions;
   if (config.channels) content.channels = config.channels;
   if (config.gateway) content.gateway = config.gateway;
+  if (config.groupChat) content.groupChat = config.groupChat;
   await writeFile(configPath, yaml.dump(content, { lineWidth: -1 }), 'utf-8');
 }
 
