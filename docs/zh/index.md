@@ -25,7 +25,7 @@ features:
   - icon:
       src: /icons/plug.svg
     title: 随处接入
-    details: 内置 Slack、Telegram、飞书、钉钉、企业微信、HTTP，无需公网地址。写一个自定义 Adapter 即可接入邮件、Discord、GitHub Issue 或任何消息来源。也可 5 行代码嵌入 Express、Next.js 或任何 Node.js 应用。
+    details: 内置 Slack、Telegram、Discord、飞书、钉钉、企业微信、HTTP，无需公网地址。写一个自定义 Adapter 即可接入邮件、GitHub Issue 或任何消息来源。也可 5 行代码嵌入 Express、Next.js 或任何 Node.js 应用。
   - icon:
       src: /icons/folder.svg
     title: 目录即助手
@@ -94,7 +94,7 @@ for await (const ev of bot.chat('分析上个月的销售数据'))
 
 ## 通道
 
-接入任何消息来源。内置通道无需公网地址。在 `golem.yaml` 里加一行 `_adapter: <path>` 即可接入邮件、Discord、GitHub Issue 等 —— [自定义 Adapter](api/channel-adapter)。
+接入任何消息来源。内置通道无需公网地址。在 `golem.yaml` 里加一行 `_adapter: <path>` 即可接入邮件、GitHub Issue 等 —— [自定义 Adapter](api/channel-adapter)。
 
 <div class="channels-grid">
   <div class="channel-card">
@@ -108,6 +108,12 @@ for await (const ev of bot.chat('分析上个月的销售数据'))
     <img class="channel-icon" src="/icons/telegram.svg" alt="Telegram" />
     <div class="channel-name">Telegram</div>
     <div class="channel-transport">长轮询</div>
+  </div>
+  <div class="channel-card">
+    <a class="card-link" href="channels/discord" aria-label="Discord"></a>
+    <img class="channel-icon" src="/icons/discord.svg" alt="Discord" />
+    <div class="channel-name">Discord</div>
+    <div class="channel-transport">Gateway WebSocket</div>
   </div>
   <div class="channel-card">
     <a class="card-link" href="channels/feishu" aria-label="飞书"></a>

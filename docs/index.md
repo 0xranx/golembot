@@ -25,7 +25,7 @@ features:
   - icon:
       src: /icons/plug.svg
     title: Connect Anywhere
-    details: Connect to Slack, Telegram, Feishu, DingTalk, WeCom, or HTTP out of the box — no public URL required. Write a custom adapter to plug in email, Discord, GitHub Issues, or any other source. Or embed as a library in Express, Next.js, or any Node.js app in 5 lines.
+    details: Connect to Slack, Telegram, Discord, Feishu, DingTalk, WeCom, or HTTP out of the box — no public URL required. Write a custom adapter to plug in email, GitHub Issues, or any other source. Or embed as a library in Express, Next.js, or any Node.js app in 5 lines.
   - icon:
       src: /icons/folder.svg
     title: Directory Is the Assistant
@@ -94,7 +94,7 @@ Switch engines by changing one line in `golem.yaml` — the [StreamEvent](/api/s
 
 ## Channels
 
-Connect to any message source. Built-in adapters need no public URL. Add `_adapter: <path>` to `golem.yaml` to plug in email, Discord, GitHub Issues, or anything else — [write your own adapter](api/channel-adapter).
+Connect to any message source. Built-in adapters need no public URL. Add `_adapter: <path>` to `golem.yaml` to plug in email, GitHub Issues, or anything else — [write your own adapter](api/channel-adapter).
 
 <div class="channels-grid">
   <div class="channel-card">
@@ -108,6 +108,12 @@ Connect to any message source. Built-in adapters need no public URL. Add `_adapt
     <img class="channel-icon" src="/icons/telegram.svg" alt="Telegram" />
     <div class="channel-name">Telegram</div>
     <div class="channel-transport">Long-Polling</div>
+  </div>
+  <div class="channel-card">
+    <a class="card-link" href="channels/discord" aria-label="Discord"></a>
+    <img class="channel-icon" src="/icons/discord.svg" alt="Discord" />
+    <div class="channel-name">Discord</div>
+    <div class="channel-transport">Gateway WebSocket</div>
   </div>
   <div class="channel-card">
     <a class="card-link" href="channels/feishu" aria-label="Feishu"></a>

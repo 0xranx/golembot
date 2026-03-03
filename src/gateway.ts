@@ -260,7 +260,10 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
             groupHistories.set(groupKey, hist);
 
             // mention-only: skip if not @mentioned (zero agent cost)
-            const mentioned = detectMention(msg.text, config.name);
+            // msg.mentioned is set by adapters that detect mentions natively
+            // (e.g. Discord's <@userId> token), as a fallback when text normalisation
+            // hasn't happened (e.g. botName not configured).
+            const mentioned = detectMention(msg.text, config.name) || !!msg.mentioned;
             if (gc.groupPolicy === 'mention-only' && !mentioned) return;
 
             // maxTurns safety valve: stop if this bot has replied too many times in this group

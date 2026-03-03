@@ -52,8 +52,12 @@ export class DiscordAdapter implements ChannelAdapter {
 
       const isDM = !message.guild;
 
+      // Detect mention via Discord's native <@userId> token (works even without botName).
+      const mentionPattern = new RegExp(`<@!?${botId}>`);
+      const mentioned = mentionPattern.test(message.content);
+
       // Normalize Discord mention tokens (<@botId>, <@!botId>) → @botName
-      // so that gateway's detectMention(text, config.name) works correctly.
+      // so that gateway's detectMention(text, config.name) also works correctly.
       let text = message.content;
       if (botName) {
         text = text.replace(new RegExp(`<@!?${botId}>`, 'g'), `@${botName}`);
@@ -66,6 +70,7 @@ export class DiscordAdapter implements ChannelAdapter {
         chatId: isDM ? `dm-${message.author.id}` : message.channelId,
         chatType: isDM ? 'dm' : 'group',
         text,
+        mentioned,
         raw: message,
       });
     });

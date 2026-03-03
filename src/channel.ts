@@ -6,6 +6,12 @@ export interface ChannelMessage {
   chatType: 'dm' | 'group';
   text: string;
   raw: unknown;
+  /**
+   * Set to `true` by adapters that can reliably detect a bot @mention through
+   * platform-native means (e.g. Discord's `<@userId>` token). When set, the
+   * gateway treats the message as an @mention regardless of text pattern matching.
+   */
+  mentioned?: boolean;
 }
 
 export interface ChannelAdapter {
