@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/0xranx/golembot/compare/v0.7.1...v0.8.0) (2026-03-03)
+
+
+### Features
+
+* add Slack, Telegram, Discord to onboard wizard channel selection ([37047c0](https://github.com/0xranx/golembot/commit/37047c0014b72f326dcb0111d1b63af0e4a64d60))
+
 ## [0.7.1](https://github.com/0xranx/golembot/compare/v0.7.0...v0.7.1) (2026-03-03)
 
 
