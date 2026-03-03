@@ -86,6 +86,7 @@ interface ChannelAdapter {
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
   reply(msg: ChannelMessage, text: string): Promise<void>;
   stop(): Promise<void>;
+  typing?(msg: ChannelMessage): Promise<void>;  // optional, send "typing…" indicator
 }
 ```
 
@@ -121,6 +122,11 @@ export default class MyPlatformAdapter {
 
   async stop() {
     await this._client.disconnect();
+  }
+
+  // Optional: show "typing…" indicator while AI is processing
+  async typing(originalMsg) {
+    await this._client.sendTyping(originalMsg.chatId).catch(() => {});
   }
 }
 ```

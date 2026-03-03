@@ -12,6 +12,9 @@ interface ChannelAdapter {
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
   reply(msg: ChannelMessage, text: string): Promise<void>;
   stop(): Promise<void>;
+  /** 可选：向聊天发送"正在输入…"指示器。在 AI 调用前触发，每 4 秒刷新一次，
+   *  AI 回复完毕后自动停止。支持此功能可显著改善长响应期间的用户体验。 */
+  typing?(msg: ChannelMessage): Promise<void>;
 }
 ```
 
@@ -110,6 +113,11 @@ export default class EmailAdapter implements ChannelAdapter {
 
   async stop(): Promise<void> {
     // 清理连接资源
+  }
+
+  // 可选：在 AI 处理期间发送"正在输入…"指示器
+  async typing(msg: ChannelMessage): Promise<void> {
+    await this.client.sendTyping(msg.chatId).catch(() => {});
   }
 }
 ```

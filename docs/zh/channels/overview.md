@@ -86,6 +86,7 @@ interface ChannelAdapter {
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
   reply(msg: ChannelMessage, text: string): Promise<void>;
   stop(): Promise<void>;
+  typing?(msg: ChannelMessage): Promise<void>;  // 可选，发送"正在输入…"指示器
 }
 ```
 
@@ -120,6 +121,11 @@ export default class MyPlatformAdapter {
 
   async stop() {
     await this._client.disconnect();
+  }
+
+  // 可选：在 AI 处理期间显示"正在输入…"指示器
+  async typing(originalMsg) {
+    await this._client.sendTyping(originalMsg.chatId).catch(() => {});
   }
 }
 ```

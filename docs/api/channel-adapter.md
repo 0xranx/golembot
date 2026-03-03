@@ -12,6 +12,9 @@ interface ChannelAdapter {
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
   reply(msg: ChannelMessage, text: string): Promise<void>;
   stop(): Promise<void>;
+  /** Optional: send a platform "typing…" indicator. Called before the AI invocation
+   *  and refreshed every 4 seconds so users see feedback during long waits. */
+  typing?(msg: ChannelMessage): Promise<void>;
 }
 ```
 
@@ -22,6 +25,7 @@ interface ChannelAdapter {
 | `start(onMessage)` | Connect to the platform and begin listening. Call `onMessage` for each incoming message. |
 | `reply(msg, text)` | Send a text reply to the original message |
 | `stop()` | Gracefully disconnect |
+| `typing(msg)` | *(optional)* Send a "typing…" indicator to the chat. Called before the AI call and refreshed every 4 s. Implement for better UX on platforms that support it (e.g. Telegram `sendChatAction`, Discord `sendTyping`). |
 
 ## ChannelMessage Type
 
@@ -134,6 +138,11 @@ export default class EmailAdapter implements ChannelAdapter {
 
   async stop(): Promise<void> {
     // Clean up connections
+  }
+
+  // Optional: send typing indicator while the AI is thinking
+  async typing(msg: ChannelMessage): Promise<void> {
+    await this.client.sendTyping(msg.chatId).catch(() => {});
   }
 }
 ```
