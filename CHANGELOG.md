@@ -1,3 +1,10 @@
+## [0.6.1-beta.1](https://github.com/0xranx/golembot/compare/v0.6.0...v0.6.1-beta.1) (2026-03-03)
+
+
+### Bug Fixes
+
+* reset groupTurnCounter after 1 hour of group inactivity ([7f8cb15](https://github.com/0xranx/golembot/commit/7f8cb1532d8d43774c3e611d9d5f977dd2d4e51d))
+
 # [0.6.0](https://github.com/0xranx/golembot/compare/v0.5.0...v0.6.0) (2026-03-03)
 
 

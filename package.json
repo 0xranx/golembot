@@ -1,6 +1,6 @@
 {
   "name": "golembot",
-  "version": "0.6.0",
+  "version": "0.6.1-beta.1",
   "description": "GolemBot - Local-first AI assistant powered by Coding Agent CLI engines",
   "type": "module",
   "main": "./dist/index.js",
