@@ -18,7 +18,7 @@ When modifying code under `src/`, the following constraints must not be violated
 ### Interface Change Rules
 
 - Any signature change to the `Assistant` interface (`index.ts`) must be verified across `server.ts`, `gateway.ts`, and `cli.ts`.
-- Any change to the `AgentEngine` interface (`engine.ts`) must remain compatible with all three engines (Cursor, Claude Code, OpenCode).
+- Any change to the `AgentEngine` interface (`engine.ts`) must remain compatible with all engines (Cursor, Claude Code, OpenCode, Codex).
 - `StreamEvent` type changes must verify compatibility with `server.ts` SSE output, `cli.ts` event handling, and `gateway.ts` IM message assembly.
 
 ### File Responsibility Boundaries
@@ -92,3 +92,11 @@ pnpm run test         # Unit tests (vitest)
 - Binary: `opencode` (on PATH)
 - Flags: `run <prompt> --format json`
 - step_finish events are accumulated; single done event emitted on process close
+
+### Codex
+
+- Binary: `codex` (npm: `@openai/codex`)
+- Flags: `exec --json --full-auto --skip-git-repo-check [--model X] <prompt>`
+- Resume: `exec resume --json --full-auto --skip-git-repo-check [--model X] <thread_id> <prompt>`
+- Auth: `CODEX_API_KEY` env var (also sets `OPENAI_API_KEY` for compatibility)
+- `--skip-git-repo-check` is required (GolemBot uses temp dirs)

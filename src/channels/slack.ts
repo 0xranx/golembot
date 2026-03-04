@@ -3,11 +3,26 @@ import type { SlackChannelConfig } from '../workspace.js';
 
 export class SlackAdapter implements ChannelAdapter {
   readonly name = 'slack';
+  readonly maxMessageLength = 4000;
   private config: SlackChannelConfig;
   private app: any;
+  private userNameCache = new Map<string, string>();
 
   constructor(config: SlackChannelConfig) {
     this.config = config;
+  }
+
+  private async resolveUserName(userId: string): Promise<string | undefined> {
+    const cached = this.userNameCache.get(userId);
+    if (cached) return cached;
+    try {
+      const res = await this.app.client.users.info({ user: userId });
+      const name = res.user?.profile?.display_name || res.user?.real_name;
+      if (name) this.userNameCache.set(userId, name);
+      return name;
+    } catch {
+      return undefined;
+    }
   }
 
   async start(onMessage: (msg: ChannelMessage) => void): Promise<void> {
@@ -33,9 +48,11 @@ export class SlackAdapter implements ChannelAdapter {
       if (message.channel_type !== 'im') return; // group messages handled via app_mention
       if (!message.text) return;
 
+      const senderName = await this.resolveUserName(message.user);
       onMessage({
         channelType: 'slack',
         senderId: message.user,
+        senderName,
         chatId: message.channel,
         chatType: 'dm',
         text: message.text,
@@ -50,9 +67,11 @@ export class SlackAdapter implements ChannelAdapter {
       const text = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
       if (!text) return;
 
+      const senderName = await this.resolveUserName(event.user);
       onMessage({
         channelType: 'slack',
         senderId: event.user,
+        senderName,
         chatId: event.channel,
         chatType: 'group',
         text,

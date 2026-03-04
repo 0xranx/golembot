@@ -74,7 +74,7 @@ claude --version
   [--model <model-alias>]
 ```
 
-**PTY is not needed**. Claude Code CLI supports standard stdin/stdout — a regular `child_process.spawn()` suffices. All three engines (Cursor, Claude Code, OpenCode) now use the same `child_process.spawn` approach.
+**PTY is not needed**. Claude Code CLI supports standard stdin/stdout — a regular `child_process.spawn()` suffices. All engines (Cursor, Claude Code, OpenCode, Codex) now use the same `child_process.spawn` approach.
 
 ---
 

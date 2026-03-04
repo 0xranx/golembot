@@ -3,6 +3,7 @@ import type { TelegramChannelConfig } from '../workspace.js';
 
 export class TelegramAdapter implements ChannelAdapter {
   readonly name = 'telegram';
+  readonly maxMessageLength = 4096;
   private config: TelegramChannelConfig;
   private bot: any;
   private botUsername: string | undefined;

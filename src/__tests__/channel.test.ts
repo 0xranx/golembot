@@ -105,10 +105,9 @@ describe('Feishu adapter mentioned field', () => {
   });
 
   it('DM messages have mentioned=undefined', () => {
-    const chatType: 'dm' | 'group' = 'dm';
     const msg: ChannelMessage = {
       channelType: 'feishu', senderId: 'ou_user1', chatId: 'oc_dm1',
-      chatType, text: 'hello', mentioned: chatType === 'group' ? true : undefined, raw: {},
+      chatType: 'dm', text: 'hello', raw: {},
     };
     expect(msg.mentioned).toBeUndefined();
   });

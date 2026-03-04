@@ -13,13 +13,30 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 export class WecomAdapter implements ChannelAdapter {
   readonly name = 'wecom';
+  readonly maxMessageLength = 2048;
   private config: WecomChannelConfig;
   private server: ReturnType<typeof createServer> | null = null;
   private accessToken: string = '';
   private tokenExpiresAt: number = 0;
 
+  private userNameCache = new Map<string, string>();
+
   constructor(config: WecomChannelConfig) {
     this.config = config;
+  }
+
+  private async resolveUserName(userId: string): Promise<string | undefined> {
+    const cached = this.userNameCache.get(userId);
+    if (cached) return cached;
+    try {
+      const token = await this.getAccessToken();
+      const res = await fetch(`https://qyapi.weixin.qq.com/cgi-bin/user/get?access_token=${token}&userid=${userId}`);
+      const data = await res.json() as { name?: string; errcode?: number };
+      if (data.name) this.userNameCache.set(userId, data.name);
+      return data.name;
+    } catch {
+      return undefined;
+    }
   }
 
   private async getAccessToken(): Promise<string> {
@@ -113,10 +130,13 @@ export class WecomAdapter implements ChannelAdapter {
             return;
           }
 
+          const senderId = msgXml.FromUserName || '';
+          const senderName = await this.resolveUserName(senderId);
           const channelMsg: ChannelMessage = {
             channelType: 'wecom',
-            senderId: msgXml.FromUserName || '',
-            chatId: msgXml.FromUserName || '',
+            senderId,
+            senderName,
+            chatId: senderId,
             chatType: 'dm',
             text: msgXml.Content || '',
             raw: msgXml,

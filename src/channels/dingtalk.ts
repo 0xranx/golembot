@@ -3,6 +3,7 @@ import type { DingtalkChannelConfig } from '../workspace.js';
 
 export class DingtalkAdapter implements ChannelAdapter {
   readonly name = 'dingtalk';
+  readonly maxMessageLength = 4000;
   private config: DingtalkChannelConfig;
   private dwClient: any;
 

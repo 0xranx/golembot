@@ -82,6 +82,11 @@ export class DiscordAdapter implements ChannelAdapter {
     await raw.reply({ content: text });
   }
 
+  async typing(msg: ChannelMessage): Promise<void> {
+    const raw = msg.raw as any;
+    await raw.channel?.sendTyping?.().catch(() => {});
+  }
+
   async stop(): Promise<void> {
     this.client?.destroy();
     this.client = null;

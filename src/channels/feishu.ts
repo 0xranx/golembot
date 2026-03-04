@@ -3,12 +3,32 @@ import type { FeishuChannelConfig } from '../workspace.js';
 
 export class FeishuAdapter implements ChannelAdapter {
   readonly name = 'feishu';
+  readonly maxMessageLength = 4000;
   private config: FeishuChannelConfig;
   private client: any;
   private wsClient: any;
 
+  private userNameCache = new Map<string, string>();
+
   constructor(config: FeishuChannelConfig) {
     this.config = config;
+  }
+
+  private async resolveUserName(openId: string): Promise<string | undefined> {
+    const cached = this.userNameCache.get(openId);
+    if (cached) return cached;
+    try {
+      const token = await this.client.tokenManager.getTenantAccessToken();
+      const resp = await fetch(`https://open.feishu.cn/open-apis/contact/v3/users/${openId}?user_id_type=open_id`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await resp.json()) as any;
+      const name = json?.data?.user?.name;
+      if (name) this.userNameCache.set(openId, name);
+      return name;
+    } catch {
+      return undefined;
+    }
   }
 
   async start(onMessage: (msg: ChannelMessage) => void): Promise<void> {
@@ -90,10 +110,12 @@ export class FeishuAdapter implements ChannelAdapter {
 
         if (!text) return;
 
+        const senderId = sender.sender_id?.open_id || sender.sender_id?.user_id || '';
+        const senderName = await this.resolveUserName(senderId);
         const channelMsg: ChannelMessage = {
           channelType: 'feishu',
-          senderId: sender.sender_id?.open_id || sender.sender_id?.user_id || '',
-          senderName: sender.sender_id?.open_id,
+          senderId,
+          senderName: senderName || senderId,
           chatId: message.chat_id,
           chatType,
           text,

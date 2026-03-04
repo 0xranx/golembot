@@ -11,15 +11,6 @@ import {
   type ChannelMessage,
 } from './channel.js';
 
-// ── IM channel message limits ───────────────────────────
-const CHANNEL_LIMITS: Record<string, number> = {
-  feishu: 4000,
-  dingtalk: 4000,
-  wecom: 2048,
-  slack: 4000,
-  telegram: 4096,
-};
-
 export function splitMessage(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text];
 
@@ -287,7 +278,7 @@ export async function handleMessage(
     }
 
     if (reply.trim()) {
-      const maxLen = adapter.maxMessageLength ?? CHANNEL_LIMITS[channelType] ?? 4000;
+      const maxLen = adapter.maxMessageLength ?? 4000;
       const chunks = splitMessage(reply.trim(), maxLen);
       for (const chunk of chunks) {
         await adapter.reply(msg, chunk);
@@ -368,6 +359,18 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
 
         adapters.push(adapter);
         console.log(`   ✅ ${type} channel connected`);
+
+        // DingTalk Stream SDK only delivers @mention messages to the bot.
+        // Warn if the user configured smart/always, which won't work as expected.
+        if (type === 'dingtalk') {
+          const gc = resolveGroupChatConfig(config);
+          if (gc.groupPolicy !== 'mention-only') {
+            console.warn(
+              `   ⚠️  DingTalk groupPolicy "${gc.groupPolicy}" will behave like "mention-only" — ` +
+                `the platform only delivers @mention messages to bots.`,
+            );
+          }
+        }
       } catch (e) {
         console.error(`   ❌ ${type} channel failed to start: ${(e as Error).message}`);
       }
