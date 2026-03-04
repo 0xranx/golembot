@@ -1,3 +1,10 @@
+## [0.8.5](https://github.com/0xranx/golembot/compare/v0.8.4...v0.8.5) (2026-03-04)
+
+
+### Bug Fixes
+
+* inject Codex skills to .agents/skills/ via symlinks ([fe8b834](https://github.com/0xranx/golembot/commit/fe8b834e8c9311f45349cc370a4e5b264f59270a))
+
 ## [0.8.4](https://github.com/0xranx/golembot/compare/v0.8.3...v0.8.4) (2026-03-04)
 
 
