@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildSessionKey, stripMention, type ChannelAdapter, type ChannelMessage } from '../channel.js';
+import { buildSessionKey, stripMention, type ChannelAdapter, type ChannelMessage, type ReplyOptions } from '../channel.js';
 import type { StreamEvent } from '../engine.js';
 import type { GolemConfig } from '../workspace.js';
 
@@ -434,17 +434,18 @@ function makeErrorEventAssistant(): MockAssistant {
 }
 
 type MockAdapter = {
-  replies: Array<{ msg: ChannelMessage; text: string }>;
-  reply(msg: ChannelMessage, text: string): Promise<void>;
+  replies: Array<{ msg: ChannelMessage; text: string; options?: ReplyOptions }>;
+  reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   maxMessageLength?: number;
+  getGroupMembers?: (chatId: string) => Promise<Map<string, string>>;
 };
 
 function makeMockAdapter(maxLen?: number): MockAdapter {
   const obj: MockAdapter = {
     replies: [],
     maxMessageLength: maxLen,
-    async reply(msg: ChannelMessage, text: string) {
-      obj.replies.push({ msg, text });
+    async reply(msg: ChannelMessage, text: string, options?: ReplyOptions) {
+      obj.replies.push({ msg, text, options });
     },
   };
   return obj;
@@ -773,13 +774,22 @@ describe('handleMessage — full gateway pipeline', () => {
   // ── DM handling ─────────────────────────────────────────────────────────
 
   describe('DM handling', () => {
-    it('DM text is passed to assistant without mention stripping', async () => {
+    it('DM text includes private conversation context', async () => {
       const assistant = makeMockAssistant('ok');
       const adapter = makeMockAdapter();
       const msg = makeDmMsg({ text: '@golem test' });
       await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
-      // DM: text goes straight through (no stripMention), sessionKey includes senderId
-      expect(assistant.lastPrompt).toBe('@golem test');
+      // DM: text is wrapped with system context (sender name + private chat indicator)
+      expect(assistant.lastPrompt).toContain('[System: This is a private 1-on-1 conversation with alice.]');
+      expect(assistant.lastPrompt).toContain('@golem test');
+    });
+
+    it('DM context uses senderId when senderName is missing', async () => {
+      const assistant = makeMockAssistant('ok');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: 'hello', senderName: undefined });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.lastPrompt).toContain('[System: This is a private 1-on-1 conversation with U001.]');
     });
 
     it('DM does not use group state Maps', async () => {
@@ -883,6 +893,149 @@ describe('handleMessage — full gateway pipeline', () => {
       const unblockedMsg = makeGroupMsg({ text: 'try again' });
       await handleMessage(unblockedMsg, config, assistant, adapter, 'slack', false, dir);
       expect(assistant.callCount).toBe(1);
+    });
+  });
+
+  // ── parseMentions ───────────────────────────────────────────────────────
+
+  describe('parseMentions', () => {
+    let parseMentions: typeof import('../gateway.js').parseMentions;
+
+    beforeEach(async () => {
+      const mod = await import('../gateway.js');
+      parseMentions = mod.parseMentions;
+    });
+
+    it('returns empty mentions when memberCache is empty', () => {
+      const result = parseMentions('hello @alice', new Map());
+      expect(result.mentions).toEqual([]);
+      expect(result.text).toBe('hello @alice');
+    });
+
+    it('resolves a single @mention against memberCache', () => {
+      const cache = new Map([['alice', 'ou_alice_001']]);
+      const result = parseMentions('hello @alice please help', cache);
+      expect(result.mentions).toEqual([{ name: 'alice', platformId: 'ou_alice_001' }]);
+    });
+
+    it('resolves multiple different @mentions', () => {
+      const cache = new Map([
+        ['alice', 'ou_alice'],
+        ['bob', 'ou_bob'],
+      ]);
+      const result = parseMentions('@alice and @bob please review', cache);
+      expect(result.mentions).toHaveLength(2);
+      expect(result.mentions).toContainEqual({ name: 'alice', platformId: 'ou_alice' });
+      expect(result.mentions).toContainEqual({ name: 'bob', platformId: 'ou_bob' });
+    });
+
+    it('deduplicates repeated @mentions of the same person', () => {
+      const cache = new Map([['alice', 'ou_alice']]);
+      const result = parseMentions('@alice hey @alice are you there', cache);
+      expect(result.mentions).toHaveLength(1);
+    });
+
+    it('ignores @mentions not in memberCache', () => {
+      const cache = new Map([['alice', 'ou_alice']]);
+      const result = parseMentions('@alice and @charlie', cache);
+      expect(result.mentions).toHaveLength(1);
+      expect(result.mentions[0].name).toBe('alice');
+    });
+
+    it('resolves Chinese name @mentions', () => {
+      const cache = new Map([['小舟', 'ou_xiaozhou']]);
+      const result = parseMentions('好的，@小舟 你来处理', cache);
+      expect(result.mentions).toEqual([{ name: '小舟', platformId: 'ou_xiaozhou' }]);
+    });
+
+    it('preserves original text unchanged', () => {
+      const cache = new Map([['alice', 'ou_alice']]);
+      const original = 'hello @alice world';
+      const result = parseMentions(original, cache);
+      expect(result.text).toBe(original);
+    });
+
+    it('returns empty mentions when text has no @ patterns', () => {
+      const cache = new Map([['alice', 'ou_alice']]);
+      const result = parseMentions('hello world', cache);
+      expect(result.mentions).toEqual([]);
+    });
+  });
+
+  // ── outgoing @mention integration ─────────────────────────────────────
+
+  describe('outgoing @mention in group replies', () => {
+    it('calls getGroupMembers and passes resolved mentions to adapter.reply', async () => {
+      const assistant = makeMockAssistant('好的，@小舟 你来处理这个任务');
+      const adapter = makeMockAdapter();
+      adapter.getGroupMembers = async (chatId: string) => {
+        return new Map([['小舟', 'ou_xiaozhou_001']]);
+      };
+      const msg = makeGroupMsg({ text: '@golem assign task' });
+      const config = makeConfig({ groupChat: { groupPolicy: 'mention-only' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
+      const lastReply = adapter.replies[adapter.replies.length - 1];
+      expect(lastReply.options?.mentions).toBeDefined();
+      expect(lastReply.options!.mentions).toContainEqual({
+        name: '小舟',
+        platformId: 'ou_xiaozhou_001',
+      });
+    });
+
+    it('does not call getGroupMembers for DM replies', async () => {
+      let called = false;
+      const assistant = makeMockAssistant('hello @alice');
+      const adapter = makeMockAdapter();
+      adapter.getGroupMembers = async () => {
+        called = true;
+        return new Map([['alice', 'ou_alice']]);
+      };
+      const msg = makeDmMsg({ text: 'hi' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(called).toBe(false);
+      // DM reply should not have mentions options
+      expect(adapter.replies[0].options).toBeUndefined();
+    });
+
+    it('passes no mentions when adapter lacks getGroupMembers', async () => {
+      const assistant = makeMockAssistant('hey @alice');
+      const adapter = makeMockAdapter();
+      // no getGroupMembers on adapter
+      const msg = makeGroupMsg({ text: '@golem hello' });
+      const config = makeConfig({ groupChat: { groupPolicy: 'mention-only' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
+      // Without getGroupMembers, no mentions should be resolved
+      expect(adapter.replies[0].options).toBeUndefined();
+    });
+
+    it('passes no mentions when reply text has no @patterns matching members', async () => {
+      const assistant = makeMockAssistant('sure, I will handle it');
+      const adapter = makeMockAdapter();
+      adapter.getGroupMembers = async () => new Map([['alice', 'ou_alice']]);
+      const msg = makeGroupMsg({ text: '@golem do it' });
+      const config = makeConfig({ groupChat: { groupPolicy: 'mention-only' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
+      expect(adapter.replies[0].options).toBeUndefined();
+    });
+
+    it('gracefully handles getGroupMembers throwing an error', async () => {
+      const assistant = makeMockAssistant('hello @alice');
+      const adapter = makeMockAdapter();
+      adapter.getGroupMembers = async () => { throw new Error('API error'); };
+      const msg = makeGroupMsg({ text: '@golem hi' });
+      const config = makeConfig({ groupChat: { groupPolicy: 'mention-only' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      // Should still reply, just without mentions
+      expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
+      expect(adapter.replies[0].options).toBeUndefined();
     });
   });
 });

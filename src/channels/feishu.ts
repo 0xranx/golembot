@@ -1,5 +1,6 @@
-import type { ChannelAdapter, ChannelMessage } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions, MentionTarget } from '../channel.js';
 import type { FeishuChannelConfig } from '../workspace.js';
+import { hasMarkdown, markdownToPost, markdownToCard, injectMentionsIntoPost } from './feishu-format.js';
 
 export class FeishuAdapter implements ChannelAdapter {
   readonly name = 'feishu';
@@ -9,6 +10,14 @@ export class FeishuAdapter implements ChannelAdapter {
   private wsClient: any;
 
   private userNameCache = new Map<string, string>();
+  /** Recent message IDs used to deduplicate re-delivered events. */
+  private seenMsgIds = new Set<string>();
+  private static readonly MAX_SEEN = 500;
+
+  /** Cached group members: chatId → (displayName → open_id). */
+  private groupMemberCache = new Map<string, Map<string, string>>();
+  private groupMemberCacheTime = new Map<string, number>();
+  private static readonly MEMBER_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
   constructor(config: FeishuChannelConfig) {
     this.config = config;
@@ -73,6 +82,18 @@ export class FeishuAdapter implements ChannelAdapter {
       'im.message.receive_v1': async (data: any) => {
         const { message, sender } = data;
 
+        // Deduplicate re-delivered events.
+        const msgId: string | undefined = message.message_id;
+        if (msgId) {
+          if (this.seenMsgIds.has(msgId)) return;
+          this.seenMsgIds.add(msgId);
+          if (this.seenMsgIds.size > FeishuAdapter.MAX_SEEN) {
+            // Evict oldest half.
+            const entries = [...this.seenMsgIds];
+            this.seenMsgIds = new Set(entries.slice(entries.length >> 1));
+          }
+        }
+
         if (message.message_type !== 'text') return;
 
         let content: { text: string };
@@ -136,16 +157,98 @@ export class FeishuAdapter implements ChannelAdapter {
     console.log(`[feishu] WebSocket connection established`);
   }
 
-  async reply(msg: ChannelMessage, text: string): Promise<void> {
+  async getGroupMembers(chatId: string): Promise<Map<string, string>> {
+    const cached = this.groupMemberCache.get(chatId);
+    const ts = this.groupMemberCacheTime.get(chatId) ?? 0;
+    if (cached && Date.now() - ts < FeishuAdapter.MEMBER_CACHE_TTL) return cached;
+
+    if (!this.client) return new Map();
+
+    try {
+      const token = await this.client.tokenManager.getTenantAccessToken();
+      const members = new Map<string, string>();
+      let pageToken: string | undefined;
+
+      do {
+        const url = new URL(`https://open.feishu.cn/open-apis/im/v1/chats/${chatId}/members`);
+        url.searchParams.set('member_id_type', 'open_id');
+        if (pageToken) url.searchParams.set('page_token', pageToken);
+
+        const resp = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = (await resp.json()) as any;
+
+        for (const item of json?.data?.items ?? []) {
+          if (item.name && item.member_id) {
+            members.set(item.name, item.member_id);
+          }
+        }
+
+        pageToken = json?.data?.has_more ? json?.data?.page_token : undefined;
+      } while (pageToken);
+
+      this.groupMemberCache.set(chatId, members);
+      this.groupMemberCacheTime.set(chatId, Date.now());
+      return members;
+    } catch {
+      return cached ?? new Map();
+    }
+  }
+
+  async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.client) return;
-    await this.client.im.v1.message.create({
-      params: { receive_id_type: 'chat_id' },
-      data: {
-        receive_id: msg.chatId,
-        content: JSON.stringify({ text }),
-        msg_type: 'text',
-      },
-    });
+
+    const mentions = options?.mentions;
+    const hasMentions = mentions && mentions.length > 0;
+
+    if (hasMarkdown(text) || hasMentions) {
+      if (this.config.sendMarkdownAsCard) {
+        // Interactive card — native markdown rendering
+        let cardText = text;
+        if (hasMentions) {
+          for (const m of mentions) {
+            cardText = cardText.replace(
+              new RegExp(`@${m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g'),
+              `<at id=${m.platformId}></at>`,
+            );
+          }
+        }
+        const card = markdownToCard(cardText);
+        await this.client.im.v1.message.create({
+          params: { receive_id_type: 'chat_id' },
+          data: {
+            receive_id: msg.chatId,
+            content: JSON.stringify(card),
+            msg_type: 'interactive',
+          },
+        });
+      } else {
+        // Post rich text (default)
+        const post = markdownToPost(text);
+        if (hasMentions) {
+          injectMentionsIntoPost(post, mentions);
+        }
+        await this.client.im.v1.message.create({
+          params: { receive_id_type: 'chat_id' },
+          data: {
+            receive_id: msg.chatId,
+            content: JSON.stringify(post),
+            msg_type: 'post',
+          },
+        });
+      }
+    } else {
+      // Plain text
+      await this.client.im.v1.message.create({
+        params: { receive_id_type: 'chat_id' },
+        data: {
+          receive_id: msg.chatId,
+          content: JSON.stringify({ text }),
+          msg_type: 'text',
+        },
+      });
+    }
   }
 
   async stop(): Promise<void> {

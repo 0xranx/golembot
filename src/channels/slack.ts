@@ -1,4 +1,4 @@
-import type { ChannelAdapter, ChannelMessage } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
 import type { SlackChannelConfig } from '../workspace.js';
 
 export class SlackAdapter implements ChannelAdapter {
@@ -7,9 +7,22 @@ export class SlackAdapter implements ChannelAdapter {
   private config: SlackChannelConfig;
   private app: any;
   private userNameCache = new Map<string, string>();
+  private seenMsgIds = new Set<string>();
+  private static readonly MAX_SEEN = 500;
 
   constructor(config: SlackChannelConfig) {
     this.config = config;
+  }
+
+  private dedup(id: string | undefined): boolean {
+    if (!id) return false;
+    if (this.seenMsgIds.has(id)) return true;
+    this.seenMsgIds.add(id);
+    if (this.seenMsgIds.size > SlackAdapter.MAX_SEEN) {
+      const entries = [...this.seenMsgIds];
+      this.seenMsgIds = new Set(entries.slice(entries.length >> 1));
+    }
+    return false;
   }
 
   private async resolveUserName(userId: string): Promise<string | undefined> {
@@ -47,6 +60,7 @@ export class SlackAdapter implements ChannelAdapter {
       if (message.subtype) return; // ignore edits, bot messages, etc.
       if (message.channel_type !== 'im') return; // group messages handled via app_mention
       if (!message.text) return;
+      if (this.dedup(message.client_msg_id || message.ts)) return;
 
       const senderName = await this.resolveUserName(message.user);
       onMessage({
@@ -63,6 +77,7 @@ export class SlackAdapter implements ChannelAdapter {
     // Handle group @mention events
     this.app.event('app_mention', async ({ event }: any) => {
       if (!event.text) return;
+      if (this.dedup(event.event_ts || event.ts)) return;
       // Strip <@BOT_ID> prefix(es)
       const text = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
       if (!text) return;
@@ -89,7 +104,7 @@ export class SlackAdapter implements ChannelAdapter {
     console.log(`[slack] Socket Mode connection established`);
   }
 
-  async reply(msg: ChannelMessage, text: string): Promise<void> {
+  async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.app) return;
     await this.app.client.chat.postMessage({
       channel: msg.chatId,

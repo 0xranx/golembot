@@ -5,6 +5,8 @@ import yaml from 'js-yaml';
 export interface FeishuChannelConfig {
   appId: string;
   appSecret: string;
+  /** When true, send Markdown replies as interactive cards instead of post rich text. */
+  sendMarkdownAsCard?: boolean;
 }
 
 export interface DingtalkChannelConfig {

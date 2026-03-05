@@ -1,4 +1,4 @@
-import type { ChannelAdapter, ChannelMessage } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
 import type { TelegramChannelConfig } from '../workspace.js';
 
 export class TelegramAdapter implements ChannelAdapter {
@@ -7,6 +7,8 @@ export class TelegramAdapter implements ChannelAdapter {
   private config: TelegramChannelConfig;
   private bot: any;
   private botUsername: string | undefined;
+  private seenMsgIds = new Set<string>();
+  private static readonly MAX_SEEN = 500;
 
   constructor(config: TelegramChannelConfig) {
     this.config = config;
@@ -34,6 +36,14 @@ export class TelegramAdapter implements ChannelAdapter {
       // Only handle text messages (grammy's message:text filter skips group
       // messages that contain mention entities, so we filter manually here)
       if (!message?.text) return;
+      // Deduplicate re-delivered updates (message_id is unique per chat).
+      const dedupKey = `${message.chat.id}:${message.message_id}`;
+      if (this.seenMsgIds.has(dedupKey)) return;
+      this.seenMsgIds.add(dedupKey);
+      if (this.seenMsgIds.size > TelegramAdapter.MAX_SEEN) {
+        const entries = [...this.seenMsgIds];
+        this.seenMsgIds = new Set(entries.slice(entries.length >> 1));
+      }
       const chatType: 'dm' | 'group' =
         message.chat.type === 'private' ? 'dm' : 'group';
       let text: string = message.text;
@@ -75,7 +85,7 @@ export class TelegramAdapter implements ChannelAdapter {
     console.log(`[telegram] Long-polling started (@${this.botUsername})`);
   }
 
-  async reply(msg: ChannelMessage, text: string): Promise<void> {
+  async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.bot) return;
     await this.bot.api.sendMessage(Number(msg.chatId), text);
   }

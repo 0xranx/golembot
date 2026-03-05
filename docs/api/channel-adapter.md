@@ -5,16 +5,29 @@ The `ChannelAdapter` interface defines how GolemBot connects to IM platforms.
 ## ChannelAdapter Interface
 
 ```typescript
+interface MentionTarget {
+  name: string;        // Display name (e.g. "Alice")
+  platformId: string;  // Platform-specific user ID
+}
+
+interface ReplyOptions {
+  mentions?: MentionTarget[];  // Resolved @mentions to render natively
+}
+
 interface ChannelAdapter {
   readonly name: string;
   /** Optional: override the default 4000-char message split limit for this channel. */
   readonly maxMessageLength?: number;
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
-  reply(msg: ChannelMessage, text: string): Promise<void>;
+  reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
   /** Optional: send a platform "typing…" indicator. Called before the AI invocation
    *  and refreshed every 4 seconds so users see feedback during long waits. */
   typing?(msg: ChannelMessage): Promise<void>;
+  /** Optional: resolve group members for @mention support.
+   *  Returns a map of display name → platform-specific user ID.
+   *  Called by the gateway when the AI reply contains @mentions. */
+  getGroupMembers?(chatId: string): Promise<Map<string, string>>;
 }
 ```
 
@@ -23,9 +36,10 @@ interface ChannelAdapter {
 | `name` | Adapter name (e.g., `'feishu'`, `'dingtalk'`, `'my-email'`) |
 | `maxMessageLength` | *(optional)* Override the default 4000-char split limit for long replies |
 | `start(onMessage)` | Connect to the platform and begin listening. Call `onMessage` for each incoming message. |
-| `reply(msg, text)` | Send a text reply to the original message |
+| `reply(msg, text, options?)` | Send a text reply. `options.mentions` contains resolved @mention targets for native rendering. |
 | `stop()` | Gracefully disconnect |
 | `typing(msg)` | *(optional)* Send a "typing…" indicator to the chat. Called before the AI call and refreshed every 4 s. Implement for better UX on platforms that support it (e.g. Telegram `sendChatAction`, Discord `sendTyping`). |
+| `getGroupMembers(chatId)` | *(optional)* Return a `Map<displayName, platformId>` of group members. The gateway calls this when an AI reply contains `@name` patterns to resolve them into native mentions. Implementations should cache results for performance. |
 
 ## ChannelMessage Type
 

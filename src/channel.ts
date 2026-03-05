@@ -14,12 +14,21 @@ export interface ChannelMessage {
   mentioned?: boolean;
 }
 
+export interface MentionTarget {
+  name: string;
+  platformId: string;
+}
+
+export interface ReplyOptions {
+  mentions?: MentionTarget[];
+}
+
 export interface ChannelAdapter {
   readonly name: string;
   /** Optional: override the default 4000-char message split limit for this channel. */
   readonly maxMessageLength?: number;
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
-  reply(msg: ChannelMessage, text: string): Promise<void>;
+  reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
   /**
    * Optional: send a "typing…" indicator to the chat.
@@ -27,6 +36,12 @@ export interface ChannelAdapter {
    * Implementations should be idempotent and best-effort (errors are ignored).
    */
   typing?(msg: ChannelMessage): Promise<void>;
+  /**
+   * Optional: resolve group members for @mention support.
+   * Returns a map of display name → platform-specific user ID.
+   * Called by the gateway when the AI reply contains @mentions.
+   */
+  getGroupMembers?(chatId: string): Promise<Map<string, string>>;
 }
 
 export function buildSessionKey(msg: ChannelMessage): string {

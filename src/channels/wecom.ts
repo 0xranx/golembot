@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import type { ChannelAdapter, ChannelMessage } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
 import type { WecomChannelConfig } from '../workspace.js';
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -20,6 +20,8 @@ export class WecomAdapter implements ChannelAdapter {
   private tokenExpiresAt: number = 0;
 
   private userNameCache = new Map<string, string>();
+  private seenMsgIds = new Set<string>();
+  private static readonly MAX_SEEN = 500;
 
   constructor(config: WecomChannelConfig) {
     this.config = config;
@@ -130,6 +132,21 @@ export class WecomAdapter implements ChannelAdapter {
             return;
           }
 
+          // Deduplicate re-delivered webhooks.
+          const msgId: string | undefined = msgXml.MsgId;
+          if (msgId) {
+            if (this.seenMsgIds.has(msgId)) {
+              res.writeHead(200);
+              res.end('ok');
+              return;
+            }
+            this.seenMsgIds.add(msgId);
+            if (this.seenMsgIds.size > WecomAdapter.MAX_SEEN) {
+              const entries = [...this.seenMsgIds];
+              this.seenMsgIds = new Set(entries.slice(entries.length >> 1));
+            }
+          }
+
           const senderId = msgXml.FromUserName || '';
           const senderName = await this.resolveUserName(senderId);
           const channelMsg: ChannelMessage = {
@@ -164,7 +181,7 @@ export class WecomAdapter implements ChannelAdapter {
     });
   }
 
-  async reply(msg: ChannelMessage, text: string): Promise<void> {
+  async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     const token = await this.getAccessToken();
     const url = `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${token}`;
     const body = {

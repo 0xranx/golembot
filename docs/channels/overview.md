@@ -44,9 +44,9 @@ Each platform has a maximum message length. GolemBot automatically splits long r
 
 ## Session Routing
 
-**DM messages** use a per-user key: `${channelType}:${chatId}:${senderId}` — each user gets their own independent conversation.
+**DM messages** use a per-user key: `${channelType}:${chatId}:${senderId}` — each user gets their own independent conversation. The gateway injects a context line so the bot knows it's in a private conversation and who it's talking to.
 
-**Group messages** use a shared key: `${channelType}:${chatId}` — all users in the same group share a single session, so the agent has full group context.
+**Group messages** use a shared key: `${channelType}:${chatId}` — all users in the same group share a single session, so the agent has full group context including recent message history.
 
 ## Group Chat Behaviour
 
@@ -69,9 +69,21 @@ See the [Configuration guide](/guide/configuration#groupchat) for full details.
 
 ## Mention Handling
 
+### Incoming @mentions
+
 GolemBot strips `@` mentions from incoming messages before passing them to the agent. This handles patterns like `<at user_id="xxx">BotName</at>` (Feishu XML) and `@BotName` (plain text).
 
 Mention detection (used for `mention-only` and `smart` policies) checks both formats and is word-boundary-aware — `@mybot` will not trigger on `@mybotplus`.
+
+### Outgoing @mentions
+
+When the AI reply contains `@name` patterns matching known group members, the gateway resolves them into native platform mentions. This requires the adapter to implement the optional `getGroupMembers()` method.
+
+Currently supported:
+- **Feishu** — auto-discovers group members via API, converts to native `at` elements (post mode) or `<at>` tags (card mode). Requires `im:chat:readonly` permission.
+- **Slack / Discord** — `<@USER_ID>` in text is rendered as native mentions by the platform.
+
+For adapters without `getGroupMembers()`, `@name` is sent as plain text.
 
 ## Custom Adapters
 
@@ -84,9 +96,10 @@ interface ChannelAdapter {
   readonly name: string;
   readonly maxMessageLength?: number;  // optional, overrides default 4000
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
-  reply(msg: ChannelMessage, text: string): Promise<void>;
+  reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
-  typing?(msg: ChannelMessage): Promise<void>;  // optional, send "typing…" indicator
+  typing?(msg: ChannelMessage): Promise<void>;           // optional, send "typing…" indicator
+  getGroupMembers?(chatId: string): Promise<Map<string, string>>;  // optional, for @mention support
 }
 ```
 

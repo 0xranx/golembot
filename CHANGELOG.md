@@ -1,3 +1,83 @@
+# [0.11.0-beta.7](https://github.com/0xranx/golembot/compare/v0.11.0-beta.6...v0.11.0-beta.7) (2026-03-05)
+
+
+### Bug Fixes
+
+* use card v2 markdown component for native list rendering in Feishu ([00be390](https://github.com/0xranx/golembot/commit/00be390b992f000627fbfc7bde54777d231b7c13))
+
+
+### Features
+
+* private chat context injection and group [@mention](https://github.com/mention) support ([c550d0a](https://github.com/0xranx/golembot/commit/c550d0af37b8adc5131102842ca0602d42c05f4e))
+
+# [0.11.0-beta.8](https://github.com/0xranx/golembot/compare/v0.11.0-beta.7...v0.11.0-beta.8) (2026-03-05)
+
+
+### Bug Fixes
+
+* use card v2 markdown component for native list rendering in Feishu ([00be390](https://github.com/0xranx/golembot/commit/00be390b992f000627fbfc7bde54777d231b7c13))
+
+
+### Features
+
+* private chat context injection and group [@mention](https://github.com/mention) support ([c550d0a](https://github.com/0xranx/golembot/commit/c550d0af37b8adc5131102842ca0602d42c05f4e))
+
+# [0.11.0-beta.8](https://github.com/0xranx/golembot/compare/v0.11.0-beta.7...v0.11.0-beta.8) (2026-03-05)
+
+
+### Bug Fixes
+
+* use card v2 markdown component for native list rendering in Feishu ([00be390](https://github.com/0xranx/golembot/commit/00be390b992f000627fbfc7bde54777d231b7c13))
+
+# [0.11.0-beta.6](https://github.com/0xranx/golembot/compare/v0.11.0-beta.5...v0.11.0-beta.6) (2026-03-05)
+
+
+### Bug Fixes
+
+* deduplicate re-delivered events in all channel adapters ([0607885](https://github.com/0xranx/golembot/commit/06078856e4ec3dbfe38c4cdfcd9131f8e90b9aae))
+
+# [0.11.0-beta.5](https://github.com/0xranx/golembot/compare/v0.11.0-beta.4...v0.11.0-beta.5) (2026-03-05)
+
+
+### Bug Fixes
+
+* explicitly disable npm provenance to fix silent publish failure ([8a8c5ac](https://github.com/0xranx/golembot/commit/8a8c5ac929907996725bdefefc74138f189d2f48))
+
+# [0.11.0-beta.4](https://github.com/0xranx/golembot/compare/v0.11.0-beta.3...v0.11.0-beta.4) (2026-03-05)
+
+
+### Bug Fixes
+
+* update npm publish token for CI releases ([87d99b7](https://github.com/0xranx/golembot/commit/87d99b7e9262dffb5e3cfd09bcd9e9ac50417104))
+
+# [0.11.0-beta.3](https://github.com/0xranx/golembot/compare/v0.11.0-beta.2...v0.11.0-beta.3) (2026-03-05)
+
+
+### Bug Fixes
+
+* disable OIDC provenance in release workflow ([26a95ae](https://github.com/0xranx/golembot/commit/26a95aef71bdab129721d6234003b78e45b810e0))
+
+# [0.11.0-beta.2](https://github.com/0xranx/golembot/compare/v0.11.0-beta.1...v0.11.0-beta.2) (2026-03-05)
+
+
+### Bug Fixes
+
+* add .npmrc for npm token auth in CI release ([8cba977](https://github.com/0xranx/golembot/commit/8cba977a7f3df2b9a3e3efc29233d07bd6712abe))
+
+# [0.11.0-beta.1](https://github.com/0xranx/golembot/compare/v0.10.1...v0.11.0-beta.1) (2026-03-05)
+
+
+### Features
+
+* smart Feishu message formatting with post rich text and optional card mode ([6bcb567](https://github.com/0xranx/golembot/commit/6bcb567923c0181c8be68e4f35e8ee427837657c))
+
+# [0.11.0-beta.1](https://github.com/0xranx/golembot/compare/v0.10.1...v0.11.0-beta.1) (2026-03-05)
+
+
+### Features
+
+* smart Feishu message formatting with post rich text and optional card mode ([6bcb567](https://github.com/0xranx/golembot/commit/6bcb567923c0181c8be68e4f35e8ee427837657c))
+
 ## [0.10.1](https://github.com/0xranx/golembot/compare/v0.10.0...v0.10.1) (2026-03-05)
 
 

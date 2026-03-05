@@ -44,9 +44,9 @@ Gateway 流程：
 
 ## 会话路由
 
-**私聊消息**使用 per-user key：`${channelType}:${chatId}:${senderId}` — 每个用户拥有独立的对话上下文。
+**私聊消息**使用 per-user key：`${channelType}:${chatId}:${senderId}` — 每个用户拥有独立的对话上下文。Gateway 会注入上下文让 bot 知道自己在私聊中、对方是谁。
 
-**群消息**使用 group-scoped key：`${channelType}:${chatId}` — 同一个群里的所有用户共享一个 session，agent 能看到完整的群对话上下文。
+**群消息**使用 group-scoped key：`${channelType}:${chatId}` — 同一个群里的所有用户共享一个 session，agent 能看到完整的群对话上下文，包括最近的消息历史。
 
 ## 群聊行为
 
@@ -69,9 +69,21 @@ groupChat:
 
 ## Mention 处理
 
+### 入站 @mention
+
 GolemBot 在将消息传给 agent 前会自动去除 @mention 标记，兼容飞书 XML 格式（`<at user_id="xxx">BotName</at>`）和纯文本格式（`@BotName`）。
 
 Mention 检测支持词边界——`@mybot` 不会误触发 `@mybotplus`。
+
+### 出站 @mention
+
+当 AI 回复中包含 `@名字` 且匹配已知群成员时，Gateway 自动将其转换为平台原生 mention。这需要 Adapter 实现可选的 `getGroupMembers()` 方法。
+
+目前支持：
+- **飞书** — 通过 API 自动获取群成员，转换为原生 `at` 元素（post 模式）或 `<at>` 标签（card 模式）。需要 `im:chat:readonly` 权限。
+- **Slack / Discord** — 文本中的 `<@USER_ID>` 由平台原生渲染为 mention。
+
+未实现 `getGroupMembers()` 的 Adapter，`@名字` 将作为纯文本发送。
 
 ## 自定义 Adapter
 
@@ -84,9 +96,10 @@ interface ChannelAdapter {
   readonly name: string;
   readonly maxMessageLength?: number;  // 可选，覆盖默认的 4000 字符限制
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
-  reply(msg: ChannelMessage, text: string): Promise<void>;
+  reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
-  typing?(msg: ChannelMessage): Promise<void>;  // 可选，发送"正在输入…"指示器
+  typing?(msg: ChannelMessage): Promise<void>;           // 可选，发送"正在输入…"指示器
+  getGroupMembers?(chatId: string): Promise<Map<string, string>>;  // 可选，用于 @mention
 }
 ```
 

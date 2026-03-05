@@ -5,16 +5,29 @@
 ## ChannelAdapter 接口
 
 ```typescript
+interface MentionTarget {
+  name: string;        // 显示名称（如 "小舟"）
+  platformId: string;  // 平台用户 ID
+}
+
+interface ReplyOptions {
+  mentions?: MentionTarget[];  // 已解析的 @mention 目标，用于原生渲染
+}
+
 interface ChannelAdapter {
   readonly name: string;
   /** 可选：覆盖该 channel 的默认消息分割长度限制（默认 4000 字符）。 */
   readonly maxMessageLength?: number;
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
-  reply(msg: ChannelMessage, text: string): Promise<void>;
+  reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
   /** 可选：向聊天发送"正在输入…"指示器。在 AI 调用前触发，每 4 秒刷新一次，
-   *  AI 回复完毕后自动停止。支持此功能可显著改善长响应期间的用户体验。 */
+   *  AI 回复完毕后自动停止。 */
   typing?(msg: ChannelMessage): Promise<void>;
+  /** 可选：获取群成员列表用于 @mention 支持。
+   *  返回 displayName → platformId 的 Map。
+   *  当 AI 回复包含 @name 时由 Gateway 调用。 */
+  getGroupMembers?(chatId: string): Promise<Map<string, string>>;
 }
 ```
 

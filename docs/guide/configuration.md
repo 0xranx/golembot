@@ -218,7 +218,7 @@ interface GolemConfig {
     maxTurns?: number;       // default: 10
   };
   channels?: {
-    feishu?: { appId: string; appSecret: string };
+    feishu?: { appId: string; appSecret: string; sendMarkdownAsCard?: boolean };
     dingtalk?: { clientId: string; clientSecret: string };
     wecom?: {
       corpId: string; agentId: string; secret: string;

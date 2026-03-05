@@ -20,6 +20,7 @@ import {
   stripMention,
   type ChannelAdapter,
   type ChannelMessage,
+  type MentionTarget,
 } from './channel.js';
 
 export function splitMessage(text: string, maxLen: number): string[] {
@@ -160,6 +161,32 @@ export function requireFields(
   }
 }
 
+/**
+ * Extract @mentions from AI reply text by matching against known group members.
+ * Returns the original text (unchanged) plus a list of resolved mention targets.
+ */
+export function parseMentions(
+  text: string,
+  memberCache: Map<string, string>,
+): { text: string; mentions: MentionTarget[] } {
+  const mentions: MentionTarget[] = [];
+  if (memberCache.size === 0) return { text, mentions };
+
+  const mentionPattern = /@([\w\u4e00-\u9fff]{1,20})/g;
+  const seen = new Set<string>();
+  let match;
+  while ((match = mentionPattern.exec(text)) !== null) {
+    const name = match[1];
+    if (seen.has(name)) continue;
+    const platformId = memberCache.get(name);
+    if (platformId) {
+      mentions.push({ name, platformId });
+      seen.add(name);
+    }
+  }
+  return { text, mentions };
+}
+
 async function createChannelAdapter(
   type: string,
   channelConfig: Record<string, unknown>,
@@ -230,7 +257,7 @@ export async function handleMessage(
   msg: ChannelMessage,
   config: GolemConfig,
   assistant: Pick<Assistant, 'chat'>,
-  adapter: Pick<ChannelAdapter, 'reply' | 'maxMessageLength' | 'typing'>,
+  adapter: Pick<ChannelAdapter, 'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers'>,
   channelType: string,
   verbose: boolean,
   dir: string,
@@ -283,7 +310,8 @@ export async function handleMessage(
     fullText = buildGroupPrompt(hist, msg.senderName ?? msg.senderId, userText, injectPass, groupKey, dir);
   } else {
     sessionKey = buildSessionKey(msg);
-    fullText = msg.text;
+    const senderLabel = msg.senderName || msg.senderId;
+    fullText = `[System: This is a private 1-on-1 conversation with ${senderLabel}.]\n${msg.text}`;
   }
 
   log(
@@ -326,8 +354,21 @@ export async function handleMessage(
     if (reply.trim()) {
       const maxLen = adapter.maxMessageLength ?? 4000;
       const chunks = splitMessage(reply.trim(), maxLen);
+
+      // Resolve @mentions in group replies when adapter supports it
+      let mentions: MentionTarget[] = [];
+      if (msg.chatType === 'group' && adapter.getGroupMembers) {
+        try {
+          const memberCache = await adapter.getGroupMembers(msg.chatId);
+          mentions = parseMentions(reply.trim(), memberCache).mentions;
+        } catch {
+          // Best effort — send without mentions if member lookup fails
+        }
+      }
+
+      const replyOpts = mentions.length > 0 ? { mentions } : undefined;
       for (const chunk of chunks) {
-        await adapter.reply(msg, chunk);
+        await adapter.reply(msg, chunk, replyOpts);
       }
       log(verbose, `[${channelType}] replied to ${msg.senderName || msg.senderId}: "${reply.trim().slice(0, 80)}..." (${chunks.length} chunk(s))`);
 
