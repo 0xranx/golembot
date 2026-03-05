@@ -1,3 +1,10 @@
+# [0.11.0-beta.2](https://github.com/0xranx/golembot/compare/v0.11.0-beta.1...v0.11.0-beta.2) (2026-03-05)
+
+
+### Bug Fixes
+
+* add .npmrc for npm token auth in CI release ([8cba977](https://github.com/0xranx/golembot/commit/8cba977a7f3df2b9a3e3efc29233d07bd6712abe))
+
 # [0.11.0-beta.1](https://github.com/0xranx/golembot/compare/v0.10.1...v0.11.0-beta.1) (2026-03-05)
 
 
