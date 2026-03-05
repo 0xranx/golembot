@@ -122,17 +122,9 @@ groupChat:
 
 ### 会话历史
 
-GolemBot 自动将每轮对话记录到按 session 分隔的 JSONL 文件中：
+GolemBot 自动将对话记录到 `.golem/history/{sessionKey}.jsonl`，并在 session 丢失时（切换引擎、过期、恢复失败）自动恢复上下文。无需配置。
 
-```
-.golem/history/{sessionKey}.jsonl
-```
-
-每行是一个 JSON 对象，包含 `ts`（时间戳）、`sessionKey`、`role`（`user` 或 `assistant`）、`content`，以及可选的 `durationMs` / `costUsd` 字段。
-
-**自动上下文恢复：** 当 session 丢失时——无论是切换引擎、session 过期还是恢复失败——GolemBot 会检测到当前没有活跃 session，并指示 agent 在回复前先读取历史文件恢复上下文。用户无需重复之前说过的话。
-
-此功能无需配置，开箱即用。`.golem/` 目录默认已在 `.gitignore` 中排除。
+详见[记忆系统](/zh/guide/memory)，了解对话历史、个人记忆（`notes.md`）和群聊记忆的完整说明。
 
 ### `gateway`
 
