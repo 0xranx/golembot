@@ -1,3 +1,10 @@
+# [0.11.0-beta.3](https://github.com/0xranx/golembot/compare/v0.11.0-beta.2...v0.11.0-beta.3) (2026-03-05)
+
+
+### Bug Fixes
+
+* disable OIDC provenance in release workflow ([26a95ae](https://github.com/0xranx/golembot/commit/26a95aef71bdab129721d6234003b78e45b810e0))
+
 # [0.11.0-beta.2](https://github.com/0xranx/golembot/compare/v0.11.0-beta.1...v0.11.0-beta.2) (2026-03-05)
 
 
