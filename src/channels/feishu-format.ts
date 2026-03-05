@@ -32,6 +32,7 @@ export interface CardElement {
   tag: string;
   text?: { tag: string; content: string };
   content?: string;
+  text_size?: string;
 }
 
 export interface CardContent {
@@ -235,9 +236,12 @@ function parseInline(text: string): PostElement[] {
 /**
  * Convert Markdown text to a Feishu interactive card structure.
  *
- * Feishu cards support `lark_md` which natively renders bold, italic,
- * strikethrough, links, and code blocks. We only preprocess syntax that
- * lark_md does not support (checkboxes, blockquotes).
+ * Uses the card v2 `markdown` component which natively renders bold, italic,
+ * strikethrough, links, ordered/unordered lists, and code blocks.
+ * We only preprocess syntax that the markdown component does not support
+ * (checkboxes, blockquotes).
+ *
+ * Note: nested/indented lists are not supported by Feishu's markdown component.
  */
 export function markdownToCard(markdown: string): CardContent {
   const preprocessed = preprocessForCard(markdown);
@@ -246,8 +250,8 @@ export function markdownToCard(markdown: string): CardContent {
     config: { wide_screen_mode: true },
     elements: [
       {
-        tag: 'div',
-        text: { tag: 'lark_md', content: preprocessed },
+        tag: 'markdown',
+        content: preprocessed,
       },
     ],
   };

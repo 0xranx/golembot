@@ -222,37 +222,42 @@ describe('markdownToPost', () => {
 // ---------------------------------------------------------------------------
 
 describe('markdownToCard', () => {
-  it('wraps text in a card with wide_screen_mode', () => {
+  it('wraps text in a card v2 markdown element with wide_screen_mode', () => {
     const card = markdownToCard('hello');
     expect(card.config.wide_screen_mode).toBe(true);
     expect(card.elements.length).toBe(1);
-    expect(card.elements[0].tag).toBe('div');
-    expect(card.elements[0].text?.tag).toBe('lark_md');
-    expect(card.elements[0].text?.content).toBe('hello');
+    expect(card.elements[0].tag).toBe('markdown');
+    expect(card.elements[0].content).toBe('hello');
   });
 
-  it('preserves markdown formatting for lark_md', () => {
+  it('preserves markdown formatting for native rendering', () => {
     const card = markdownToCard('**bold** and *italic*');
-    expect(card.elements[0].text?.content).toBe('**bold** and *italic*');
+    expect(card.elements[0].content).toBe('**bold** and *italic*');
+  });
+
+  it('preserves ordered and unordered lists for native rendering', () => {
+    const md = '- item 1\n- item 2\n1. first\n2. second';
+    const card = markdownToCard(md);
+    expect(card.elements[0].content).toBe(md);
   });
 
   it('converts checkboxes to emoji', () => {
     const card = markdownToCard('- [x] done\n- [ ] todo');
-    const content = card.elements[0].text?.content ?? '';
+    const content = card.elements[0].content ?? '';
     expect(content).toContain('\u2705 done');
     expect(content).toContain('\u2B1C todo');
   });
 
   it('converts blockquotes to emoji prefix', () => {
     const card = markdownToCard('> important');
-    const content = card.elements[0].text?.content ?? '';
+    const content = card.elements[0].content ?? '';
     expect(content).toContain('\uD83D\uDCAC important');
   });
 
-  it('preserves code blocks as-is for lark_md', () => {
+  it('preserves code blocks for native rendering', () => {
     const md = '```js\nconsole.log(1)\n```';
     const card = markdownToCard(md);
-    const content = card.elements[0].text?.content ?? '';
+    const content = card.elements[0].content ?? '';
     expect(content).toContain('```js');
     expect(content).toContain('console.log(1)');
     expect(content).toContain('```');
