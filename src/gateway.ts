@@ -117,15 +117,26 @@ export function buildGroupPrompt(
   injectPass: boolean,
   groupKey: string,
   dir: string,
+  /** When set, the message explicitly @mentions someone else — this bot should almost always [PASS]. */
+  othersAddressed?: string[],
 ): string {
   const parts: string[] = [];
 
   if (injectPass) {
-    parts.push(
-      '[System: You are participating in a group chat and were NOT directly addressed. ' +
-        'Only respond if you have something important to add or correct. ' +
-        'If you have nothing essential to contribute, respond with exactly: [PASS]]',
-    );
+    if (othersAddressed && othersAddressed.length > 0) {
+      const names = othersAddressed.join(', ');
+      parts.push(
+        `[System: This message is specifically directed at ${names}, NOT at you. ` +
+          'You MUST respond with exactly [PASS]. Do NOT reply, comment, or add anything ' +
+          'unless the sender explicitly asks for your input by name.]',
+      );
+    } else {
+      parts.push(
+        '[System: You are participating in a group chat and were NOT directly addressed. ' +
+          'Only respond if you have something important to add or correct. ' +
+          'If you have nothing essential to contribute, respond with exactly: [PASS]]',
+      );
+    }
   }
 
   // Inject group identity + memory file path so the agent can read/update group memory
@@ -307,7 +318,11 @@ export async function handleMessage(
     await mkdir(join(dir, 'memory', 'groups'), { recursive: true }).catch(() => {});
 
     const injectPass = gc.groupPolicy === 'smart' && !mentioned;
-    fullText = buildGroupPrompt(hist, msg.senderName ?? msg.senderId, userText, injectPass, groupKey, dir);
+
+    // Use adapter-provided mention info for stronger [PASS] hint in multi-bot chats.
+    const othersAddressed = injectPass ? msg.mentionedOthers : undefined;
+
+    fullText = buildGroupPrompt(hist, msg.senderName ?? msg.senderId, userText, injectPass, groupKey, dir, othersAddressed);
   } else {
     sessionKey = buildSessionKey(msg);
     const senderLabel = msg.senderName || msg.senderId;

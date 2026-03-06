@@ -12,6 +12,11 @@ export interface ChannelMessage {
    * gateway treats the message as an @mention regardless of text pattern matching.
    */
   mentioned?: boolean;
+  /**
+   * Names of OTHER users/bots that were @mentioned in this message (excluding this bot).
+   * Used by the gateway to inject stronger [PASS] hints in multi-bot group chats.
+   */
+  mentionedOthers?: string[];
 }
 
 export interface MentionTarget {
