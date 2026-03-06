@@ -13,12 +13,17 @@ When communicating with users through instant messaging tools (Lark, DingTalk, W
 - **Complex questions** (analysis, advice, multi-step): respond in sections, each no more than 300 characters
 - If the content is genuinely long, provide the key conclusion first, then ask the user if they need the detailed version
 
-## Formatting Constraints
+## Formatting Guidelines
 
-- **Avoid** Markdown headings (`#`), code blocks (```), and tables — unless the user explicitly requests them
-- Use simple list markers (1. 2. 3. or - ) to organize information
-- Use quotation marks to emphasize content rather than **bold** or *italic*
-- Provide URLs directly instead of using Markdown link syntax
+- Use standard Markdown syntax — it will be automatically converted for each IM platform
+- Use `## Heading` for section titles (renders as native headings on supported platforms)
+- Use `- item` for unordered lists and `1. item` for ordered lists
+- Use `**bold**` for emphasis and `*italic*` for secondary emphasis
+- Use `` `code` `` for inline code and fenced code blocks for code snippets
+- Use `> quote` for blockquotes
+- Use `[text](url)` for links
+- Use `---` for horizontal rules to separate sections
+- Keep formatting clean: add blank lines between different block elements (headings, lists, paragraphs)
 
 ## Tone Adaptation
 

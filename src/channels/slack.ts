@@ -1,5 +1,6 @@
 import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
 import type { SlackChannelConfig } from '../workspace.js';
+import { markdownToMrkdwn } from './slack-format.js';
 
 export class SlackAdapter implements ChannelAdapter {
   readonly name = 'slack';
@@ -108,7 +109,7 @@ export class SlackAdapter implements ChannelAdapter {
     if (!this.app) return;
     await this.app.client.chat.postMessage({
       channel: msg.chatId,
-      text,
+      text: markdownToMrkdwn(text),
     });
   }
 

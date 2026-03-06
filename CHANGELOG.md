@@ -1,20 +1,25 @@
-# [0.11.0](https://github.com/0xranx/golembot/compare/v0.10.1...v0.11.0) (2026-03-05)
+# [0.11.0-beta.10](https://github.com/0xranx/golembot/compare/v0.11.0-beta.9...v0.11.0-beta.10) (2026-03-06)
 
 
 ### Bug Fixes
 
-* add .npmrc for npm token auth in CI release ([8cba977](https://github.com/0xranx/golembot/commit/8cba977a7f3df2b9a3e3efc29233d07bd6712abe))
-* deduplicate re-delivered events in all channel adapters ([0607885](https://github.com/0xranx/golembot/commit/06078856e4ec3dbfe38c4cdfcd9131f8e90b9aae))
-* disable OIDC provenance in release workflow ([26a95ae](https://github.com/0xranx/golembot/commit/26a95aef71bdab129721d6234003b78e45b810e0))
-* explicitly disable npm provenance to fix silent publish failure ([8a8c5ac](https://github.com/0xranx/golembot/commit/8a8c5ac929907996725bdefefc74138f189d2f48))
-* update npm publish token for CI releases ([87d99b7](https://github.com/0xranx/golembot/commit/87d99b7e9262dffb5e3cfd09bcd9e9ac50417104))
-* use card v2 markdown component for native list rendering in Feishu ([00be390](https://github.com/0xranx/golembot/commit/00be390b992f000627fbfc7bde54777d231b7c13))
+* update im-adapter skill to encourage standard markdown formatting ([d8d664b](https://github.com/0xranx/golembot/commit/d8d664b77e4b486c943ea9d1a17450d6a50b5fdc))
+
+# [0.11.0-beta.9](https://github.com/0xranx/golembot/compare/v0.11.0-beta.8...v0.11.0-beta.9) (2026-03-06)
 
 
 ### Features
 
-* private chat context injection and group [@mention](https://github.com/mention) support ([c550d0a](https://github.com/0xranx/golembot/commit/c550d0af37b8adc5131102842ca0602d42c05f4e))
-* smart Feishu message formatting with post rich text and optional card mode ([6bcb567](https://github.com/0xranx/golembot/commit/6bcb567923c0181c8be68e4f35e8ee427837657c))
+* **feishu:** default to card v2 for markdown messages ([de06e99](https://github.com/0xranx/golembot/commit/de06e993ae50ff351650c2daf1db4bb639fbd586))
+
+# [0.11.0-beta.8](https://github.com/0xranx/golembot/compare/v0.11.0-beta.7...v0.11.0-beta.8) (2026-03-06)
+
+
+### Features
+
+* add Slack mrkdwn and Telegram HTML message formatting ([58573c0](https://github.com/0xranx/golembot/commit/58573c04059844cbacbb8970650e69e8112789eb))
+* **feishu:** upgrade card to v2 schema with native markdown ([7fa203e](https://github.com/0xranx/golembot/commit/7fa203e9baf0f01e981ccdf8df5d67d4bc66f9fe))
+* **feishu:** use native md tag in post mode for markdown rendering ([2916c51](https://github.com/0xranx/golembot/commit/2916c51290c292f490f79891d6c52cd8e294134c))
 
 # [0.11.0-beta.7](https://github.com/0xranx/golembot/compare/v0.11.0-beta.6...v0.11.0-beta.7) (2026-03-05)
 
