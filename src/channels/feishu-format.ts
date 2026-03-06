@@ -36,8 +36,12 @@ export interface CardElement {
 }
 
 export interface CardContent {
-  config: { wide_screen_mode: boolean };
-  elements: CardElement[];
+  schema: string;
+  body: { elements: CardElement[] };
+  header?: {
+    title: { tag: string; content: string };
+    template?: string;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -229,26 +233,27 @@ function parseInline(text: string): PostElement[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Convert Markdown text to a Feishu interactive card structure.
+ * Convert Markdown text to a Feishu interactive card v2 structure.
  *
- * Uses the card v2 `markdown` component which natively renders bold, italic,
- * strikethrough, links, ordered/unordered lists, and code blocks.
- * We only preprocess syntax that the markdown component does not support
- * (checkboxes, blockquotes).
+ * Uses the card v2 `markdown` component which natively renders full CommonMark
+ * syntax including bold, italic, strikethrough, links, lists, code blocks,
+ * blockquotes, headings, and tables.
  *
- * Note: nested/indented lists are not supported by Feishu's markdown component.
+ * Only checkboxes need preprocessing (not supported by card markdown).
  */
 export function markdownToCard(markdown: string): CardContent {
   const preprocessed = preprocessForCard(markdown);
 
   return {
-    config: { wide_screen_mode: true },
-    elements: [
-      {
-        tag: 'markdown',
-        content: preprocessed,
-      },
-    ],
+    schema: '2.0',
+    body: {
+      elements: [
+        {
+          tag: 'markdown',
+          content: preprocessed,
+        },
+      ],
+    },
   };
 }
 
@@ -316,24 +321,18 @@ export function injectMentionsIntoPost(
   }
 }
 
-/** Preprocess Markdown for lark_md compatibility. */
+/** Preprocess Markdown for card v2 markdown component. */
 function preprocessForCard(text: string): string {
   return text
     .split('\n')
     .map((line) => {
       const trimmed = line.trim();
 
-      // Checkbox -> emoji
+      // Checkbox -> emoji (not supported by card markdown)
       const cbMatch = trimmed.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
       if (cbMatch) {
         const icon = cbMatch[1].toLowerCase() === 'x' ? '\u2705' : '\u2B1C';
         return `${icon} ${cbMatch[2]}`;
-      }
-
-      // Blockquote -> emoji prefix
-      const quoteMatch = trimmed.match(/^>\s*(.*)$/);
-      if (quoteMatch) {
-        return `\uD83D\uDCAC ${quoteMatch[1]}`;
       }
 
       return line;

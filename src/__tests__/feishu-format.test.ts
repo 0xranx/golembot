@@ -225,42 +225,42 @@ describe('markdownToPost', () => {
 // ---------------------------------------------------------------------------
 
 describe('markdownToCard', () => {
-  it('wraps text in a card v2 markdown element with wide_screen_mode', () => {
+  it('uses card v2 schema with body.elements', () => {
     const card = markdownToCard('hello');
-    expect(card.config.wide_screen_mode).toBe(true);
-    expect(card.elements.length).toBe(1);
-    expect(card.elements[0].tag).toBe('markdown');
-    expect(card.elements[0].content).toBe('hello');
+    expect(card.schema).toBe('2.0');
+    expect(card.body.elements.length).toBe(1);
+    expect(card.body.elements[0].tag).toBe('markdown');
+    expect(card.body.elements[0].content).toBe('hello');
   });
 
   it('preserves markdown formatting for native rendering', () => {
     const card = markdownToCard('**bold** and *italic*');
-    expect(card.elements[0].content).toBe('**bold** and *italic*');
+    expect(card.body.elements[0].content).toBe('**bold** and *italic*');
   });
 
   it('preserves ordered and unordered lists for native rendering', () => {
     const md = '- item 1\n- item 2\n1. first\n2. second';
     const card = markdownToCard(md);
-    expect(card.elements[0].content).toBe(md);
+    expect(card.body.elements[0].content).toBe(md);
   });
 
   it('converts checkboxes to emoji', () => {
     const card = markdownToCard('- [x] done\n- [ ] todo');
-    const content = card.elements[0].content ?? '';
+    const content = card.body.elements[0].content ?? '';
     expect(content).toContain('\u2705 done');
     expect(content).toContain('\u2B1C todo');
   });
 
-  it('converts blockquotes to emoji prefix', () => {
+  it('preserves blockquotes for native rendering', () => {
     const card = markdownToCard('> important');
-    const content = card.elements[0].content ?? '';
-    expect(content).toContain('\uD83D\uDCAC important');
+    const content = card.body.elements[0].content ?? '';
+    expect(content).toBe('> important');
   });
 
   it('preserves code blocks for native rendering', () => {
     const md = '```js\nconsole.log(1)\n```';
     const card = markdownToCard(md);
-    const content = card.elements[0].content ?? '';
+    const content = card.body.elements[0].content ?? '';
     expect(content).toContain('```js');
     expect(content).toContain('console.log(1)');
     expect(content).toContain('```');

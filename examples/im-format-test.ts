@@ -134,8 +134,29 @@ function handleMessage(adapter: ChannelAdapter) {
 
     // Strip bot mentions for keyword matching (e.g. "@GolemBot test" → "test")
     const stripped = text.replace(/<@!?\d+>/g, '').replace(/@\S+/g, '').trim();
+    const keyword = stripped.toLowerCase();
+
+    if (keyword === 'card' && name === 'feishu') {
+      // Test Feishu card mode: create a temporary adapter with sendMarkdownAsCard
+      try {
+        const { FeishuAdapter } = await import('../dist/channels/feishu.js');
+        const cardAdapter = new FeishuAdapter({
+          appId: process.env.FEISHU_APP_ID,
+          appSecret: process.env.FEISHU_APP_SECRET,
+          sendMarkdownAsCard: true,
+        } as any);
+        await cardAdapter.start(() => {}); // init client
+        await cardAdapter.reply(msg, TEST_MESSAGE);
+        await cardAdapter.stop();
+        console.log(`[${name}] replied with CARD (${TEST_MESSAGE.length} chars)`);
+      } catch (err: any) {
+        console.error(`[${name}] card reply error:`, err.message || err);
+      }
+      return;
+    }
+
     let reply: string;
-    if (stripped.toLowerCase() === 'test') {
+    if (keyword === 'test') {
       reply = TEST_MESSAGE;
     } else {
       reply = `Echo: **${text}**\n\nYou said \`${text}\` in a ${msg.chatType} chat.`;
