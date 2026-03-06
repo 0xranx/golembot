@@ -129,17 +129,7 @@ function parseLine(line: string): PostElement[] {
     return [{ tag: 'text', text: icon }, ...parseInline(checkboxMatch[2])];
   }
 
-  // Unordered list
-  const listMatch = trimmed.match(/^[-*]\s+(.+)$/);
-  if (listMatch) {
-    return [{ tag: 'text', text: '\u2022 ' }, ...parseInline(listMatch[1])];
-  }
-
-  // Ordered list
-  const orderedMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
-  if (orderedMatch) {
-    return [{ tag: 'text', text: `${orderedMatch[1]}. ` }, ...parseInline(orderedMatch[2])];
-  }
+  // Unordered / ordered lists — pass through as-is (keep original `- ` / `1. ` prefix)
 
   // Horizontal rule
   if (/^[-*_]{3,}$/.test(trimmed)) {

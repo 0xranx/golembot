@@ -1,5 +1,6 @@
 import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
 import type { TelegramChannelConfig } from '../workspace.js';
+import { markdownToHtml } from './telegram-format.js';
 
 export class TelegramAdapter implements ChannelAdapter {
   readonly name = 'telegram';
@@ -87,7 +88,9 @@ export class TelegramAdapter implements ChannelAdapter {
 
   async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.bot) return;
-    await this.bot.api.sendMessage(Number(msg.chatId), text);
+    await this.bot.api.sendMessage(Number(msg.chatId), markdownToHtml(text), {
+      parse_mode: 'HTML',
+    });
   }
 
   async typing(msg: ChannelMessage): Promise<void> {

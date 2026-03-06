@@ -102,16 +102,15 @@ describe('markdownToPost', () => {
     expect(content).toEqual([[{ tag: 'text', text: 'Hello World', style: ['bold'] }]]);
   });
 
-  it('converts unordered list items', () => {
+  it('passes through unordered list items as-is', () => {
     const content = getContent('- item one');
-    expect(content[0][0]).toEqual({ tag: 'text', text: '\u2022 ' });
-    expect(content[0][1]).toEqual({ tag: 'text', text: 'item one' });
+    expect(content[0][0]).toEqual({ tag: 'text', text: '- item one' });
   });
 
-  it('converts ordered list items', () => {
+  it('passes through ordered list items as-is', () => {
     const content = getContent('1. first\n2. second');
-    expect(content[0][0]).toEqual({ tag: 'text', text: '1. ' });
-    expect(content[1][0]).toEqual({ tag: 'text', text: '2. ' });
+    expect(content[0][0]).toEqual({ tag: 'text', text: '1. first' });
+    expect(content[1][0]).toEqual({ tag: 'text', text: '2. second' });
   });
 
   it('converts checked checkboxes', () => {
