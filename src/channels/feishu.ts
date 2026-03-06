@@ -83,16 +83,26 @@ export class FeishuAdapter implements ChannelAdapter {
         const { message, sender } = data;
 
         // Deduplicate re-delivered events.
+        // Primary: message_id (always present in im.message.receive_v1 events).
+        // Fallback: content-based dedup (chat_id + sender + text hash + 10s window)
+        // to guard against SDK re-dispatches with different envelope IDs.
         const msgId: string | undefined = message.message_id;
         if (msgId) {
           if (this.seenMsgIds.has(msgId)) return;
           this.seenMsgIds.add(msgId);
           if (this.seenMsgIds.size > FeishuAdapter.MAX_SEEN) {
-            // Evict oldest half.
             const entries = [...this.seenMsgIds];
             this.seenMsgIds = new Set(entries.slice(entries.length >> 1));
           }
         }
+
+        // Secondary dedup: same chat + sender + content within 10s window.
+        // Lark WSClient may fire the handler twice for the same event.
+        const contentKey = `${message.chat_id}:${sender?.sender_id?.open_id}:${message.content}`;
+        if (this.seenMsgIds.has(contentKey)) return;
+        this.seenMsgIds.add(contentKey);
+        // Auto-expire content keys after 10s.
+        setTimeout(() => this.seenMsgIds.delete(contentKey), 10_000);
 
         if (message.message_type !== 'text') return;
 
