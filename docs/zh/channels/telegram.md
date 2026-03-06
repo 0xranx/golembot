@@ -51,6 +51,24 @@ golem gateway
 
 每个会话（私聊或群组）维护独立的对话上下文。
 
+## 消息格式
+
+适配器自动将标准 Markdown 转换为 **Telegram HTML** 格式：
+
+| Markdown | Telegram HTML |
+|----------|--------------|
+| `**bold**` | `<b>bold</b>` |
+| `*italic*` | `<i>italic</i>` |
+| `~~strike~~` | `<s>strike</s>` |
+| `` `code` `` | `<code>code</code>` |
+| ` ```lang ` | `<pre><code class="language-lang">` |
+| `[text](url)` | `<a href="url">text</a>` |
+| `# Heading` | `<b>Heading</b>` |
+| `> quote` | `<blockquote>quote</blockquote>` |
+| `- item` | `• item` |
+
+消息以 `parse_mode: 'HTML'` 发送。代码块内外的特殊字符自动转义。
+
 ## 消息长度限制
 
 响应超过 **4,096 字符** 时会自动分段发送。

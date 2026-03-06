@@ -60,6 +60,10 @@ When `botName` is set, the adapter additionally replaces the `<@userId>` token w
 
 Each DM conversation and each server channel maintains its own session context.
 
+::: tip Message Format
+Discord natively supports Markdown — no conversion needed. GolemBot sends the AI response as-is and Discord renders bold, italic, code blocks, links, and other Markdown formatting automatically.
+:::
+
 ## Message Limits
 
 Discord messages are split at **2,000 characters** per chunk if the response is longer.

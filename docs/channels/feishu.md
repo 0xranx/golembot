@@ -42,7 +42,6 @@ channels:
   feishu:
     appId: ${FEISHU_APP_ID}
     appSecret: ${FEISHU_APP_SECRET}
-    # sendMarkdownAsCard: true   # optional: use interactive cards for Markdown replies
 ```
 
 ```sh
@@ -51,25 +50,25 @@ FEISHU_APP_ID=cli_xxxxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxx
 ```
 
-### Message Format Options
+### Message Format
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `appId` | `string` | — | Feishu App ID (required) |
 | `appSecret` | `string` | — | Feishu App Secret (required) |
-| `sendMarkdownAsCard` | `boolean` | `false` | When `true`, Markdown replies are sent as interactive cards (`msg_type: "interactive"`) with native `lark_md` rendering. When `false` (default), Markdown replies are sent as post rich text (`msg_type: "post"`) |
 
 The adapter automatically detects whether the AI reply contains Markdown formatting:
 
 - **Plain text** — sent as `msg_type: "text"` (no conversion)
-- **Markdown (default)** — converted to Feishu post rich text (`msg_type: "post"`): headings become bold, lists get bullet prefixes, code blocks are wrapped with box-drawing characters
-- **Markdown (card mode)** — sent as interactive card (`msg_type: "interactive"`) with native Markdown rendering including code blocks and tables
+- **Markdown** — sent as interactive card (`msg_type: "interactive"`) using Feishu card v2 with native Markdown rendering. Supports headings, lists, bold/italic, code blocks with syntax highlighting, blockquotes, tables, and links
+
+Standard Markdown syntax is automatically converted — no configuration needed.
 
 ## How It Works
 
 - **Transport**: WebSocket long-connection via `WSClient` from `@larksuiteoapi/node-sdk`
 - **Events**: Listens for `im.message.receive_v1` events (text messages only)
-- **Reply**: Sends messages via `client.im.v1.message.create()` — format is auto-selected based on content and config
+- **Reply**: Sends messages via `client.im.v1.message.create()` — format is auto-selected based on content
 - **Chat types**: Supports both DMs and group chats
 - **DM context**: In private chats, the gateway injects the sender's display name so the bot knows who it's talking to
 - **Group @mention filter**: In group chats the bot only responds when directly @mentioned. The @mention key is automatically stripped from the message text before it is passed to the engine

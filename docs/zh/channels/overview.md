@@ -42,6 +42,21 @@ Gateway 流程：
 | Discord | 2,000 字符 | 多条消息 |
 | 自定义 | 可通过 `maxMessageLength` 配置 | 多条消息 |
 
+## 消息格式转换
+
+GolemBot 自动将标准 Markdown 转换为各平台的原生格式：
+
+| 通道 | 输出格式 | 转换方式 |
+|------|----------|----------|
+| 飞书 | 卡片 v2（interactive） | 原生 Markdown 渲染 — 标题、列表、代码块、表格 |
+| Slack | mrkdwn | `**bold**` → `*bold*`、`*italic*` → `_italic_`、链接重写 |
+| Telegram | HTML | `**bold**` → `<b>`、代码块 → `<pre><code>`、引用 → `<blockquote>` |
+| Discord | Markdown（原生） | 无需转换 — Discord 原生渲染 Markdown |
+| 钉钉 | Markdown（原生） | 直接透传 |
+| 企业微信 | 纯文本 | Markdown 被去除（企业微信文本 API 格式支持有限） |
+
+AI agent 被鼓励使用标准 Markdown 语法（标题、列表、加粗、代码块等），各适配器自动处理平台特定的格式转换。
+
 ## 会话路由
 
 **私聊消息**使用 per-user key：`${channelType}:${chatId}:${senderId}` — 每个用户拥有独立的对话上下文。Gateway 会注入上下文让 bot 知道自己在私聊中、对方是谁。
@@ -80,7 +95,7 @@ Mention 检测支持词边界——`@mybot` 不会误触发 `@mybotplus`。
 当 AI 回复中包含 `@名字` 且匹配已知群成员时，Gateway 自动将其转换为平台原生 mention。这需要 Adapter 实现可选的 `getGroupMembers()` 方法。
 
 目前支持：
-- **飞书** — 通过 API 自动获取群成员，转换为原生 `at` 元素（post 模式）或 `<at>` 标签（card 模式）。需要 `im:chat:readonly` 权限。
+- **飞书** — 通过 API 自动获取群成员，转换为卡片 v2 消息中的原生 `<at>` 标签。需要 `im:chat:readonly` 权限。
 - **Slack / Discord** — 文本中的 `<@USER_ID>` 由平台原生渲染为 mention。
 
 未实现 `getGroupMembers()` 的 Adapter，`@名字` 将作为纯文本发送。

@@ -58,6 +58,21 @@ golem gateway
 
 > **注意：** 在 Thread 中 @mention bot 时，回复会发送到频道顶层，而非 Thread 内部。
 
+## 消息格式
+
+适配器自动将标准 Markdown 转换为 **Slack mrkdwn** 格式：
+
+| Markdown | Slack mrkdwn |
+|----------|-------------|
+| `**bold**` | `*bold*` |
+| `*italic*` | `_italic_` |
+| `~~strike~~` | `~strike~` |
+| `[text](url)` | `<url\|text>` |
+| `# Heading` | `*Heading*`（加粗） |
+| `- item` | `• item` |
+
+代码块、引用和行内代码保持原样（Slack 原生渲染）。特殊字符（`&`、`<`、`>`）自动转义。
+
 ## 消息长度限制
 
 响应超过 **4,000 字符** 时会自动分段发送。

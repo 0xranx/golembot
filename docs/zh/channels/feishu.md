@@ -42,7 +42,6 @@ channels:
   feishu:
     appId: ${FEISHU_APP_ID}
     appSecret: ${FEISHU_APP_SECRET}
-    # sendMarkdownAsCard: true   # 可选：用消息卡片渲染 Markdown 回复
 ```
 
 ```sh
@@ -51,25 +50,25 @@ FEISHU_APP_ID=cli_xxxxxxxxxx
 FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxx
 ```
 
-### 消息格式选项
+### 消息格式
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `appId` | `string` | — | 飞书 App ID（必填） |
 | `appSecret` | `string` | — | 飞书 App Secret（必填） |
-| `sendMarkdownAsCard` | `boolean` | `false` | 为 `true` 时，Markdown 回复以消息卡片发送（`msg_type: "interactive"`），原生 `lark_md` 渲染。为 `false`（默认）时，以 post 富文本发送（`msg_type: "post"`） |
 
 适配器自动检测 AI 回复是否包含 Markdown 格式：
 
 - **纯文本** — 以 `msg_type: "text"` 发送（无转换）
-- **Markdown（默认）** — 转换为飞书 post 富文本（`msg_type: "post"`）：标题变为加粗、列表加圆点前缀、代码块用制表符包裹
-- **Markdown（卡片模式）** — 以消息卡片发送（`msg_type: "interactive"`），原生渲染 Markdown，支持代码块和表格
+- **Markdown** — 以消息卡片发送（`msg_type: "interactive"`），使用飞书卡片 v2 原生 Markdown 渲染。支持标题、列表、加粗/斜体、带语法高亮的代码块、引用、表格和链接
+
+标准 Markdown 语法自动转换，无需额外配置。
 
 ## 工作原理
 
 - **传输**：通过 `@larksuiteoapi/node-sdk` 的 `WSClient` 建立 WebSocket 长连接
 - **事件**：监听 `im.message.receive_v1` 事件（仅文本消息）
-- **回复**：通过 `client.im.v1.message.create()` 发送消息，根据内容和配置自动选择格式
+- **回复**：通过 `client.im.v1.message.create()` 发送消息，根据内容自动选择格式
 - **聊天类型**：支持单聊（私信）和群聊
 - **私聊上下文**：私聊中 Gateway 会注入发送者的显示名称，让 bot 知道对方是谁
 - **群聊 @mention 过滤**：群聊中机器人只在被直接 @提及时才响应，@mention 的 key 会在传给引擎前自动从消息文本中剥除
