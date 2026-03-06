@@ -44,3 +44,24 @@ description: 这个技能做什么的简要说明
 - **没有独立的 Tool 概念** — 脚本放在技能目录里，`SKILL.md` 描述如何调用
 - **即放即用** — 复制目录即添加技能；删除目录即移除技能
 - **引擎无关** — 同一个 Skill 在 Cursor、Claude Code、OpenCode 和 Codex 上都能用
+
+## ClawHub 集成
+
+GolemBot 集成了 [ClawHub](https://clawhub.ai)，最大的社区技能市场，拥有 13,000+ 技能。可直接从 CLI 搜索和安装：
+
+```bash
+# 搜索技能
+golembot skill search "数据分析"
+
+# 从 ClawHub 安装
+golembot skill add clawhub:data-analysis
+
+# 所有 skill 命令支持 --json，方便 agent 调用
+golembot skill search "markdown" --json
+```
+
+可插拔的 registry 接口允许将来接入其他技能来源。当前支持：`clawhub`。
+
+::: tip Agent 友好
+所有 skill 命令支持 `--json` 输出。内置的 `general` 技能会教 agent 自主搜索和安装技能 — 当用户需要 agent 没有的能力时，agent 会主动搜索 ClawHub 并建议安装相关技能。
+:::

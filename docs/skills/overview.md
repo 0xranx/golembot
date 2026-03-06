@@ -74,3 +74,24 @@ golembot skill remove my-skill
 ```
 
 Or simply copy/delete directories manually — no CLI required.
+
+## ClawHub Integration
+
+GolemBot integrates with [ClawHub](https://clawhub.ai), the largest community skill marketplace with 13,000+ skills. Search and install skills directly from the CLI:
+
+```bash
+# Search for skills
+golembot skill search "data analysis"
+
+# Install from ClawHub
+golembot skill add clawhub:data-analysis
+
+# All skill commands support --json for agent-friendly output
+golembot skill search "markdown" --json
+```
+
+The pluggable registry interface allows future integration with other skill sources. Currently supported: `clawhub`.
+
+::: tip Agent-Friendly
+All skill commands support `--json` output. The built-in `general` skill teaches the agent to search and install skills autonomously — when a user asks for capabilities the agent doesn't have, it can proactively search ClawHub and suggest installing relevant skills.
+:::

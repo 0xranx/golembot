@@ -155,6 +155,18 @@ skills/
 
 `ls skills/` 就是助手能力的完整清单。
 
+### ClawHub 集成
+
+从 [ClawHub](https://clawhub.ai) 搜索和安装社区技能 — 13,000+：
+
+```bash
+golembot skill search "数据分析"           # 搜索
+golembot skill add clawhub:data-analysis  # 安装
+golembot skill search "markdown" --json   # Agent 友好的 JSON 输出
+```
+
+Agent 可在 IM 对话中自主发现和安装技能。
+
 ## Docker 部署
 
 ```dockerfile

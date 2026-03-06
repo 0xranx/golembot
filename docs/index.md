@@ -30,6 +30,10 @@ features:
       src: /icons/folder.svg
     title: Directory Is the Assistant
     details: Skills, memory, config, and work artifacts all live in one directory. Fully transparent, version-controllable, and shareable via git.
+  - icon:
+      src: /icons/plug.svg
+    title: 13,000+ Community Skills
+    details: Search and install skills from ClawHub — the largest AI agent skill marketplace. Your agent can even discover and install skills autonomously during conversations.
 ---
 
 <div class="home-content">
@@ -45,6 +49,7 @@ mkdir my-bot && cd my-bot
 golembot onboard          # guided setup wizard
 golembot run              # interactive REPL
 golembot gateway          # start IM + HTTP service
+golembot skill search "data analysis"  # browse ClawHub skills
 ```
 
 Or use as a library — 5 lines of code:

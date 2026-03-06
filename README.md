@@ -155,6 +155,18 @@ skills/
 
 `ls skills/` is the complete list of what your assistant can do.
 
+### ClawHub Integration
+
+Search and install from [ClawHub](https://clawhub.ai) — 13,000+ community skills:
+
+```bash
+golembot skill search "data analysis"       # search
+golembot skill add clawhub:data-analysis    # install
+golembot skill search "markdown" --json     # agent-friendly JSON output
+```
+
+The agent can discover and install skills autonomously during IM conversations.
+
 ## Docker Deployment
 
 ```dockerfile

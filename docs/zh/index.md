@@ -30,6 +30,10 @@ features:
       src: /icons/folder.svg
     title: 目录即助手
     details: 技能、记忆、配置和工作产物全部在一个目录里。完全透明，可版本控制，可通过 git 共享。
+  - icon:
+      src: /icons/plug.svg
+    title: 13,000+ 社区技能
+    details: 从 ClawHub 搜索和安装社区技能 — 最大的 AI agent 技能市场。你的 Agent 甚至可以在对话中自主发现和安装技能。
 ---
 
 <div class="home-content">
@@ -45,6 +49,7 @@ mkdir my-bot && cd my-bot
 golembot onboard          # 引导式设置向导
 golembot run              # 交互式 REPL
 golembot gateway          # 启动 IM + HTTP 服务
+golembot skill search "数据分析"  # 浏览 ClawHub 社区技能
 ```
 
 或作为库使用 — 5 行代码：

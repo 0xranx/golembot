@@ -14,6 +14,8 @@ A general-purpose skill that makes the agent a personal AI assistant.
 
 **Persistent Memory:** The `general` skill establishes a `notes.md` convention for cross-session memory — the agent reads it at conversation start and writes to it when important information comes up. See [Memory](/guide/memory) for the full specification.
 
+**Skill Management:** The agent can search and install community skills from ClawHub autonomously. When a user asks for capabilities the agent doesn't have, it proactively searches ClawHub and suggests installing relevant skills. All commands support `--json` for structured output.
+
 **Restrictions:**
 - Only operates within the assistant directory
 - Does not modify `golem.yaml`, `AGENTS.md`, `.golem/`, or `SKILL.md` files
