@@ -42,6 +42,21 @@ Each platform has a maximum message length. GolemBot automatically splits long r
 | Discord | 2,000 chars | Multi-message |
 | Custom | Configurable via `maxMessageLength` | Multi-message |
 
+## Message Format Conversion
+
+GolemBot automatically converts standard Markdown to each platform's native format:
+
+| Channel | Output Format | Conversion |
+|---------|--------------|------------|
+| Feishu | Card v2 (interactive) | Native Markdown rendering — headings, lists, code blocks, tables |
+| Slack | mrkdwn | `**bold**` → `*bold*`, `*italic*` → `_italic_`, links rewritten |
+| Telegram | HTML | `**bold**` → `<b>`, code blocks → `<pre><code>`, blockquotes → `<blockquote>` |
+| Discord | Markdown (native) | No conversion needed — Discord renders Markdown natively |
+| DingTalk | Markdown (native) | Passed through as-is |
+| WeCom | Plain text | Markdown stripped (WeCom text API has limited formatting) |
+
+The AI agent is encouraged to use standard Markdown syntax (headings, lists, bold, code blocks, etc.) — each adapter handles the platform-specific conversion automatically.
+
 ## Session Routing
 
 **DM messages** use a per-user key: `${channelType}:${chatId}:${senderId}` — each user gets their own independent conversation. The gateway injects a context line so the bot knows it's in a private conversation and who it's talking to.
@@ -80,7 +95,7 @@ Mention detection (used for `mention-only` and `smart` policies) checks both for
 When the AI reply contains `@name` patterns matching known group members, the gateway resolves them into native platform mentions. This requires the adapter to implement the optional `getGroupMembers()` method.
 
 Currently supported:
-- **Feishu** — auto-discovers group members via API, converts to native `at` elements (post mode) or `<at>` tags (card mode). Requires `im:chat:readonly` permission.
+- **Feishu** — auto-discovers group members via API, converts to native `<at>` tags in card v2 messages. Requires `im:chat:readonly` permission.
 - **Slack / Discord** — `<@USER_ID>` in text is rendered as native mentions by the platform.
 
 For adapters without `getGroupMembers()`, `@name` is sent as plain text.

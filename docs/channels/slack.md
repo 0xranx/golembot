@@ -58,6 +58,21 @@ DM conversations maintain a per-user session. Channel messages share a per-chann
 
 > **Note:** Thread replies are delivered to the top-level channel, not inside the thread.
 
+## Message Format
+
+The adapter automatically converts standard Markdown to **Slack mrkdwn** format:
+
+| Markdown | Slack mrkdwn |
+|----------|-------------|
+| `**bold**` | `*bold*` |
+| `*italic*` | `_italic_` |
+| `~~strike~~` | `~strike~` |
+| `[text](url)` | `<url\|text>` |
+| `# Heading` | `*Heading*` (bold) |
+| `- item` | `• item` |
+
+Code blocks, blockquotes, and inline code are preserved as-is (Slack renders them natively). Special characters (`&`, `<`, `>`) are automatically escaped.
+
 ## Message Limits
 
 Slack messages are split at **4,000 characters** per chunk if the response is longer.

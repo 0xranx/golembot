@@ -51,6 +51,24 @@ golem gateway
 
 Each conversation (private chat or group) maintains its own session context.
 
+## Message Format
+
+The adapter automatically converts standard Markdown to **Telegram HTML** format:
+
+| Markdown | Telegram HTML |
+|----------|--------------|
+| `**bold**` | `<b>bold</b>` |
+| `*italic*` | `<i>italic</i>` |
+| `~~strike~~` | `<s>strike</s>` |
+| `` `code` `` | `<code>code</code>` |
+| ` ```lang ` | `<pre><code class="language-lang">` |
+| `[text](url)` | `<a href="url">text</a>` |
+| `# Heading` | `<b>Heading</b>` |
+| `> quote` | `<blockquote>quote</blockquote>` |
+| `- item` | `• item` |
+
+Messages are sent with `parse_mode: 'HTML'`. Special characters are automatically escaped inside and outside code blocks.
+
 ## Message Limits
 
 Telegram messages are split at **4,096 characters** per chunk if the response is longer.

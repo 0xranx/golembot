@@ -20,7 +20,7 @@ A general-purpose skill that makes the agent a personal AI assistant.
 
 ## `im-adapter` — IM Response Guidelines
 
-Optimizes the agent's responses for instant messaging platforms (Feishu, DingTalk, WeCom).
+Optimizes the agent's responses for instant messaging platforms (Feishu, DingTalk, WeCom, Slack, Telegram, Discord).
 
 **Response length:**
 - Simple questions: 1–2 sentences, max 200 characters
@@ -28,14 +28,15 @@ Optimizes the agent's responses for instant messaging platforms (Feishu, DingTal
 - Long content: key conclusion first, then offer detailed version
 
 **Formatting:**
-- Avoid Markdown headers, code blocks, and tables (unless explicitly requested)
-- Use simple list markers (1. 2. 3. or -)
-- URLs directly, not Markdown link syntax
+- Use standard Markdown syntax — it is automatically converted for each IM platform
+- Use `## Heading` for section titles, `**bold**` for emphasis, `- item` for lists
+- Use fenced code blocks for code snippets and `> quote` for blockquotes
+- Keep formatting clean: add blank lines between different block elements
 
 **Group chat:**
-- `[User:xxx]` prefix indicates group context
-- Address users by name
-- Extra concise to avoid flooding
+- Address users by name; @mention them when helpful
+- Extra concise to avoid flooding the chat
+- In `smart` mode, output `[PASS]` when you have nothing important to add
 
 **Tone:**
 - Conversational and natural

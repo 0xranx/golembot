@@ -60,6 +60,10 @@ golembot gateway
 
 每个私信会话和每个服务器频道分别维护独立的会话上下文。
 
+::: tip 消息格式
+Discord 原生支持 Markdown，无需格式转换。GolemBot 直接发送 AI 回复原文，Discord 自动渲染加粗、斜体、代码块、链接等 Markdown 格式。
+:::
+
 ## 消息限制
 
 Discord 单条消息上限为 **2,000 字符**。超出时 GolemBot 自动拆分为多条发送。
