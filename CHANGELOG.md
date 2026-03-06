@@ -1,3 +1,10 @@
+# [0.11.0-beta.13](https://github.com/0xranx/golembot/compare/v0.11.0-beta.12...v0.11.0-beta.13) (2026-03-06)
+
+
+### Bug Fixes
+
+* add secondary content-based dedup for Feishu group messages ([5367102](https://github.com/0xranx/golembot/commit/5367102c07de7e0dc6c043a4d9d9f049dfce0304))
+
 # [0.11.0-beta.12](https://github.com/0xranx/golembot/compare/v0.11.0-beta.11...v0.11.0-beta.12) (2026-03-06)
 
 
