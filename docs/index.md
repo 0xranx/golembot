@@ -22,7 +22,7 @@ hero:
 
 features:
   - icon:
-      src: /icons/claw.svg
+      src: /icons/clawhub.png
     title: 13,000+ OpenClaw Skills
     details: Fully compatible with the OpenClaw ecosystem. Search and install skills from ClawHub — the largest AI agent skill marketplace — with one command. Your agent can even discover and install skills autonomously during conversations.
   - icon:

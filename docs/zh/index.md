@@ -22,7 +22,7 @@ hero:
 
 features:
   - icon:
-      src: /icons/claw.svg
+      src: /icons/clawhub.png
     title: 13,000+ OpenClaw 技能
     details: SKILL.md 格式与 OpenClaw 生态 100% 兼容。一条命令从 ClawHub 搜索和安装 13,000+ 社区技能。Agent 甚至可以在对话中自主发现和安装技能。
   - icon:
