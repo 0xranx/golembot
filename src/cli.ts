@@ -337,10 +337,15 @@ skill
   .command('list')
   .description('List installed skills')
   .option('-d, --dir <dir>', 'assistant directory', '.')
-  .action(async (opts) => {
+  .option('--json', 'output JSON (agent-friendly)')
+  .action(async (opts: { dir: string; json?: boolean }) => {
     const dir = resolve(opts.dir);
     const { scanSkills } = await import('./workspace.js');
     const skills = await scanSkills(dir);
+    if (opts.json) {
+      console.log(JSON.stringify(skills.map(s => ({ name: s.name, description: s.description }))));
+      return;
+    }
     if (skills.length === 0) {
       console.log('(no skills installed)');
       return;
@@ -353,13 +358,103 @@ skill
   });
 
 skill
+  .command('search <query...>')
+  .description('Search for skills on ClawHub')
+  .option('-l, --limit <n>', 'max results', '10')
+  .option('--json', 'output JSON (agent-friendly)')
+  .action(async (queryWords: string[], opts: { limit: string; json?: boolean }) => {
+    const { getRegistry } = await import('./registry.js');
+    const registry = getRegistry('clawhub');
+    if (!registry) { console.error('No registry available'); process.exit(1); }
+
+    if (!registry.isAvailable()) {
+      console.error('clawhub CLI not found. Install it: npm i -g clawhub');
+      process.exit(1);
+    }
+
+    const query = queryWords.join(' ');
+    const results = await registry.search(query, Number(opts.limit));
+
+    if (opts.json) {
+      console.log(JSON.stringify(results));
+      return;
+    }
+
+    if (!results.length) {
+      console.log(`No skills found for "${query}"`);
+      return;
+    }
+
+    console.log(`\nClawHub results for "${query}" (${results.length}):\n`);
+    for (const s of results) {
+      const meta = [s.version ? `v${s.version}` : '', s.author ?? '', s.downloads != null ? `${s.downloads} installs` : ''].filter(Boolean).join(' | ');
+      console.log(`  ${s.slug.padEnd(30)} ${s.description ? s.description.slice(0, 60) : ''}`);
+      if (meta) console.log(`  ${' '.repeat(30)} ${DIM}${meta}${RESET}`);
+    }
+    console.log(`\nInstall: golembot skill add clawhub:<slug>\n`);
+  });
+
+skill
   .command('add <source>')
-  .description('Add a skill from a local path')
+  .description('Add a skill from a local path or registry (clawhub:<slug>)')
   .option('-d, --dir <dir>', 'assistant directory', '.')
-  .action(async (source: string, opts: { dir: string }) => {
+  .option('--json', 'output JSON (agent-friendly)')
+  .action(async (source: string, opts: { dir: string; json?: boolean }) => {
     const { stat: fsStat, cp, readFile: fsReadFile } = await import('node:fs/promises');
     const { join, basename } = await import('node:path');
     const dir = resolve(opts.dir);
+
+    // ── Registry remote install (prefix:slug) ──
+    const registryMatch = source.match(/^(\w+):(.+)$/);
+    if (registryMatch) {
+      const [, registryName, slug] = registryMatch;
+      const { getRegistry, listRegistries } = await import('./registry.js');
+      const registry = getRegistry(registryName);
+
+      if (!registry) {
+        const msg = `Unknown registry: ${registryName}. Available: ${listRegistries().join(', ')}`;
+        if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`❌ ${msg}`); }
+        process.exit(1);
+      }
+
+      if (!registry.isAvailable()) {
+        const msg = `${registryName} CLI not found. Install it: npm i -g ${registryName}`;
+        if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`❌ ${msg}`); }
+        process.exit(1);
+      }
+
+      const skillName = slug.includes('/') ? slug.split('/').pop()! : slug;
+      const destPath = join(dir, 'skills', skillName);
+
+      try {
+        await fsStat(destPath);
+        const msg = `Skill ${skillName} already exists. Run: golembot skill remove ${skillName}`;
+        if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`❌ ${msg}`); }
+        process.exit(1);
+      } catch {
+        // doesn't exist — good
+      }
+
+      try {
+        const meta = await registry.install(slug, destPath);
+        if (opts.json) {
+          console.log(JSON.stringify({ ok: true, name: meta.name, version: meta.version }));
+        } else {
+          console.log(`✅ Installed from ${registryName}: ${meta.name} (v${meta.version})`);
+        }
+      } catch (e: unknown) {
+        const msg = (e as Error).message;
+        if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`❌ ${msg}`); }
+        process.exit(1);
+      }
+
+      const { scanSkills, generateAgentsMd } = await import('./workspace.js');
+      const skills = await scanSkills(dir);
+      await generateAgentsMd(dir, skills);
+      return;
+    }
+
+    // ── Local path install (existing logic) ──
     const srcPath = resolve(source);
 
     try {
@@ -387,7 +482,11 @@ skill
     }
 
     await cp(srcPath, destPath, { recursive: true });
-    console.log(`✅ Skill added: ${skillName}`);
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, name: skillName }));
+    } else {
+      console.log(`✅ Skill added: ${skillName}`);
+    }
 
     const { scanSkills, generateAgentsMd } = await import('./workspace.js');
     const skills = await scanSkills(dir);
