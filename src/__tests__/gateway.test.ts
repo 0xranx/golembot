@@ -302,22 +302,21 @@ describe('group chat helpers - buildGroupPrompt', () => {
     expect(result).not.toContain('--- Recent group conversation ---');
   });
 
-  it('injects stronger [PASS] hint when othersAddressed is provided', () => {
+  it('mentions othersAddressed names in [PASS] hint', () => {
     const result = buildGroupPrompt([], 'alice', '@小舟 帮我看看', true, 'feishu:G1', '', ['小舟']);
-    expect(result).toContain('specifically directed at 小舟');
-    expect(result).toContain('MUST respond with exactly [PASS]');
-    expect(result).not.toContain('Only respond if you have something important');
+    expect(result).toContain('directed at 小舟');
+    expect(result).toContain('[PASS]');
   });
 
   it('uses generic [PASS] hint when othersAddressed is empty', () => {
     const result = buildGroupPrompt([], 'alice', 'hello everyone', true, 'feishu:G1', '', []);
     expect(result).toContain('Only respond if you have something important');
-    expect(result).not.toContain('specifically directed at');
+    expect(result).not.toContain('directed at');
   });
 
   it('lists multiple othersAddressed names', () => {
     const result = buildGroupPrompt([], 'alice', 'hi', true, 'feishu:G1', '', ['小舟', '小忆']);
-    expect(result).toContain('specifically directed at 小舟, 小忆');
+    expect(result).toContain('directed at 小舟, 小忆');
   });
 
   it('DM uses per-user session key (buildSessionKey still works)', async () => {

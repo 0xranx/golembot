@@ -123,19 +123,19 @@ export function buildGroupPrompt(
   const parts: string[] = [];
 
   if (injectPass) {
+    const base =
+      '[System: You are participating in a group chat and were NOT directly addressed. ' +
+      'Only respond if you have something important to add or correct. ' +
+      'If you have nothing essential to contribute, respond with exactly: [PASS]]';
     if (othersAddressed && othersAddressed.length > 0) {
       const names = othersAddressed.join(', ');
       parts.push(
-        `[System: This message is specifically directed at ${names}, NOT at you. ` +
-          'You MUST respond with exactly [PASS]. Do NOT reply, comment, or add anything ' +
-          'unless the sender explicitly asks for your input by name.]',
-      );
-    } else {
-      parts.push(
-        '[System: You are participating in a group chat and were NOT directly addressed. ' +
+        `[System: This message is directed at ${names}, not you. ` +
           'Only respond if you have something important to add or correct. ' +
           'If you have nothing essential to contribute, respond with exactly: [PASS]]',
       );
+    } else {
+      parts.push(base);
     }
   }
 
