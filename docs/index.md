@@ -4,7 +4,7 @@ layout: home
 hero:
   name: GolemBot
   text: Run Your Coding Agent Everywhere
-  tagline: Connect Cursor, Claude Code, OpenCode, or Codex to IM platforms, HTTP APIs, or your own product — with one command.
+  tagline: Connect Cursor, Claude Code, OpenCode, or Codex to IM platforms, HTTP APIs, or your own product. Compatible with 13,000+ OpenClaw community skills.
   image:
     light: /logo-icon-light.svg
     dark: /logo-icon-dark.svg
@@ -22,6 +22,10 @@ hero:
 
 features:
   - icon:
+      src: /icons/claw.svg
+    title: 13,000+ OpenClaw Skills
+    details: Fully compatible with the OpenClaw ecosystem. Search and install skills from ClawHub — the largest AI agent skill marketplace — with one command. Your agent can even discover and install skills autonomously during conversations.
+  - icon:
       src: /icons/cpu.svg
     title: Your Agent Is the Brain
     details: GolemBot doesn't reinvent AI. It uses the Coding Agent you already have — Cursor, Claude Code, OpenCode, or Codex — as the engine. When the agent gets smarter, your assistant gets smarter automatically.
@@ -33,13 +37,29 @@ features:
       src: /icons/folder.svg
     title: Directory Is the Assistant
     details: Skills, memory, config, and work artifacts all live in one directory. Fully transparent, version-controllable, and shareable via git.
-  - icon:
-      src: /icons/claw.svg
-    title: 13,000+ Community Skills
-    details: Search and install skills from ClawHub — the largest AI agent skill marketplace. Your agent can even discover and install skills autonomously during conversations.
 ---
 
 <div class="home-content">
+
+## 13,000+ OpenClaw Community Skills
+
+GolemBot's SKILL.md format is **100% compatible** with the [OpenClaw](https://clawhub.ai) ecosystem. Search and install any of the 13,000+ community skills from [ClawHub](https://clawhub.ai) — the largest AI agent skill marketplace. Your agent can even discover and install skills autonomously during conversations.
+
+<div class="clawhub-demo">
+
+```bash
+$ golembot skill search "code review"
+
+ClawHub results for "code review" (3):
+
+  code-review          5-dimension code review with severity tiers
+  pr-reviewer          Automated PR review with inline comments
+  security-audit       Security vulnerability scanner for codebases
+
+Install: golembot skill add clawhub:<slug>
+```
+
+</div>
 
 ## Quick Start
 
@@ -64,26 +84,6 @@ const bot = createAssistant({ dir: './my-bot' })
 for await (const ev of bot.chat('Analyze last month sales'))
   if (ev.type === 'text') process.stdout.write(ev.content)
 ```
-
-## 13,000+ Community Skills
-
-GolemBot is fully compatible with [ClawHub](https://clawhub.ai) — the largest AI agent skill marketplace. One command to search and install any skill. Your agent can even discover and install skills autonomously during conversations.
-
-<div class="clawhub-demo">
-
-```bash
-$ golembot skill search "code review"
-
-ClawHub results for "code review" (3):
-
-  code-review          5-dimension code review with severity tiers
-  pr-reviewer          Automated PR review with inline comments
-  security-audit       Security vulnerability scanner for codebases
-
-Install: golembot skill add clawhub:<slug>
-```
-
-</div>
 
 ## Supported Engines
 

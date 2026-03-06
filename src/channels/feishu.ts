@@ -114,7 +114,7 @@ export class FeishuAdapter implements ChannelAdapter {
         }
 
         // Mentions are on message.mentions (not inside content JSON).
-        type Mention = { key: string; id: { open_id: string } };
+        type Mention = { key: string; id: { open_id: string }; name?: string };
         const mentions: Mention[] = message.mentions ?? [];
 
         const chatType: 'dm' | 'group' = message.chat_type === 'p2p' ? 'dm' : 'group';
@@ -128,13 +128,17 @@ export class FeishuAdapter implements ChannelAdapter {
             : mentions.length > 0;
         }
 
-        // Strip the bot's @mention key from the text before passing to the assistant.
+        // Process @mentions in text:
+        // - Strip the bot's own @mention key entirely
+        // - Replace other users' @mention keys with readable @Name format
         let text = content.text || '';
         if (chatType === 'group' && mentions.length) {
           for (const m of mentions) {
             const isBot = botOpenId ? m.id?.open_id === botOpenId : true;
             if (isBot) {
               text = text.replace(m.key, '').trim();
+            } else if (m.name) {
+              text = text.replace(m.key, `@${m.name}`);
             }
           }
         }
@@ -143,6 +147,16 @@ export class FeishuAdapter implements ChannelAdapter {
 
         const senderId = sender.sender_id?.open_id || sender.sender_id?.user_id || '';
         const senderName = await this.resolveUserName(senderId);
+
+        // Collect names of other @mentioned users/bots (not this bot).
+        const otherMentionNames: string[] = [];
+        if (chatType === 'group') {
+          for (const m of mentions) {
+            const isBot = botOpenId ? m.id?.open_id === botOpenId : false;
+            if (!isBot && m.name) otherMentionNames.push(m.name);
+          }
+        }
+
         const channelMsg: ChannelMessage = {
           channelType: 'feishu',
           senderId,
@@ -151,6 +165,7 @@ export class FeishuAdapter implements ChannelAdapter {
           chatType,
           text,
           mentioned: chatType === 'group' ? isMentioned : undefined,
+          mentionedOthers: otherMentionNames.length > 0 ? otherMentionNames : undefined,
           raw: data,
         };
 

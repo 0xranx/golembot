@@ -18,6 +18,10 @@
 <p align="center"><strong>Your Coding Agent is trapped in a terminal. GolemBot sets it free.</strong></p>
 
 <p align="center">
+  🔌 Compatible with <a href="https://clawhub.ai"><strong>13,000+ OpenClaw community skills</strong></a> — the largest AI agent skill ecosystem. One command to search and install.
+</p>
+
+<p align="center">
   📖 <a href="https://0xranx.github.io/golembot/"><strong>Documentation & Guides → 0xranx.github.io/golembot</strong></a>
 </p>
 

@@ -18,6 +18,10 @@
 <p align="center"><strong>你的 Coding Agent 被困在终端里。GolemBot 把它释放出来。</strong></p>
 
 <p align="center">
+  🔌 兼容 <a href="https://clawhub.ai"><strong>13,000+ OpenClaw 社区技能</strong></a> —— 最大的 AI agent 技能生态。一条命令即可搜索安装。
+</p>
+
+<p align="center">
   📖 <a href="https://0xranx.github.io/golembot/"><strong>文档与指南 → 0xranx.github.io/golembot</strong></a>
 </p>
 

@@ -4,7 +4,7 @@ layout: home
 hero:
   name: GolemBot
   text: 让你的 Coding Agent 随处运行
-  tagline: 一条命令，将 Cursor、Claude Code、OpenCode 或 Codex 接入 IM 平台、HTTP API，或嵌入到你的产品中。
+  tagline: 将 Cursor、Claude Code、OpenCode 或 Codex 接入 IM 平台、HTTP API，或嵌入产品。兼容 13,000+ OpenClaw 社区技能。
   image:
     light: /logo-icon-light.svg
     dark: /logo-icon-dark.svg
@@ -22,6 +22,10 @@ hero:
 
 features:
   - icon:
+      src: /icons/claw.svg
+    title: 13,000+ OpenClaw 技能
+    details: SKILL.md 格式与 OpenClaw 生态 100% 兼容。一条命令从 ClawHub 搜索和安装 13,000+ 社区技能。Agent 甚至可以在对话中自主发现和安装技能。
+  - icon:
       src: /icons/cpu.svg
     title: Agent 就是大脑
     details: GolemBot 不重新发明 AI。它直接使用你已有的 Coding Agent — Cursor、Claude Code、OpenCode 或 Codex — 作为引擎。Agent 变强，助手自动变强。
@@ -33,13 +37,29 @@ features:
       src: /icons/folder.svg
     title: 目录即助手
     details: 技能、记忆、配置和工作产物全部在一个目录里。完全透明，可版本控制，可通过 git 共享。
-  - icon:
-      src: /icons/claw.svg
-    title: 13,000+ 社区技能
-    details: 从 ClawHub 搜索和安装社区技能 — 最大的 AI agent 技能市场。你的 Agent 甚至可以在对话中自主发现和安装技能。
 ---
 
 <div class="home-content">
+
+## 13,000+ OpenClaw 社区技能
+
+GolemBot 的 SKILL.md 格式与 [OpenClaw](https://clawhub.ai) 生态 **100% 兼容**。从 [ClawHub](https://clawhub.ai) 搜索和安装 13,000+ 社区技能 —— 最大的 AI agent 技能市场。你的 Agent 甚至可以在对话中自主发现和安装技能。
+
+<div class="clawhub-demo">
+
+```bash
+$ golembot skill search "代码审查"
+
+ClawHub results for "代码审查" (3):
+
+  code-review          5 维度代码审查，按严重级别分层
+  pr-reviewer          自动化 PR 审查，支持行内评论
+  security-audit       代码库安全漏洞扫描
+
+Install: golembot skill add clawhub:<slug>
+```
+
+</div>
 
 ## 快速开始
 
@@ -64,26 +84,6 @@ const bot = createAssistant({ dir: './my-bot' })
 for await (const ev of bot.chat('分析上个月的销售数据'))
   if (ev.type === 'text') process.stdout.write(ev.content)
 ```
-
-## 13,000+ 社区技能
-
-GolemBot 与 [ClawHub](https://clawhub.ai) 完全兼容 —— 最大的 AI agent 技能市场。一条命令搜索和安装任何技能。你的 Agent 甚至可以在对话中自主发现和安装技能。
-
-<div class="clawhub-demo">
-
-```bash
-$ golembot skill search "代码审查"
-
-ClawHub results for "代码审查" (3):
-
-  code-review          5 维度代码审查，按严重级别分层
-  pr-reviewer          自动化 PR 审查，支持行内评论
-  security-audit       代码库安全漏洞扫描
-
-Install: golembot skill add clawhub:<slug>
-```
-
-</div>
 
 ## 支持的引擎
 

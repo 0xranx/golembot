@@ -1,15 +1,16 @@
-# [0.13.0](https://github.com/0xranx/golembot/compare/v0.12.0...v0.13.0) (2026-03-06)
+# [0.11.0-beta.14](https://github.com/0xranx/golembot/compare/v0.11.0-beta.13...v0.11.0-beta.14) (2026-03-06)
+
+
+### Bug Fixes
+
+* stronger [PASS] hint for multi-bot group chats when others are [@mentioned](https://github.com/mentioned) ([a446450](https://github.com/0xranx/golembot/commit/a446450bca76573441596366cdb54ad03fbb6764))
+
+# [0.11.0-beta.13](https://github.com/0xranx/golembot/compare/v0.11.0-beta.12...v0.11.0-beta.13) (2026-03-06)
 
 
 ### Bug Fixes
 
 * add secondary content-based dedup for Feishu group messages ([5367102](https://github.com/0xranx/golembot/commit/5367102c07de7e0dc6c043a4d9d9f049dfce0304))
-
-
-### Features
-
-* add golem ASCII art welcome screen to CLI ([d65218f](https://github.com/0xranx/golembot/commit/d65218ff3e6c93bb3d123415c93113fca207553a))
-* integrate ClawHub skill registry for search and install ([eb526d0](https://github.com/0xranx/golembot/commit/eb526d0a9ddcc3c1f85ef4f7b862015f52b5611c))
 
 # [0.11.0-beta.12](https://github.com/0xranx/golembot/compare/v0.11.0-beta.11...v0.11.0-beta.12) (2026-03-06)
 
