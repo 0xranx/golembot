@@ -1,3 +1,12 @@
+# [0.11.0-beta.8](https://github.com/0xranx/golembot/compare/v0.11.0-beta.7...v0.11.0-beta.8) (2026-03-06)
+
+
+### Features
+
+* add Slack mrkdwn and Telegram HTML message formatting ([58573c0](https://github.com/0xranx/golembot/commit/58573c04059844cbacbb8970650e69e8112789eb))
+* **feishu:** upgrade card to v2 schema with native markdown ([7fa203e](https://github.com/0xranx/golembot/commit/7fa203e9baf0f01e981ccdf8df5d67d4bc66f9fe))
+* **feishu:** use native md tag in post mode for markdown rendering ([2916c51](https://github.com/0xranx/golembot/commit/2916c51290c292f490f79891d6c52cd8e294134c))
+
 # [0.11.0-beta.7](https://github.com/0xranx/golembot/compare/v0.11.0-beta.6...v0.11.0-beta.7) (2026-03-05)
 
 
