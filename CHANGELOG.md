@@ -1,3 +1,10 @@
+# [0.14.0-beta.2](https://github.com/0xranx/golembot/compare/v0.14.0-beta.1...v0.14.0-beta.2) (2026-03-07)
+
+
+### Features
+
+* add Fleet Dashboard for multi-bot management ([42d87bd](https://github.com/0xranx/golembot/commit/42d87bd7e6d6c291affa4b064ede9c7e7ff120ef))
+
 # [0.14.0-beta.1](https://github.com/0xranx/golembot/compare/v0.13.1...v0.14.0-beta.1) (2026-03-07)
 
 
