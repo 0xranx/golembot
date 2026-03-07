@@ -69,6 +69,41 @@ golembot fleet ls [--json]
 
 每个 gateway 启动时自动注册，关闭时自动注销。崩溃的进程（stale entries）会通过 PID 存活检测自动清理。
 
+当有通过 `fleet stop` 停止的 bot 时，也会显示：
+
+```
+  Stopped Instances (1)
+
+  ○  beta-bot (cursor)
+     Port 3001 · /path/to/beta-bot
+```
+
+### `golembot fleet stop`
+
+终止一个运行中的 bot 实例（发送 SIGTERM）。bot 会被保存为已停止状态，可通过 `fleet start` 重启。
+
+```bash
+golembot fleet stop <name> [--json]
+```
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `<name>` | Bot 名称（如 `fleet ls` 所示） | — |
+| `--json` | 输出 JSON（Agent 友好） | `false` |
+
+### `golembot fleet start`
+
+重启一个之前停止的 bot 实例。bot 会在原来的目录和端口重新启动。
+
+```bash
+golembot fleet start <name> [--json]
+```
+
+| 选项 | 说明 | 默认值 |
+|------|------|--------|
+| `<name>` | Bot 名称（如 `fleet ls` 停止列表所示） | — |
+| `--json` | 输出 JSON（Agent 友好） | `false` |
+
 ### `golembot fleet serve`
 
 启动 Fleet Dashboard Web 服务 — 所有运行中 bot 的聚合视图。
@@ -85,6 +120,8 @@ golembot fleet serve [-p <port>] [--host <host>]
 **Fleet Dashboard 功能：**
 - 自动发现 `~/.golembot/fleet/` 中的所有运行中 bot
 - 显示引擎、模型、运行时间、消息数和费用
+- 每张 bot 卡片上有 Stop/Start 按钮
+- 已停止的 bot 以虚线边框 + Start 按钮显示
 - 链接到每个 bot 的独立 Dashboard
 - 每 10 秒自动刷新
 - 无 bot 运行时显示引导提示
@@ -94,7 +131,9 @@ golembot fleet serve [-p <port>] [--host <host>]
 | 端点 | 说明 |
 |------|------|
 | `GET /` | Fleet Dashboard HTML |
-| `GET /api/fleet` | 所有实例 + 指标的 JSON 数组 |
+| `GET /api/fleet` | JSON：运行中实例 + 已停止实例 + 指标 |
+| `POST /api/fleet/:name/stop` | 终止运行中的 bot（发送 SIGTERM） |
+| `POST /api/fleet/:name/start` | 重启已停止的 bot |
 | `GET /health` | `{ "status": "ok" }` |
 
 ## `golembot onboard`
