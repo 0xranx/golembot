@@ -7,6 +7,7 @@ export interface ServerOpts {
   port?: number;
   token?: string;
   hostname?: string;
+  onShutdown?: () => Promise<void> | void;
 }
 
 /** http.Server extended with a forceClose() method for clean shutdown. */
@@ -176,6 +177,18 @@ export function createGolemServer(assistant: Assistant, opts: ServerOpts = {}, d
         dashboard.metrics.eventSubscribers.delete(res);
         activeConnections.delete(res);
       });
+      return;
+    }
+
+    // POST /shutdown — graceful gateway shutdown
+    if (path === '/shutdown' && req.method === 'POST') {
+      if (opts.onShutdown) {
+        json(res, 200, { ok: true });
+        // Delay shutdown slightly so the response is sent first
+        setTimeout(() => { opts.onShutdown!(); }, 200);
+      } else {
+        json(res, 404, { error: 'Shutdown not available' });
+      }
       return;
     }
 

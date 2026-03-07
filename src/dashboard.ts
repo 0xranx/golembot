@@ -151,6 +151,7 @@ function renderHeader(data: DashboardData): string {
   ${modelBadge}
   <span><span class="status-dot"></span>Online</span>
   <span class="meta">v${esc(data.version)} &middot; uptime <span id="uptime">${formatUptime(data.uptime)}</span></span>
+  <button class="shutdown-btn" onclick="shutdownGateway()" title="Shutdown this gateway">Shutdown</button>
 </div>
 <div class="subtitle">${esc(data.name)} &middot; ${connectedCount} channel${connectedCount !== 1 ? 's' : ''} connected &middot; ${data.skills.length} skill${data.skills.length !== 1 ? 's' : ''} loaded &middot; <a href="${DOCS_BASE}/" target="_blank">Documentation</a></div>`;
 }
@@ -434,6 +435,20 @@ function renderClientScript(data: DashboardData): string {
     });
   };
 
+  window.shutdownGateway = function(){
+    if(!confirm('Shutdown this gateway? The bot will stop serving requests.')) return;
+    var btn = document.querySelector('.shutdown-btn');
+    if(btn){btn.disabled=true;btn.textContent='Shutting down...';}
+    var headers = { 'Content-Type': 'application/json' };
+    if(testToken) headers['Authorization'] = 'Bearer ' + testToken;
+    fetch('/shutdown', { method: 'POST', headers: headers }).then(function(res){
+      return res.json();
+    }).then(function(data){
+      if(data.ok) document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#888"><div style="text-align:center"><h2>Gateway Stopped</h2><p>This gateway has been shut down.</p></div></div>';
+      else { alert(data.error || 'Shutdown failed'); if(btn){btn.disabled=false;btn.textContent='Shutdown';} }
+    }).catch(function(e){ alert('Request failed: '+e.message); if(btn){btn.disabled=false;btn.textContent='Shutdown';} });
+  };
+
   window.copyCode = function(btn){
     var pre = btn.parentElement;
     var text = pre.getAttribute('data-copy') || pre.textContent.replace('Copy','').trim();
@@ -497,6 +512,11 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:6px;paddin
 .token-input{display:flex;gap:8px;margin-bottom:12px;align-items:center}
 .token-input input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:4px 8px;color:var(--text);font-size:12px;font-family:monospace}
 .token-input button{background:var(--accent);color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:12px;cursor:pointer}
+
+/* Shutdown button */
+.shutdown-btn{background:#ef4444;color:#fff;border:none;padding:4px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-left:auto;transition:opacity .15s}
+.shutdown-btn:hover{opacity:.85}
+.shutdown-btn:disabled{opacity:.5;cursor:not-allowed}
 
 /* Responsive (dashboard-specific) */
 @media(max-width:768px){

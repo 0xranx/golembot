@@ -273,7 +273,7 @@ export async function findStoppedInstance(
 const FLEET_CSS = `${BASE_CSS}
 
 /* Fleet-specific styles */
-.bot-card{position:relative;transition:border-color .2s}
+.bot-card{position:relative;transition:border-color .2s;padding-top:14px}
 .bot-card:hover{border-color:var(--accent)}
 .bot-name{font-size:16px;font-weight:600;margin-bottom:8px}
 .bot-meta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
@@ -295,9 +295,9 @@ const FLEET_CSS = `${BASE_CSS}
 .auth-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:var(--border);color:var(--dim)}
 .card-actions{display:flex;align-items:center;gap:12px;margin-top:10px}
 .btn-stop,.btn-start{border:none;padding:4px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s}
-.btn-stop{background:#ef4444;color:#fff}
+.btn-stop{background:#ef4444;color:#fff;position:absolute;top:14px;right:14px}
 .btn-stop:hover{opacity:.85}
-.btn-start{background:var(--green);color:#fff}
+.btn-start{background:var(--green);color:#fff;position:absolute;top:14px;right:14px}
 .btn-start:hover{opacity:.85}
 .btn-stop:disabled,.btn-start:disabled{opacity:.5;cursor:not-allowed}
 .stopped-card{opacity:.65;border-style:dashed}
@@ -385,10 +385,8 @@ function renderBotCard(inst: FleetInstance): string {
       </div>
       ${statsHtml}
       ${channelsHtml}
-      <div class="card-actions">
-        <a class="open-link" href="${esc(inst.url)}" target="_blank">Open Dashboard &rarr;</a>
-        <button class="btn-stop" onclick="fleetAction('stop','${esc(inst.name)}',${new URL(inst.url).port || 3000})">Stop</button>
-      </div>
+      <a class="open-link" href="${esc(inst.url)}" target="_blank">Open Dashboard &rarr;</a>
+      <button class="btn-stop" onclick="fleetAction('stop','${esc(inst.name)}',${new URL(inst.url).port || 3000})">Stop</button>
     </div>`;
 }
 
@@ -408,9 +406,7 @@ function renderStoppedCard(entry: FleetEntry & { stopped: true }): string {
         <span class="stat-item">Port <strong>${esc(port)}</strong></span>
         <span class="stat-item" style="color:var(--dim)">${esc(entry.dir)}</span>
       </div>
-      <div class="card-actions">
-        <button class="btn-start" onclick="fleetAction('start','${esc(entry.name)}',${port})">Start</button>
-      </div>
+      <button class="btn-start" onclick="fleetAction('start','${esc(entry.name)}',${port})">Start</button>
     </div>`;
 }
 
