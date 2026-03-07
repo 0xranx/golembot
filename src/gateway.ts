@@ -550,7 +550,9 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
     version,
   };
 
-  const serverOpts: ServerOpts = { port, token, hostname: host };
+  // shutdown is assigned later after httpServer is created — use a wrapper
+  let shutdownFn: (() => Promise<void>) | undefined;
+  const serverOpts: ServerOpts = { port, token, hostname: host, onShutdown: () => shutdownFn?.() };
   const httpServer: GolemServer = createGolemServer(assistant, serverOpts, dashboardCtx);
 
   const adapters: ChannelAdapter[] = [];
@@ -629,6 +631,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
     await unregisterInstance(config.name, port).catch(() => {});
     process.exit(0);
   };
+  shutdownFn = shutdown;
 
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
