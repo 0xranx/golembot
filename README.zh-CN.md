@@ -13,6 +13,7 @@
   <a href="https://www.npmjs.com/package/golembot"><img src="https://img.shields.io/npm/v/golembot.svg?style=for-the-badge" alt="npm version"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge" alt="MIT License"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge" alt="Node.js"></a>
+  <a href="https://discord.gg/tgU5FXChgM"><img src="https://img.shields.io/discord/1478375769003655393?style=for-the-badge&logo=discord&label=Discord" alt="Discord"></a>
 </p>
 
 <p align="center"><strong>你的 Coding Agent 被困在终端里。GolemBot 把它释放出来。</strong></p>

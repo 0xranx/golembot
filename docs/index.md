@@ -19,6 +19,9 @@ hero:
     - theme: alt
       text: Browse Skills
       link: /skills/overview
+    - theme: alt
+      text: Join Discord
+      link: https://discord.gg/tgU5FXChgM
 
 features:
   - icon:

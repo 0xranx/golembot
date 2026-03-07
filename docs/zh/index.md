@@ -19,6 +19,9 @@ hero:
     - theme: alt
       text: 浏览技能
       link: /zh/skills/overview
+    - theme: alt
+      text: Discord 社区
+      link: https://discord.gg/tgU5FXChgM
 
 features:
   - icon:
