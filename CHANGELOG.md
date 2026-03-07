@@ -1,10 +1,16 @@
-# [0.14.0](https://github.com/0xranx/golembot/compare/v0.13.1...v0.14.0) (2026-03-07)
+# [0.14.0-beta.3](https://github.com/0xranx/golembot/compare/v0.14.0-beta.2...v0.14.0-beta.3) (2026-03-07)
+
+
+### Features
+
+* add fleet stop/start for bot lifecycle management ([a6826b5](https://github.com/0xranx/golembot/commit/a6826b586eaf155c0a410e1cfea2a1d33b062f7d))
+
+# [0.14.0-beta.2](https://github.com/0xranx/golembot/compare/v0.14.0-beta.1...v0.14.0-beta.2) (2026-03-07)
 
 
 ### Features
 
 * add Fleet Dashboard for multi-bot management ([42d87bd](https://github.com/0xranx/golembot/commit/42d87bd7e6d6c291affa4b064ede9c7e7ff120ef))
-* add gateway dashboard with real-time monitoring ([07b56dc](https://github.com/0xranx/golembot/commit/07b56dcc1fd2cae6f9e8b9a1ccea3abefdc2afe2))
 
 # [0.14.0-beta.1](https://github.com/0xranx/golembot/compare/v0.13.1...v0.14.0-beta.1) (2026-03-07)
 

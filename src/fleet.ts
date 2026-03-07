@@ -6,9 +6,10 @@
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { mkdir, writeFile, unlink, readdir, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, unlink, readdir, readFile, stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { request as httpRequest } from 'node:http';
+import { spawn } from 'node:child_process';
 import { esc, formatUptime, FAVICON, DOCS_BASE, ENGINE_COLORS, BASE_CSS } from './ui-shared.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -23,6 +24,7 @@ export interface FleetEntry {
   startedAt: string;
   channels: { type: string; status: string }[];
   authEnabled: boolean;
+  dir: string;
 }
 
 export interface FleetInstance extends FleetEntry {
@@ -85,7 +87,11 @@ export async function listInstances(fleetDir = DEFAULT_FLEET_DIR): Promise<Fleet
     const filePath = join(fleetDir, file);
     try {
       const raw = await readFile(filePath, 'utf-8');
-      const entry: FleetEntry = JSON.parse(raw);
+      const entry = JSON.parse(raw);
+
+      // Skip stopped markers — they're managed by fleet stop/start
+      if (entry.stopped === true) continue;
+
       const alive = isProcessAlive(entry.pid);
 
       if (!alive) {
@@ -134,6 +140,134 @@ export async function fetchInstanceMetrics(instance: FleetInstance): Promise<Fle
   });
 }
 
+// ── Stop / Start ─────────────────────────────────────────────────────────────
+
+export async function stopInstance(instance: FleetInstance, fleetDir = DEFAULT_FLEET_DIR): Promise<void> {
+  if (!isProcessAlive(instance.pid)) {
+    throw new Error(`Bot "${instance.name}" (PID ${instance.pid}) is not running`);
+  }
+
+  // Save a stopped marker so the bot can be restarted from fleet
+  const url = new URL(instance.url);
+  const port = Number(url.port) || 3000;
+  const stoppedEntry: FleetEntry & { stopped: true } = {
+    name: instance.name,
+    url: instance.url,
+    pid: instance.pid,
+    engine: instance.engine,
+    model: instance.model,
+    version: instance.version,
+    startedAt: instance.startedAt,
+    channels: instance.channels,
+    authEnabled: instance.authEnabled,
+    dir: instance.dir,
+    stopped: true,
+  };
+  const filePath = join(fleetDir, entryFileName(instance.name, port));
+  await writeFile(filePath, JSON.stringify(stoppedEntry, null, 2));
+
+  // Send SIGTERM — the gateway's shutdown handler will try to unregister,
+  // but we've already written the stopped marker, so even if it deletes
+  // the file, we re-write it below after a short delay.
+  process.kill(instance.pid, 'SIGTERM');
+
+  // Wait briefly for the process to exit, then ensure the stopped marker persists
+  await new Promise(r => setTimeout(r, 500));
+  if (!isProcessAlive(instance.pid)) {
+    await writeFile(filePath, JSON.stringify(stoppedEntry, null, 2));
+  }
+}
+
+export async function startInstance(
+  entry: FleetEntry & { stopped?: boolean },
+  fleetDir = DEFAULT_FLEET_DIR,
+): Promise<{ pid: number }> {
+  // Verify the bot directory still exists
+  try {
+    await stat(join(entry.dir, 'golem.yaml'));
+  } catch {
+    throw new Error(`Bot directory "${entry.dir}" does not contain golem.yaml`);
+  }
+
+  // Resolve the golembot binary — prefer the same installation
+  const selfDir = dirname(fileURLToPath(import.meta.url));
+  const cliBin = join(selfDir, '..', 'dist', 'cli.js');
+  let bin: string;
+  let args: string[];
+  try {
+    await stat(cliBin);
+    bin = process.execPath;
+    args = [cliBin, 'gateway'];
+  } catch {
+    bin = 'golembot';
+    args = ['gateway'];
+  }
+
+  // Restore port from the original URL
+  const port = new URL(entry.url).port;
+  if (port) args.push('-p', port);
+
+  const child = spawn(bin, args, {
+    cwd: entry.dir,
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env },
+  });
+  child.unref();
+
+  if (!child.pid) throw new Error('Failed to spawn gateway process');
+
+  // Remove the stopped marker — the new gateway will register itself
+  const url = new URL(entry.url);
+  const p = Number(url.port) || 3000;
+  await unlink(join(fleetDir, entryFileName(entry.name, p))).catch(() => {});
+
+  return { pid: child.pid };
+}
+
+/** List stopped bots (those stopped via fleet but not restarted) */
+export async function listStoppedInstances(fleetDir = DEFAULT_FLEET_DIR): Promise<(FleetEntry & { stopped: true })[]> {
+  let files: string[];
+  try {
+    files = await readdir(fleetDir);
+  } catch {
+    return [];
+  }
+
+  const stopped: (FleetEntry & { stopped: true })[] = [];
+  for (const file of files) {
+    if (!file.endsWith('.json')) continue;
+    try {
+      const raw = await readFile(join(fleetDir, file), 'utf-8');
+      const entry = JSON.parse(raw);
+      if (entry.stopped === true && !isProcessAlive(entry.pid)) {
+        stopped.push(entry);
+      }
+    } catch { /* skip */ }
+  }
+  return stopped;
+}
+
+export async function findInstance(
+  nameOrPort: string,
+  fleetDir = DEFAULT_FLEET_DIR,
+): Promise<FleetInstance | undefined> {
+  const instances = await listInstances(fleetDir);
+  return instances.find(
+    i => i.name === nameOrPort || new URL(i.url).port === nameOrPort,
+  );
+}
+
+export async function findStoppedInstance(
+  nameOrPort: string,
+  fleetDir = DEFAULT_FLEET_DIR,
+): Promise<(FleetEntry & { stopped: true }) | undefined> {
+  const stopped = await listStoppedInstances(fleetDir);
+  return stopped.find(
+    i => i.name === nameOrPort || new URL(i.url).port === nameOrPort,
+  );
+}
+
 // ── Fleet Dashboard HTML ─────────────────────────────────────────────────────
 
 const FLEET_CSS = `${BASE_CSS}
@@ -159,12 +293,27 @@ const FLEET_CSS = `${BASE_CSS}
 .refresh-dot{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-left:6px;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .auth-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:var(--border);color:var(--dim)}
+.card-actions{display:flex;align-items:center;gap:12px;margin-top:10px}
+.btn-stop,.btn-start{border:none;padding:4px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn-stop{background:#ef4444;color:#fff}
+.btn-stop:hover{opacity:.85}
+.btn-start{background:var(--green);color:#fff}
+.btn-start:hover{opacity:.85}
+.btn-stop:disabled,.btn-start:disabled{opacity:.5;cursor:not-allowed}
+.stopped-card{opacity:.65;border-style:dashed}
+.dot-red{width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block;margin-right:6px}
 `;
 
-export function renderFleetDashboard(instances: FleetInstance[], version: string): string {
-  const botCards = instances.length > 0
-    ? instances.map(renderBotCard).join('\n')
-    : renderEmptyState();
+export function renderFleetDashboard(
+  instances: FleetInstance[],
+  version: string,
+  stoppedInstances: (FleetEntry & { stopped: true })[] = [],
+): string {
+  const allCards = [
+    ...instances.map(renderBotCard),
+    ...stoppedInstances.map(renderStoppedCard),
+  ];
+  const botCards = allCards.length > 0 ? allCards.join('\n') : renderEmptyState();
 
   return `<!DOCTYPE html>
 <html lang="en"><head>
@@ -236,7 +385,32 @@ function renderBotCard(inst: FleetInstance): string {
       </div>
       ${statsHtml}
       ${channelsHtml}
-      <a class="open-link" href="${esc(inst.url)}" target="_blank">Open Dashboard &rarr;</a>
+      <div class="card-actions">
+        <a class="open-link" href="${esc(inst.url)}" target="_blank">Open Dashboard &rarr;</a>
+        <button class="btn-stop" onclick="fleetAction('stop','${esc(inst.name)}',${new URL(inst.url).port || 3000})">Stop</button>
+      </div>
+    </div>`;
+}
+
+function renderStoppedCard(entry: FleetEntry & { stopped: true }): string {
+  const engineColor = ENGINE_COLORS[entry.engine] ?? 'var(--dim)';
+  const engineName = entry.engine.charAt(0).toUpperCase() + entry.engine.slice(1);
+  const port = new URL(entry.url).port || '3000';
+
+  return `
+    <div class="card bot-card stopped-card">
+      <div class="bot-name"><span class="dot-red"></span>${esc(entry.name)} <span class="auth-badge">Stopped</span></div>
+      <div class="bot-meta">
+        <span class="engine-badge" style="background:${engineColor}">${esc(engineName)}</span>
+        ${entry.model ? `<span class="model-badge">${esc(entry.model)}</span>` : ''}
+      </div>
+      <div class="stat-row">
+        <span class="stat-item">Port <strong>${esc(port)}</strong></span>
+        <span class="stat-item" style="color:var(--dim)">${esc(entry.dir)}</span>
+      </div>
+      <div class="card-actions">
+        <button class="btn-start" onclick="fleetAction('start','${esc(entry.name)}',${port})">Start</button>
+      </div>
     </div>`;
 }
 
@@ -270,6 +444,27 @@ function renderFleetScript(): string {
         }
       } catch { /* retry next tick */ }
     }
+    async function fleetAction(action, name, port) {
+      var btn = event.target;
+      btn.disabled = true;
+      btn.textContent = action === 'stop' ? 'Stopping...' : 'Starting...';
+      try {
+        var res = await fetch('/api/fleet/' + encodeURIComponent(name) + '/' + action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ port: port }),
+        });
+        var data = await res.json();
+        if (!data.ok) { alert(data.error || 'Action failed'); btn.disabled = false; btn.textContent = action === 'stop' ? 'Stop' : 'Start'; return; }
+        // Force immediate refresh after action
+        _lastHash = null;
+        setTimeout(function() { location.reload(); }, 1500);
+      } catch (e) {
+        alert('Request failed: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = action === 'stop' ? 'Stop' : 'Start';
+      }
+    }
     // Update uptimes every second
     setInterval(function() {
       document.querySelectorAll('[data-started]').forEach(function(el) {
@@ -282,7 +477,7 @@ function renderFleetScript(): string {
       });
     }, 1000);
     setInterval(refresh, 10000);
-  `;
+`;
 }
 
 // ── Fleet HTTP Server ────────────────────────────────────────────────────────
@@ -325,14 +520,49 @@ export async function startFleetServer(opts: FleetServerOpts = {}, fleetDir?: st
 
     if (path === '/api/fleet' && req.method === 'GET') {
       const instances = await getFleetData(fleetDir);
-      const hash = instances.map(i => `${i.name}:${i.pid}:${i.metrics?.totalMessages ?? 0}`).join('|');
-      json(res, 200, { instances, _hash: hash });
+      const stopped = await listStoppedInstances(fleetDir);
+      const hash = [
+        ...instances.map(i => `${i.name}:${i.pid}:${i.metrics?.totalMessages ?? 0}`),
+        ...stopped.map(s => `${s.name}:stopped`),
+      ].join('|');
+      json(res, 200, { instances, stopped, _hash: hash });
+      return;
+    }
+
+    // POST /api/fleet/:name/stop
+    const stopMatch = path.match(/^\/api\/fleet\/([^/]+)\/stop$/);
+    if (stopMatch && req.method === 'POST') {
+      const name = decodeURIComponent(stopMatch[1]);
+      try {
+        const inst = await findInstance(name, fleetDir);
+        if (!inst) { json(res, 404, { ok: false, error: `Bot "${name}" not found` }); return; }
+        await stopInstance(inst, fleetDir);
+        json(res, 200, { ok: true, name: inst.name, pid: inst.pid });
+      } catch (e: unknown) {
+        json(res, 400, { ok: false, error: (e as Error).message });
+      }
+      return;
+    }
+
+    // POST /api/fleet/:name/start
+    const startMatch = path.match(/^\/api\/fleet\/([^/]+)\/start$/);
+    if (startMatch && req.method === 'POST') {
+      const name = decodeURIComponent(startMatch[1]);
+      try {
+        const entry = await findStoppedInstance(name, fleetDir);
+        if (!entry) { json(res, 404, { ok: false, error: `Stopped bot "${name}" not found` }); return; }
+        const result = await startInstance(entry, fleetDir);
+        json(res, 200, { ok: true, name: entry.name, pid: result.pid });
+      } catch (e: unknown) {
+        json(res, 400, { ok: false, error: (e as Error).message });
+      }
       return;
     }
 
     if (path === '/' && req.method === 'GET') {
       const instances = await getFleetData(fleetDir);
-      const html = renderFleetDashboard(instances, version);
+      const stopped = await listStoppedInstances(fleetDir);
+      const html = renderFleetDashboard(instances, version, stopped);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
       return;

@@ -111,6 +111,41 @@ Each gateway automatically registers itself on startup and unregisters on shutdo
      Port 3001 · PID 12346 · 7 msgs
 ```
 
+When there are stopped bots (stopped via `fleet stop`), they also appear:
+
+```
+  Stopped Instances (1)
+
+  ○  beta-bot (cursor)
+     Port 3001 · /path/to/beta-bot
+```
+
+### `golembot fleet stop`
+
+Stop a running bot instance by sending SIGTERM. The bot is saved as a stopped entry and can be restarted with `fleet start`.
+
+```bash
+golembot fleet stop <name> [--json]
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `<name>` | Bot name (as shown in `fleet ls`) | — |
+| `--json` | Output JSON (agent-friendly) | `false` |
+
+### `golembot fleet start`
+
+Restart a previously stopped bot instance. The bot is respawned in its original directory on the same port.
+
+```bash
+golembot fleet start <name> [--json]
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `<name>` | Bot name (as shown in `fleet ls` stopped section) | — |
+| `--json` | Output JSON (agent-friendly) | `false` |
+
 ### `golembot fleet serve`
 
 Start the Fleet Dashboard web server — an aggregate view of all running bots.
@@ -127,6 +162,8 @@ golembot fleet serve [-p <port>] [--host <host>]
 **Fleet Dashboard features:**
 - Auto-discovers all running bots from `~/.golembot/fleet/`
 - Shows engine, model, uptime, message count, and cost per bot
+- Stop/Start buttons on each bot card
+- Stopped bots shown with dashed border and Start button
 - Links to each bot's individual Dashboard
 - Auto-refreshes every 10 seconds
 - Empty state guidance when no bots are running
@@ -136,7 +173,9 @@ golembot fleet serve [-p <port>] [--host <host>]
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Fleet Dashboard HTML |
-| `GET /api/fleet` | JSON array of all instances with metrics |
+| `GET /api/fleet` | JSON: running instances + stopped instances + metrics |
+| `POST /api/fleet/:name/stop` | Stop a running bot (sends SIGTERM) |
+| `POST /api/fleet/:name/start` | Restart a previously stopped bot |
 | `GET /health` | `{ "status": "ok" }` |
 
 ## `golembot onboard`

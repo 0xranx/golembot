@@ -607,6 +607,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
       startedAt: new Date().toISOString(),
       channels: channelStatuses.filter(c => c.status === 'connected').map(c => ({ type: c.type, status: c.status })),
       authEnabled: !!token,
+      dir,
     }).catch(() => {}); // best-effort
   });
 

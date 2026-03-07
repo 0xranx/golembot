@@ -7,6 +7,10 @@ import {
   unregisterInstance,
   isProcessAlive,
   listInstances,
+  listStoppedInstances,
+  stopInstance,
+  findInstance,
+  findStoppedInstance,
   renderFleetDashboard,
   type FleetEntry,
   type FleetInstance,
@@ -23,6 +27,7 @@ function makeEntry(overrides?: Partial<FleetEntry>): FleetEntry {
     startedAt: new Date().toISOString(),
     channels: [{ type: 'telegram', status: 'connected' }],
     authEnabled: false,
+    dir: '/tmp/test-bot',
     ...overrides,
   };
 }
@@ -196,5 +201,92 @@ describe('renderFleetDashboard', () => {
     ];
     const html = renderFleetDashboard(instances, '1.0.0');
     expect(html).toContain('2 bots');
+  });
+
+  it('renders stopped bot cards with Start button', () => {
+    const stopped = [{ ...makeEntry(), stopped: true as const }];
+    const html = renderFleetDashboard([], '1.0.0', stopped);
+    expect(html).toContain('Stopped');
+    expect(html).toContain('btn-start');
+    expect(html).toContain('Start');
+    // Header says "No running bots found" because 0 running, but cards still render
+    expect(html).toContain('stopped-card');
+  });
+
+  it('renders both running and stopped cards', () => {
+    const running: FleetInstance[] = [{ ...makeEntry({ name: 'live' }), alive: true }];
+    const stopped = [{ ...makeEntry({ name: 'dead' }), stopped: true as const }];
+    const html = renderFleetDashboard(running, '1.0.0', stopped);
+    expect(html).toContain('live');
+    expect(html).toContain('dead');
+    expect(html).toContain('btn-stop');
+    expect(html).toContain('btn-start');
+  });
+});
+
+// ── Stop / Start ────────────────────────────────────────────────────────────
+
+describe('stopInstance', () => {
+  it('throws for dead PID', async () => {
+    const inst: FleetInstance = { ...makeEntry({ pid: 999999 }), alive: false };
+    await expect(stopInstance(inst, fleetDir)).rejects.toThrow('is not running');
+  });
+});
+
+describe('listStoppedInstances', () => {
+  it('returns empty array when no stopped bots', async () => {
+    await registerInstance(makeEntry(), fleetDir);
+    const stopped = await listStoppedInstances(fleetDir);
+    expect(stopped).toEqual([]);
+  });
+
+  it('returns stopped entries', async () => {
+    const { writeFile: wf } = await import('node:fs/promises');
+    const entry = { ...makeEntry({ pid: 999999 }), stopped: true };
+    await wf(join(fleetDir, 'test-bot-3000.json'), JSON.stringify(entry));
+    const stopped = await listStoppedInstances(fleetDir);
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0].name).toBe('test-bot');
+    expect(stopped[0].stopped).toBe(true);
+  });
+
+  it('excludes stopped entries with alive PID (bot restarted externally)', async () => {
+    const { writeFile: wf } = await import('node:fs/promises');
+    // Use current PID (alive) — should not appear in stopped list
+    const entry = { ...makeEntry({ pid: process.pid }), stopped: true };
+    await wf(join(fleetDir, 'test-bot-3000.json'), JSON.stringify(entry));
+    const stopped = await listStoppedInstances(fleetDir);
+    expect(stopped).toHaveLength(0);
+  });
+});
+
+describe('findInstance', () => {
+  it('finds instance by name', async () => {
+    await registerInstance(makeEntry(), fleetDir);
+    const found = await findInstance('test-bot', fleetDir);
+    expect(found).toBeDefined();
+    expect(found!.name).toBe('test-bot');
+  });
+
+  it('finds instance by port', async () => {
+    await registerInstance(makeEntry(), fleetDir);
+    const found = await findInstance('3000', fleetDir);
+    expect(found).toBeDefined();
+  });
+
+  it('returns undefined for unknown name', async () => {
+    const found = await findInstance('nonexistent', fleetDir);
+    expect(found).toBeUndefined();
+  });
+});
+
+describe('findStoppedInstance', () => {
+  it('finds stopped instance by name', async () => {
+    const { writeFile: wf } = await import('node:fs/promises');
+    const entry = { ...makeEntry({ pid: 999999 }), stopped: true };
+    await wf(join(fleetDir, 'test-bot-3000.json'), JSON.stringify(entry));
+    const found = await findStoppedInstance('test-bot', fleetDir);
+    expect(found).toBeDefined();
+    expect(found!.stopped).toBe(true);
   });
 });

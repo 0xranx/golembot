@@ -643,30 +643,95 @@ fleet
   .description('List all running bot instances')
   .option('--json', 'output JSON (agent-friendly)')
   .action(async (opts: { json?: boolean }) => {
-    const { listInstances, fetchInstanceMetrics } = await import('./fleet.js');
+    const { listInstances, listStoppedInstances, fetchInstanceMetrics } = await import('./fleet.js');
     const instances = await listInstances();
     const enriched = await Promise.all(instances.map(fetchInstanceMetrics));
+    const stopped = await listStoppedInstances();
 
     if (opts.json) {
-      console.log(JSON.stringify(enriched));
+      console.log(JSON.stringify({ running: enriched, stopped }));
       return;
     }
 
-    if (enriched.length === 0) {
+    if (enriched.length === 0 && stopped.length === 0) {
       console.log('No running bots found. Start one with: golembot gateway');
       return;
     }
 
-    console.log(`\n  ${BOLD}Running GolemBot Instances${RESET} (${enriched.length})\n`);
-    for (const inst of enriched) {
-      const engine = `${DIM}(${inst.engine})${RESET}`;
-      const model = inst.model ? ` ${DIM}${inst.model}${RESET}` : '';
-      const msgs = inst.metrics ? `${inst.metrics.totalMessages} msgs` : (inst.authEnabled ? 'auth required' : 'unreachable');
-      const port = new URL(inst.url).port || '3000';
-      console.log(`  ${CYAN}●${RESET}  ${BOLD}${inst.name}${RESET} ${engine}${model}`);
-      console.log(`     ${DIM}Port ${port} · PID ${inst.pid} · ${msgs}${RESET}`);
+    if (enriched.length > 0) {
+      console.log(`\n  ${BOLD}Running GolemBot Instances${RESET} (${enriched.length})\n`);
+      for (const inst of enriched) {
+        const engine = `${DIM}(${inst.engine})${RESET}`;
+        const model = inst.model ? ` ${DIM}${inst.model}${RESET}` : '';
+        const msgs = inst.metrics ? `${inst.metrics.totalMessages} msgs` : (inst.authEnabled ? 'auth required' : 'unreachable');
+        const port = new URL(inst.url).port || '3000';
+        console.log(`  ${CYAN}●${RESET}  ${BOLD}${inst.name}${RESET} ${engine}${model}`);
+        console.log(`     ${DIM}Port ${port} · PID ${inst.pid} · ${msgs}${RESET}`);
+      }
+    }
+
+    if (stopped.length > 0) {
+      console.log(`\n  ${BOLD}Stopped Instances${RESET} (${stopped.length})\n`);
+      for (const inst of stopped) {
+        const engine = `${DIM}(${inst.engine})${RESET}`;
+        const port = new URL(inst.url).port || '3000';
+        console.log(`  ${DIM}○${RESET}  ${BOLD}${inst.name}${RESET} ${engine}`);
+        console.log(`     ${DIM}Port ${port} · ${inst.dir}${RESET}`);
+      }
     }
     console.log();
+  });
+
+fleet
+  .command('stop <name>')
+  .description('Stop a running bot instance')
+  .option('--json', 'output JSON (agent-friendly)')
+  .action(async (name: string, opts: { json?: boolean }) => {
+    const { findInstance, stopInstance } = await import('./fleet.js');
+    try {
+      const inst = await findInstance(name);
+      if (!inst) {
+        const msg = `Bot "${name}" not found. Run "golembot fleet ls" to see running bots.`;
+        if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`\u274c ${msg}`); }
+        process.exit(1);
+      }
+      await stopInstance(inst);
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: true, name: inst.name, pid: inst.pid }));
+      } else {
+        console.log(`\u2705 Stopped ${inst.name} (PID ${inst.pid})`);
+      }
+    } catch (e: unknown) {
+      const msg = (e as Error).message;
+      if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`\u274c ${msg}`); }
+      process.exit(1);
+    }
+  });
+
+fleet
+  .command('start <name>')
+  .description('Start a previously stopped bot instance')
+  .option('--json', 'output JSON (agent-friendly)')
+  .action(async (name: string, opts: { json?: boolean }) => {
+    const { findStoppedInstance, startInstance } = await import('./fleet.js');
+    try {
+      const entry = await findStoppedInstance(name);
+      if (!entry) {
+        const msg = `Stopped bot "${name}" not found. Run "golembot fleet ls" to see stopped bots.`;
+        if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`\u274c ${msg}`); }
+        process.exit(1);
+      }
+      const result = await startInstance(entry);
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: true, name: entry.name, pid: result.pid }));
+      } else {
+        console.log(`\u2705 Started ${entry.name} (PID ${result.pid})`);
+      }
+    } catch (e: unknown) {
+      const msg = (e as Error).message;
+      if (opts.json) { console.log(JSON.stringify({ ok: false, error: msg })); } else { console.error(`\u274c ${msg}`); }
+      process.exit(1);
+    }
   });
 
 program
