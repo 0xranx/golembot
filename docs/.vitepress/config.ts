@@ -205,6 +205,7 @@ export default defineConfig({
 
     socialLinks: [
       { icon: 'github', link: 'https://github.com/0xranx/golembot' },
+      { icon: 'discord', link: 'https://discord.gg/tgU5FXChgM' },
       { icon: 'npm', link: 'https://www.npmjs.com/package/golembot' },
     ],
 
