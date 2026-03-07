@@ -1,3 +1,10 @@
+# [0.14.0-beta.3](https://github.com/0xranx/golembot/compare/v0.14.0-beta.2...v0.14.0-beta.3) (2026-03-07)
+
+
+### Features
+
+* add fleet stop/start for bot lifecycle management ([a6826b5](https://github.com/0xranx/golembot/commit/a6826b586eaf155c0a410e1cfea2a1d33b062f7d))
+
 # [0.14.0-beta.2](https://github.com/0xranx/golembot/compare/v0.14.0-beta.1...v0.14.0-beta.2) (2026-03-07)
 
 
