@@ -84,6 +84,17 @@ export interface StreamingConfig {
   showToolCalls?: boolean;
 }
 
+export interface PermissionsConfig {
+  /** Paths the agent is allowed to read/write (relative to workspace). */
+  allowedPaths?: string[];
+  /** Paths the agent must not access (relative to workspace). */
+  deniedPaths?: string[];
+  /** Shell commands the agent is allowed to run (exact or glob patterns). */
+  allowedCommands?: string[];
+  /** Shell commands the agent must not run. */
+  deniedCommands?: string[];
+}
+
 export interface GolemConfig {
   name: string;
   engine: string;
@@ -105,6 +116,8 @@ export interface GolemConfig {
   groupChat?: GroupChatConfig;
   /** Control how AI replies are delivered to IM channels. */
   streaming?: StreamingConfig;
+  /** Agent permissions (allowed/denied paths and commands). */
+  permissions?: PermissionsConfig;
   tasks?: ScheduledTaskDef[];
 }
 
@@ -171,6 +184,9 @@ export async function loadConfig(dir: string): Promise<GolemConfig> {
   if (doc.streaming && typeof doc.streaming === 'object') {
     config.streaming = doc.streaming as StreamingConfig;
   }
+  if (doc.permissions && typeof doc.permissions === 'object') {
+    config.permissions = doc.permissions as PermissionsConfig;
+  }
   if (Array.isArray(doc.tasks)) {
     config.tasks = (doc.tasks as Record<string, unknown>[]).map((t, i) => ({
       id: typeof t.id === 'string' ? t.id : '',
@@ -228,6 +244,7 @@ export async function writeConfig(dir: string, config: GolemConfig): Promise<voi
   if (config.gateway) content.gateway = config.gateway;
   if (config.groupChat) content.groupChat = config.groupChat;
   if (config.streaming) content.streaming = config.streaming;
+  if (config.permissions) content.permissions = config.permissions;
   if (config.tasks) content.tasks = config.tasks;
   await writeFile(configPath, yaml.dump(content, { lineWidth: -1 }), 'utf-8');
 }
@@ -358,4 +375,44 @@ export async function initWorkspace(
   } catch {
     await writeFile(gitignorePath, gitignoreLines.join('\n') + '\n', 'utf-8');
   }
+
+  if (config.permissions) {
+    await generateCursorCliJson(dir, config.permissions);
+  }
+}
+
+/**
+ * Generate `.cursor/cli.json` from the permissions config in golem.yaml.
+ * This file controls what the Cursor Agent CLI is allowed to do when invoked
+ * without `--trust` (i.e. with granular permission enforcement).
+ */
+export async function generateCursorCliJson(dir: string, permissions: PermissionsConfig): Promise<void> {
+  const cursorDir = join(dir, '.cursor');
+  await mkdir(cursorDir, { recursive: true });
+
+  const cliConfig: Record<string, unknown> = {};
+  const perms: Record<string, unknown> = {};
+
+  if (permissions.allowedPaths?.length) {
+    perms.allowedDirectories = permissions.allowedPaths;
+  }
+  if (permissions.deniedPaths?.length) {
+    perms.deniedDirectories = permissions.deniedPaths;
+  }
+  if (permissions.allowedCommands?.length) {
+    perms.allowedCommands = permissions.allowedCommands;
+  }
+  if (permissions.deniedCommands?.length) {
+    perms.deniedCommands = permissions.deniedCommands;
+  }
+
+  if (Object.keys(perms).length > 0) {
+    cliConfig.permissions = perms;
+  }
+
+  await writeFile(
+    join(cursorDir, 'cli.json'),
+    JSON.stringify(cliConfig, null, 2) + '\n',
+    'utf-8',
+  );
 }

@@ -231,6 +231,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
         skipPermissions: config.skipPermissions,
         signal: controller.signal,
         imagePaths: imagePaths.length > 0 ? imagePaths : undefined,
+        hasPermissionsConfig: !!config.permissions,
       })) {
         if (event.type === 'done') {
           if (event.sessionId) lastSessionId = event.sessionId;

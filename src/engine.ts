@@ -18,6 +18,8 @@ export interface InvokeOpts {
   signal?: AbortSignal;
   /** Absolute paths to image files attached to the user message. Engines may use these for native multimodal support. */
   imagePaths?: string[];
+  /** When true, the workspace has a .cursor/cli.json with granular permissions; do not pass --trust. */
+  hasPermissionsConfig?: boolean;
 }
 
 export interface ListModelsOpts {

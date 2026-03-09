@@ -9,6 +9,7 @@ import {
   generateAgentsMd,
   ensureReady,
   initWorkspace,
+  generateCursorCliJson,
 } from '../workspace.js';
 
 describe('workspace', () => {
@@ -275,6 +276,107 @@ describe('workspace', () => {
       const gitignore = await readFile(join(dir, '.gitignore'), 'utf-8');
       expect(gitignore).toContain('custom/');
       expect(gitignore).not.toContain('.golem/');
+    });
+
+    it('generates .cursor/cli.json when permissions are configured', async () => {
+      await initWorkspace(
+        dir,
+        {
+          name: 'secure-bot',
+          engine: 'cursor',
+          permissions: {
+            allowedPaths: ['./src', './tests'],
+            deniedPaths: ['./.env', './secrets'],
+            allowedCommands: ['npm test', 'npm run build'],
+            deniedCommands: ['rm -rf *'],
+          },
+        },
+        '/tmp/nonexistent',
+      );
+
+      const cliJson = JSON.parse(await readFile(join(dir, '.cursor', 'cli.json'), 'utf-8'));
+      expect(cliJson.permissions.allowedDirectories).toEqual(['./src', './tests']);
+      expect(cliJson.permissions.deniedDirectories).toEqual(['./.env', './secrets']);
+      expect(cliJson.permissions.allowedCommands).toEqual(['npm test', 'npm run build']);
+      expect(cliJson.permissions.deniedCommands).toEqual(['rm -rf *']);
+    });
+
+    it('does not generate .cursor/cli.json without permissions', async () => {
+      await initWorkspace(
+        dir,
+        { name: 'plain-bot', engine: 'cursor' },
+        '/tmp/nonexistent',
+      );
+
+      await expect(stat(join(dir, '.cursor', 'cli.json'))).rejects.toThrow();
+    });
+  });
+
+  // ── generateCursorCliJson ─────────────────────────
+
+  describe('generateCursorCliJson', () => {
+    it('generates cli.json with all permission fields', async () => {
+      await generateCursorCliJson(dir, {
+        allowedPaths: ['./src'],
+        deniedPaths: ['./secrets'],
+        allowedCommands: ['npm test'],
+        deniedCommands: ['rm -rf /'],
+      });
+
+      const cliJson = JSON.parse(await readFile(join(dir, '.cursor', 'cli.json'), 'utf-8'));
+      expect(cliJson.permissions).toEqual({
+        allowedDirectories: ['./src'],
+        deniedDirectories: ['./secrets'],
+        allowedCommands: ['npm test'],
+        deniedCommands: ['rm -rf /'],
+      });
+    });
+
+    it('omits empty permission arrays', async () => {
+      await generateCursorCliJson(dir, {
+        allowedPaths: ['./src'],
+      });
+
+      const cliJson = JSON.parse(await readFile(join(dir, '.cursor', 'cli.json'), 'utf-8'));
+      expect(cliJson.permissions.allowedDirectories).toEqual(['./src']);
+      expect(cliJson.permissions.deniedDirectories).toBeUndefined();
+      expect(cliJson.permissions.allowedCommands).toBeUndefined();
+      expect(cliJson.permissions.deniedCommands).toBeUndefined();
+    });
+
+    it('generates empty object when no arrays provided', async () => {
+      await generateCursorCliJson(dir, {});
+
+      const cliJson = JSON.parse(await readFile(join(dir, '.cursor', 'cli.json'), 'utf-8'));
+      expect(cliJson.permissions).toBeUndefined();
+    });
+  });
+
+  // ── loadConfig permissions ─────────────────────────
+
+  describe('loadConfig permissions', () => {
+    it('parses permissions from golem.yaml', async () => {
+      await writeFile(join(dir, 'golem.yaml'), [
+        'name: secure-bot',
+        'engine: cursor',
+        'permissions:',
+        '  allowedPaths:',
+        '    - ./src',
+        '  deniedCommands:',
+        '    - rm -rf /',
+      ].join('\n'), 'utf-8');
+
+      const config = await loadConfig(dir);
+      expect(config.permissions).toEqual({
+        allowedPaths: ['./src'],
+        deniedCommands: ['rm -rf /'],
+      });
+    });
+
+    it('permissions is undefined when not in config', async () => {
+      await writeFile(join(dir, 'golem.yaml'), 'name: bot\nengine: cursor\n', 'utf-8');
+      const config = await loadConfig(dir);
+      expect(config.permissions).toBeUndefined();
     });
   });
 });

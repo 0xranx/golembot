@@ -143,13 +143,17 @@ export class CursorEngine implements AgentEngine {
     const args = [
       '-p', prompt,
       '--force',
-      '--trust',
       '--sandbox', 'disabled',
       '--output-format', 'stream-json',
       '--stream-partial-output',
       '--approve-mcps',
       '--workspace', opts.workspace,
     ];
+    // When granular permissions are configured via .cursor/cli.json, skip --trust
+    // so that the CLI enforces the permission rules. Otherwise, auto-approve all.
+    if (!opts.hasPermissionsConfig) {
+      args.push('--trust');
+    }
     if (opts.sessionId) args.push('--resume', opts.sessionId);
     if (opts.model) args.push('--model', opts.model);
     if (opts.apiKey) args.push('--api-key', opts.apiKey);
