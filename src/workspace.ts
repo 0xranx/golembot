@@ -1,6 +1,8 @@
 import { readFile, readdir, writeFile, mkdir, stat } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import yaml from 'js-yaml';
+import type { ScheduledTaskDef, TaskTarget } from './scheduler.js';
+export type { ScheduledTaskDef, TaskTarget } from './scheduler.js';
 
 export interface FeishuChannelConfig {
   appId: string;
@@ -71,6 +73,17 @@ export interface GroupChatConfig {
   maxTurns?: number;
 }
 
+export interface StreamingConfig {
+  /**
+   * How the gateway delivers AI replies to IM channels:
+   * - `buffered` (default): accumulate all text, send as a single message after completion
+   * - `streaming`: send text incrementally at logical boundaries (paragraph breaks, tool calls)
+   */
+  mode?: 'buffered' | 'streaming';
+  /** When true, send a brief hint message when the agent invokes a tool (e.g. "🔧 read_file..."). Default: false. */
+  showToolCalls?: boolean;
+}
+
 export interface GolemConfig {
   name: string;
   engine: string;
@@ -90,6 +103,9 @@ export interface GolemConfig {
   systemPrompt?: string;
   /** Group chat behaviour. Applies to all group messages across all channels. */
   groupChat?: GroupChatConfig;
+  /** Control how AI replies are delivered to IM channels. */
+  streaming?: StreamingConfig;
+  tasks?: ScheduledTaskDef[];
 }
 
 export interface SkillInfo {
@@ -152,8 +168,52 @@ export async function loadConfig(dir: string): Promise<GolemConfig> {
   if (doc.groupChat && typeof doc.groupChat === 'object') {
     config.groupChat = doc.groupChat as GroupChatConfig;
   }
+  if (doc.streaming && typeof doc.streaming === 'object') {
+    config.streaming = doc.streaming as StreamingConfig;
+  }
+  if (Array.isArray(doc.tasks)) {
+    config.tasks = (doc.tasks as Record<string, unknown>[]).map((t, i) => ({
+      id: typeof t.id === 'string' ? t.id : '',
+      name: typeof t.name === 'string' ? t.name : `task-${i}`,
+      schedule: typeof t.schedule === 'string' ? t.schedule : '',
+      prompt: typeof t.prompt === 'string' ? t.prompt : '',
+      target: t.target && typeof t.target === 'object' ? resolveEnvPlaceholders(t.target as TaskTarget) : undefined,
+      enabled: typeof t.enabled === 'boolean' ? t.enabled : true,
+      timeout: typeof t.timeout === 'number' ? t.timeout : undefined,
+    }));
+  }
 
   return config;
+}
+
+/**
+ * Patch specific fields in golem.yaml without losing unknown fields or expanding
+ * `${ENV_VAR}` placeholders. This is the safe way to update config at runtime.
+ */
+export async function patchConfig(dir: string, patch: Partial<Pick<GolemConfig, 'engine' | 'model'>>): Promise<void> {
+  const configPath = join(dir, 'golem.yaml');
+  let raw = await readFile(configPath, 'utf-8');
+
+  for (const [key, value] of Object.entries(patch)) {
+    // Match top-level YAML key (not indented) — e.g. "engine: opencode"
+    const re = new RegExp(`^${key}:.*$`, 'm');
+    if (value !== undefined) {
+      if (re.test(raw)) {
+        raw = raw.replace(re, `${key}: ${value}`);
+      } else {
+        // Key doesn't exist yet — insert after the first line (name: ...)
+        const idx = raw.indexOf('\n');
+        raw = idx >= 0
+          ? raw.slice(0, idx + 1) + `${key}: ${value}\n` + raw.slice(idx + 1)
+          : raw + `\n${key}: ${value}\n`;
+      }
+    } else {
+      // undefined = remove the key entirely
+      raw = raw.replace(new RegExp(`^${key}:.*\n?`, 'm'), '');
+    }
+  }
+
+  await writeFile(configPath, raw, 'utf-8');
 }
 
 export async function writeConfig(dir: string, config: GolemConfig): Promise<void> {
@@ -167,6 +227,8 @@ export async function writeConfig(dir: string, config: GolemConfig): Promise<voi
   if (config.channels) content.channels = config.channels;
   if (config.gateway) content.gateway = config.gateway;
   if (config.groupChat) content.groupChat = config.groupChat;
+  if (config.streaming) content.streaming = config.streaming;
+  if (config.tasks) content.tasks = config.tasks;
   await writeFile(configPath, yaml.dump(content, { lineWidth: -1 }), 'utf-8');
 }
 

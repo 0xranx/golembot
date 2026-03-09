@@ -550,4 +550,98 @@ describe('createAssistant', () => {
       }
     });
   });
+
+  // ── Image support ───────────────────────────────────
+
+  describe('image support', () => {
+    it('saves images to disk and appends file paths to prompt', async () => {
+      // Use a custom engine that captures the prompt
+      let capturedPrompt = '';
+      let capturedImagePaths: string[] | undefined;
+      mockedCreateEngine.mockReturnValue({
+        async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          capturedPrompt = prompt;
+          capturedImagePaths = opts.imagePaths;
+          yield { type: 'text', content: 'I see the image' };
+          yield { type: 'done', sessionId: 'mock-img-session' };
+        },
+      });
+
+      const assistant = createAssistant({ dir });
+      const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47]); // PNG magic bytes
+      const events: StreamEvent[] = [];
+      for await (const evt of assistant.chat('What is this?', {
+        images: [{ mimeType: 'image/png', data: pngHeader, fileName: 'screenshot.png' }],
+      })) {
+        events.push(evt);
+      }
+
+      expect(events.some(e => e.type === 'text' && e.content === 'I see the image')).toBe(true);
+      expect(capturedPrompt).toContain('User attached 1 image(s)');
+      expect(capturedPrompt).toContain('.golem/images/screenshot.png');
+      expect(capturedImagePaths).toBeDefined();
+      expect(capturedImagePaths!.length).toBe(1);
+      expect(capturedImagePaths![0]).toContain('screenshot.png');
+    });
+
+    it('generates filename from timestamp when fileName is not provided', async () => {
+      let capturedPrompt = '';
+      mockedCreateEngine.mockReturnValue({
+        async *invoke(prompt: string): AsyncIterable<StreamEvent> {
+          capturedPrompt = prompt;
+          yield { type: 'text', content: 'ok' };
+          yield { type: 'done', sessionId: 'x' };
+        },
+      });
+
+      const assistant = createAssistant({ dir });
+      const events: StreamEvent[] = [];
+      for await (const evt of assistant.chat('analyze', {
+        images: [{ mimeType: 'image/jpeg', data: Buffer.from([0xFF, 0xD8, 0xFF]) }],
+      })) {
+        events.push(evt);
+      }
+
+      expect(capturedPrompt).toContain('User attached 1 image(s)');
+      expect(capturedPrompt).toContain('.golem/images/img_');
+      expect(capturedPrompt).toContain('.jpg');
+    });
+
+    it('handles multiple images', async () => {
+      let capturedImagePaths: string[] | undefined;
+      mockedCreateEngine.mockReturnValue({
+        async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          capturedImagePaths = opts.imagePaths;
+          yield { type: 'text', content: 'two images' };
+          yield { type: 'done', sessionId: 'x' };
+        },
+      });
+
+      const assistant = createAssistant({ dir });
+      for await (const _evt of assistant.chat('compare these', {
+        images: [
+          { mimeType: 'image/png', data: Buffer.from([0x89, 0x50]) },
+          { mimeType: 'image/jpeg', data: Buffer.from([0xFF, 0xD8]) },
+        ],
+      })) { /* drain */ }
+
+      expect(capturedImagePaths?.length).toBe(2);
+    });
+
+    it('no images field → no imagePaths in invoke opts', async () => {
+      let capturedImagePaths: string[] | undefined;
+      mockedCreateEngine.mockReturnValue({
+        async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          capturedImagePaths = opts.imagePaths;
+          yield { type: 'text', content: 'text only' };
+          yield { type: 'done', sessionId: 'x' };
+        },
+      });
+
+      const assistant = createAssistant({ dir });
+      for await (const _evt of assistant.chat('just text')) { /* drain */ }
+
+      expect(capturedImagePaths).toBeUndefined();
+    });
+  });
 });

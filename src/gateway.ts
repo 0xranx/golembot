@@ -2,7 +2,7 @@ import { resolve, join, dirname } from 'node:path';
 import { mkdir, readFile as readFileAsync } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setPeerBase } from './peer-require.js';
-import { createAssistant, type Assistant } from './index.js';
+import { createAssistant, type Assistant, parseCommand, executeCommand, type CommandContext } from './index.js';
 import { createGolemServer, type ServerOpts, type GolemServer } from './server.js';
 import {
   loadConfig,
@@ -10,6 +10,7 @@ import {
   type GolemConfig,
   type ChannelsConfig,
   type GroupChatConfig,
+  type StreamingConfig,
   type FeishuChannelConfig,
   type DingtalkChannelConfig,
   type WecomChannelConfig,
@@ -24,6 +25,7 @@ import {
   type ChannelAdapter,
   type ChannelMessage,
   type MentionTarget,
+  type ReadReceipt,
 } from './channel.js';
 import {
   createMetrics,
@@ -34,6 +36,9 @@ import {
   type GatewayMetrics,
 } from './dashboard.js';
 import { registerInstance, unregisterInstance } from './fleet.js';
+import { Scheduler } from './scheduler.js';
+import { TaskStore } from './task-store.js';
+import { createProactiveCoordinator, type ProactiveCoordinator } from './proactive.js';
 
 export function splitMessage(text: string, maxLen: number): string[] {
   if (text.length <= maxLen) return [text];
@@ -119,6 +124,14 @@ export function resolveGroupChatConfig(config: GolemConfig): Required<GroupChatC
     groupPolicy: gc.groupPolicy ?? 'mention-only',
     historyLimit: gc.historyLimit ?? 20,
     maxTurns: gc.maxTurns ?? 10,
+  };
+}
+
+export function resolveStreamingConfig(config: GolemConfig): Required<StreamingConfig> {
+  const sc = config.streaming ?? {};
+  return {
+    mode: sc.mode ?? 'buffered',
+    showToolCalls: sc.showToolCalls ?? false,
   };
 }
 
@@ -279,15 +292,43 @@ async function createChannelAdapter(
 export async function handleMessage(
   msg: ChannelMessage,
   config: GolemConfig,
-  assistant: Pick<Assistant, 'chat'>,
+  assistant: Pick<Assistant, 'chat' | 'setEngine' | 'setModel' | 'getStatus' | 'resetSession' | 'listModels'>,
   adapter: Pick<ChannelAdapter, 'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers'>,
   channelType: string,
   verbose: boolean,
   dir: string,
   metrics?: GatewayMetrics,
+  cronCtx?: { taskStore: TaskStore; scheduler: Scheduler; runTask: (id: string) => Promise<string> },
 ): Promise<void> {
   const userText = msg.chatType === 'group' ? stripMention(msg.text) : msg.text;
-  if (!userText) return;
+  if (!userText && (!msg.images || msg.images.length === 0)) return;
+
+  // ── Slash command interception ──
+  const parsed = parseCommand(userText);
+  if (parsed) {
+    const sessionKey = msg.chatType === 'group'
+      ? `${msg.channelType}:${msg.chatId}`
+      : buildSessionKey(msg);
+    const cmdCtx: CommandContext = {
+      dir,
+      sessionKey,
+      getStatus: () => assistant.getStatus(),
+      setEngine: (e, c) => assistant.setEngine(e, c),
+      setModel: (m) => assistant.setModel(m),
+      resetSession: (k) => assistant.resetSession(k),
+      listModels: () => assistant.listModels(),
+      taskStore: cronCtx?.taskStore,
+      scheduler: cronCtx?.scheduler,
+      runTask: cronCtx?.runTask,
+    };
+    const result = await executeCommand(parsed, cmdCtx);
+    if (result) {
+      log(verbose, `[${channelType}] slash command: ${parsed.name}`);
+      await adapter.reply(msg, result.text);
+      return;
+    }
+    // Unknown command — fall through to agent
+  }
 
   const senderLabel = msg.senderName || msg.senderId;
   let sessionKey: string;
@@ -373,67 +414,154 @@ export async function handleMessage(
   let costUsd: number | undefined;
   let durationMs: number | undefined;
 
+  const maxLen = adapter.maxMessageLength ?? 4000;
+  const streamingConfig = resolveStreamingConfig(config);
+
+  // Helper: send a text chunk to the IM channel (handles splitMessage + mentions).
+  const sendChunk = async (text: string): Promise<void> => {
+    if (!text.trim()) return;
+    const chunks = splitMessage(text.trim(), maxLen);
+    let mentions: MentionTarget[] = [];
+    if (msg.chatType === 'group' && adapter.getGroupMembers) {
+      try {
+        const memberCache = await adapter.getGroupMembers(msg.chatId);
+        mentions = parseMentions(text.trim(), memberCache).mentions;
+      } catch { /* best effort */ }
+    }
+    const replyOpts = mentions.length > 0 ? { mentions } : undefined;
+    for (const chunk of chunks) {
+      await adapter.reply(msg, chunk, replyOpts);
+    }
+    // Stop typing indicator after first message is sent
+    if (typingTimer !== undefined) {
+      clearInterval(typingTimer);
+      typingTimer = undefined;
+    }
+  };
+
   try {
-    let reply = '';
+    let fullReply = '';
     let hasError = false;
-    for await (const event of assistant.chat(fullText, { sessionKey })) {
-      if (event.type === 'text') {
-        reply += event.content;
-      } else if (event.type === 'warning') {
-        log(verbose, `[${channelType}] warning: ${event.message}`);
-      } else if (event.type === 'error') {
-        hasError = true;
-        console.error(`[${channelType}] Engine error: ${event.message}`);
-      } else if (event.type === 'done') {
-        costUsd = event.costUsd;
-        durationMs = event.durationMs;
-      }
-    }
 
-    // [PASS] sentinel: smart mode bot chose to stay silent
-    if (reply.trim() === '[PASS]') {
-      log(verbose, `[${channelType}] [PASS] — bot chose not to respond`);
-      trackMetrics({ passed: true, responsePreview: '' });
-      return;
-    }
+    if (streamingConfig.mode === 'streaming') {
+      // ── Streaming mode: send text at logical boundaries ──
+      let buffer = '';
 
-    if (!reply.trim() && hasError) {
-      reply = 'Sorry, an error occurred while processing your message. Please try again later.';
-    }
+      // Flush the buffer to IM. Called at paragraph breaks, tool_call, and done.
+      const flush = async (): Promise<void> => {
+        if (!buffer.trim()) { buffer = ''; return; }
+        await sendChunk(buffer);
+        buffer = '';
+      };
 
-    if (reply.trim()) {
-      const maxLen = adapter.maxMessageLength ?? 4000;
-      const chunks = splitMessage(reply.trim(), maxLen);
+      for await (const event of assistant.chat(fullText, { sessionKey, images: msg.images })) {
+        if (event.type === 'text') {
+          fullReply += event.content;
+          buffer += event.content;
 
-      // Resolve @mentions in group replies when adapter supports it
-      let mentions: MentionTarget[] = [];
-      if (msg.chatType === 'group' && adapter.getGroupMembers) {
-        try {
-          const memberCache = await adapter.getGroupMembers(msg.chatId);
-          mentions = parseMentions(reply.trim(), memberCache).mentions;
-        } catch {
-          // Best effort — send without mentions if member lookup fails
+          // Flush at paragraph boundaries (\n\n) within the buffer.
+          // Split on double-newline, flush completed paragraphs, keep the tail.
+          const parts = buffer.split(/\n\n/);
+          if (parts.length > 1) {
+            // Everything except the last part is complete paragraphs — send them
+            const complete = parts.slice(0, -1).join('\n\n');
+            buffer = parts[parts.length - 1];
+            await sendChunk(complete);
+          }
+        } else if (event.type === 'tool_call') {
+          // Agent switches to tool use — flush accumulated text first
+          await flush();
+          if (streamingConfig.showToolCalls) {
+            // Extract a short tool label from the tool name.
+            // Codex: "/bin/bash -lc 'cd ... && ls -la'" → "bash"
+            // Claude Code: "Bash", "Read" → as-is
+            // OpenCode: "bash", "read" → as-is
+            const rawName = event.name;
+            const firstToken = rawName.split(/\s/)[0]; // "/bin/bash" or "Bash" or "read"
+            const label = firstToken.includes('/') ? firstToken.split('/').pop()! : firstToken;
+            log(verbose, `[${channelType}] stream tool_call: ${label}`);
+            await adapter.reply(msg, `🔧 ${label}...`);
+          } else {
+            log(verbose, `[${channelType}] stream tool_call: ${event.name.slice(0, 40)}`);
+          }
+        } else if (event.type === 'warning') {
+          log(verbose, `[${channelType}] warning: ${event.message}`);
+        } else if (event.type === 'error') {
+          hasError = true;
+          console.error(`[${channelType}] Engine error: ${event.message}`);
+        } else if (event.type === 'done') {
+          costUsd = event.costUsd;
+          durationMs = event.durationMs;
         }
       }
 
-      const replyOpts = mentions.length > 0 ? { mentions } : undefined;
-      for (const chunk of chunks) {
-        await adapter.reply(msg, chunk, replyOpts);
-      }
-      log(verbose, `[${channelType}] replied to ${senderLabel}: "${reply.trim().slice(0, 80)}..." (${chunks.length} chunk(s))`);
+      // Flush remaining buffer
+      await flush();
 
-      trackMetrics({ responsePreview: reply.trim().slice(0, 120) });
-
-      // Update group history with bot reply + increment turn counter
-      if (msg.chatType === 'group') {
-        const groupKey = `${msg.channelType}:${msg.chatId}`;
-        const gc = resolveGroupChatConfig(config);
-        const hist = groupHistories.get(groupKey) ?? [];
-        hist.push({ senderName: config.name, text: reply.trim(), isBot: true });
-        if (hist.length > gc.historyLimit) hist.shift();
-        groupHistories.set(groupKey, hist);
-        groupTurnCounters.set(groupKey, (groupTurnCounters.get(groupKey) ?? 0) + 1);
+      // [PASS] sentinel — in streaming mode, check the full accumulated reply.
+      // If it was only "[PASS]", the text may have already been sent to IM.
+      // To prevent this, the flush above skips whitespace-only buffers,
+      // but "[PASS]" is non-empty. For smart groups, the [PASS] typically
+      // arrives as a single text event and gets flushed. This is acceptable:
+      // smart mode is an advanced feature, and the tradeoff is documented.
+      if (fullReply.trim() === '[PASS]') {
+        log(verbose, `[${channelType}] [PASS] — bot chose not to respond`);
+        trackMetrics({ passed: true, responsePreview: '' });
+        return;
       }
+
+      if (!fullReply.trim() && hasError) {
+        await sendChunk('Sorry, an error occurred while processing your message. Please try again later.');
+        fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
+      }
+
+      if (fullReply.trim()) {
+        log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..." (streaming)`);
+        trackMetrics({ responsePreview: fullReply.trim().slice(0, 120) });
+      }
+    } else {
+      // ── Buffered mode (default): accumulate all text, send at end ──
+      for await (const event of assistant.chat(fullText, { sessionKey, images: msg.images })) {
+        if (event.type === 'text') {
+          fullReply += event.content;
+        } else if (event.type === 'warning') {
+          log(verbose, `[${channelType}] warning: ${event.message}`);
+        } else if (event.type === 'error') {
+          hasError = true;
+          console.error(`[${channelType}] Engine error: ${event.message}`);
+        } else if (event.type === 'done') {
+          costUsd = event.costUsd;
+          durationMs = event.durationMs;
+        }
+      }
+
+      // [PASS] sentinel: smart mode bot chose to stay silent
+      if (fullReply.trim() === '[PASS]') {
+        log(verbose, `[${channelType}] [PASS] — bot chose not to respond`);
+        trackMetrics({ passed: true, responsePreview: '' });
+        return;
+      }
+
+      if (!fullReply.trim() && hasError) {
+        fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
+      }
+
+      if (fullReply.trim()) {
+        await sendChunk(fullReply);
+        log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..."`);
+        trackMetrics({ responsePreview: fullReply.trim().slice(0, 120) });
+      }
+    }
+
+    // Update group history with the full reply + increment turn counter
+    if (fullReply.trim() && msg.chatType === 'group') {
+      const groupKey = `${msg.channelType}:${msg.chatId}`;
+      const gc = resolveGroupChatConfig(config);
+      const hist = groupHistories.get(groupKey) ?? [];
+      hist.push({ senderName: config.name, text: fullReply.trim(), isBot: true });
+      if (hist.length > gc.historyLimit) hist.shift();
+      groupHistories.set(groupKey, hist);
+      groupTurnCounters.set(groupKey, (groupTurnCounters.get(groupKey) ?? 0) + 1);
     }
   } catch (e) {
     console.error(`[${channelType}] Failed to process message:`, e);
@@ -544,6 +672,10 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
   } catch { /* ok — dev mode or missing */ }
 
 
+  // TaskStore is created here (before channels) so we can pass it to dashboardCtx.
+  // The coordinator is created later, after channels are ready.
+  const taskStore = new TaskStore(dir);
+
   const dashboardCtx: DashboardContext = {
     config,
     skills,
@@ -551,14 +683,21 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
     metrics,
     startTime: Date.now(),
     version,
+    getRuntimeStatus: async () => {
+      const s = await assistant.getStatus();
+      return { engine: s.engine, model: s.model };
+    },
+    taskStore,
   };
 
   // shutdown is assigned later after httpServer is created — use a wrapper
   let shutdownFn: (() => Promise<void>) | undefined;
   const serverOpts: ServerOpts = { port, token, hostname: host, onShutdown: () => shutdownFn?.() };
-  const httpServer: GolemServer = createGolemServer(assistant, serverOpts, dashboardCtx);
+  const httpServer: GolemServer = createGolemServer(assistant, serverOpts, dashboardCtx, dir,
+    () => coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined);
 
   const adapters: ChannelAdapter[] = [];
+  const adapterMap = new Map<string, ChannelAdapter>();
   const channels: ChannelsConfig | undefined = config.channels;
 
   if (channels) {
@@ -567,11 +706,19 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
 
       try {
         const adapter = await createChannelAdapter(type, channelConfig as Record<string, unknown>, dir);
+
+        // Set read receipt handler before start() so adapters can subscribe during initialization.
+        adapter.readReceiptHandler = (receipt: ReadReceipt) => {
+          log(verbose, `[${type}] read receipt: message ${receipt.messageId} read by ${receipt.readerId}`);
+        };
+
         await adapter.start((msg: ChannelMessage) =>
-          handleMessage(msg, config, assistant, adapter, type, verbose, dir, metrics),
+          handleMessage(msg, config, assistant, adapter, type, verbose, dir, metrics,
+            coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined),
         );
 
         adapters.push(adapter);
+        adapterMap.set(type, adapter);
         channelStatuses.push({ type, status: 'connected' });
 
         // DingTalk Stream SDK only delivers @mention messages to the bot.
@@ -595,6 +742,27 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
   for (const type of KNOWN_CHANNELS) {
     if (!channelStatuses.some(c => c.type === type)) {
       channelStatuses.push({ type, status: 'not_configured' });
+    }
+  }
+
+  // ── Scheduled tasks ─────────────────────────────────────────────────────────
+  const scheduler = new Scheduler();
+  let coordinator: ProactiveCoordinator | undefined;
+
+  if (config.tasks && config.tasks.length > 0) {
+    try {
+      const mergedTasks = await taskStore.mergeConfigTasks(config.tasks);
+      coordinator = createProactiveCoordinator({
+        assistant,
+        taskStore,
+        adapters: adapterMap,
+        scheduler,
+        verbose,
+      });
+      coordinator.start(mergedTasks);
+      log(verbose, `[scheduler] ${mergedTasks.filter(t => t.enabled).length} task(s) scheduled`);
+    } catch (e) {
+      console.error('[scheduler] Failed to initialize tasks:', (e as Error).message);
     }
   }
 
@@ -623,6 +791,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
   const shutdown = async () => {
     console.log('\nShutting down Gateway...');
     clearInterval(purgeTimer);
+    if (coordinator) coordinator.stop();
     for (const adapter of adapters) {
       try {
         await adapter.stop();

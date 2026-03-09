@@ -185,6 +185,49 @@ channels:
     token: ${TOKEN}
 ```
 
+## 图片支持（多模态）
+
+GolemBot 支持全部 6 个内置通道的**图片消息**。当用户发送图片（照片、截图、文件附件），Adapter 会下载图片并通过完整管线处理：
+
+```
+用户发送图片 → Adapter 下载为 Buffer → gateway 传递给 assistant.chat()
+→ 图片保存到 .golem/images/ → 文件路径追加到 prompt → Agent 读取文件
+→ 回复后自动清理
+```
+
+| 通道 | 图片来源 | 文本/标题 |
+|------|---------|----------|
+| 飞书 | `image` 消息 + `post`（富文本）中的内联图片 | 提取富文本中的文本内容 |
+| Slack | 图片类型的文件附件 | 保留消息文本 |
+| Telegram | `message.photo`（选取最大尺寸） | 使用 `message.caption` 作为文本 |
+| Discord | 图片类型的 `message.attachments` | 保留消息文本 |
+| 钉钉 | `picture` 消息 + `richText` 中的图片 | 提取富文本内容 |
+| 企业微信 | 通过 media API 下载的 `image` 消息 | 文本设为 `(image)` |
+
+**工作原理：** 图片保存为 `.golem/images/` 下的临时文件，通过绝对路径引用注入 prompt。这种方式兼容所有引擎（Cursor、Claude Code、OpenCode、Codex），因为每个编码 CLI 都能读取本地文件。Agent 回复后文件自动清理。
+
+**HTTP API：** `POST /chat` 端点同样支持 base64 编码的图片 —— 详见 [HTTP API](/zh/api/http-api#post-chat)。
+
+## 主动消息（定时任务）
+
+除了响应入站消息，GolemBot 还支持按计划**主动推送消息**到 IM 通道。在 `golem.yaml` 中定义任务：
+
+```yaml
+tasks:
+  - name: daily-standup
+    schedule: "0 9 * * 1-5"
+    prompt: 按作者汇总昨天的 git commit。
+    target:
+      channel: feishu
+      chatId: "oc_xxx"
+```
+
+Agent 按计划运行，执行 prompt，并通过 `adapter.send()` 将结果推送到指定通道。可通过 `/cron` 命令在 CLI、HTTP API 或 IM 中管理任务。
+
+**Adapter 支持情况：** 飞书、Slack、Telegram、Discord、企业微信均支持 `send()`。钉钉暂不支持主动发送（仅支持 webhook 回复）。
+
+完整语法见[配置说明 > tasks](/zh/guide/configuration#tasks)。
+
 ## 启动 Gateway
 
 ```bash

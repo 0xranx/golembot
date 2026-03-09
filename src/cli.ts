@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAssistant } from './index.js';
+import type { CommandContext } from './commands.js';
 
 // Read version from package.json at runtime
 const __filename_cli = fileURLToPath(import.meta.url);
@@ -227,7 +228,9 @@ program
       }
     }
 
-    const SLASH_CMDS = ['/help', '/reset', '/quit', '/exit'];
+    const { parseCommand, executeCommand } = await import('./commands.js');
+
+    const SLASH_CMDS = ['/help', '/status', '/engine', '/model', '/skill', '/reset', '/quit', '/exit'];
     const completer = (line: string): [string[], string] => {
       const hits = SLASH_CMDS.filter(c => c.startsWith(line));
       return [hits.length ? hits : SLASH_CMDS, line];
@@ -242,6 +245,15 @@ program
 
     const spinner = new Spinner();
 
+    const cmdCtx: CommandContext = {
+      dir,
+      getStatus: () => assistant.getStatus(),
+      setEngine: (e, c) => assistant.setEngine(e, c),
+      setModel: (m) => assistant.setModel(m),
+      resetSession: (k) => assistant.resetSession(k),
+      listModels: () => assistant.listModels(),
+    };
+
     const doPrompt = () => {
       rl.question('> ', async (input) => {
         const trimmed = input.trim();
@@ -253,19 +265,14 @@ program
           process.exit(0);
         }
 
-        if (trimmed === '/help') {
-          console.log(`\n  Available commands:`);
-          console.log(`    /help    Show this help`);
-          console.log(`    /reset   Reset the conversation session`);
-          console.log(`    /quit    Exit the REPL`);
-          console.log(`    """      Start/end multi-line input\n`);
-          return doPrompt();
-        }
-
-        if (trimmed === '/reset') {
-          await assistant.resetSession();
-          console.log('Session reset.\n');
-          return doPrompt();
+        // Slash command handling via shared commands module
+        const parsed = parseCommand(trimmed);
+        if (parsed) {
+          const result = await executeCommand(parsed, cmdCtx);
+          if (result) {
+            console.log(`\n${result.text}\n`);
+            return doPrompt();
+          }
         }
 
         // Multi-line input mode
@@ -352,7 +359,7 @@ program
       port: Number(opts.port),
       token: opts.token,
       hostname: opts.host,
-    });
+    }, dir);
   });
 
 program

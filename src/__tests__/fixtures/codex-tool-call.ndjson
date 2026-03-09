@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"thread_abc123"}
+{"type":"item.completed","item":{"type":"agent_message","text":"Let me check the current directory."}}
+{"type":"item.completed","item":{"type":"command_execution","command":"/bin/bash -lc 'cd /Users/test/project && pwd'","output":"/Users/test/project\n"}}
+{"type":"item.completed","item":{"type":"agent_message","text":"当前目录是：`/Users/test/project`"}}
+{"type":"turn.completed"}

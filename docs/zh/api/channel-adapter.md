@@ -28,8 +28,39 @@ interface ChannelAdapter {
    *  返回 displayName → platformId 的 Map。
    *  当 AI 回复包含 @name 时由 Gateway 调用。 */
   getGroupMembers?(chatId: string): Promise<Map<string, string>>;
+  /** 可选：用户阅读 bot 消息时的回调。目前飞书适配器支持。 */
+  readReceiptHandler?: (receipt: ReadReceipt) => void;
+  /** 可选：主动发送消息到指定会话（无需入站消息上下文）。
+   *  被定时任务系统用于将结果推送到 IM 通道。 */
+  send?(chatId: string, text: string): Promise<void>;
+  /** 该 Adapter 是否支持主动 send()。未定义时默认为 send() 存在则为 true。 */
+  readonly canSend?: boolean;
 }
 ```
+
+## ReadReceipt 类型
+
+```typescript
+interface ReadReceipt {
+  channelType: string;   // 'feishu'
+  messageId: string;     // 被阅读的消息 ID
+  readerId: string;      // 阅读者用户 ID
+  chatId: string;        // 会话 ID
+  readTime: string;      // 时间戳（毫秒级 epoch）
+}
+```
+
+## ImageAttachment 类型
+
+```typescript
+interface ImageAttachment {
+  mimeType: string;    // 如 'image/png'、'image/jpeg'、'image/webp'
+  data: Buffer;        // 原始图片字节数据
+  fileName?: string;   // 原始文件名（如果有）
+}
+```
+
+用于 `ChannelMessage.images` 和 `assistant.chat()` 的 opts 参数。全部 6 个内置 Adapter 在用户发送图片消息时都会填充此字段。
 
 ## ChannelMessage 类型
 
@@ -41,6 +72,7 @@ interface ChannelMessage {
   chatId: string;          // 会话/群组 ID
   chatType: 'dm' | 'group';
   text: string;            // 消息文本
+  images?: ImageAttachment[];  // 图片附件（如果有）
   raw: unknown;            // 原始 SDK 事件对象
   /**
    * 由能通过平台原生方式检测到 @mention 的 Adapter 设置（如 Discord 的 <@userId> token）。

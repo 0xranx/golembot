@@ -158,10 +158,10 @@ The `golembot` package also re-exports:
 ```typescript
 export type { StreamEvent } from './engine.js';
 export type { GolemConfig, SkillInfo, ChannelsConfig, GatewayConfig,
-              FeishuChannelConfig, DingtalkChannelConfig,
+              StreamingConfig, FeishuChannelConfig, DingtalkChannelConfig,
               WecomChannelConfig } from './workspace.js';
 export { createGolemServer, startServer, type ServerOpts } from './server.js';
-export type { ChannelAdapter, ChannelMessage } from './channel.js';
+export type { ChannelAdapter, ChannelMessage, ReadReceipt } from './channel.js';
 export { buildSessionKey, stripMention } from './channel.js';
 export { startGateway } from './gateway.js';
 ```

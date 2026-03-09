@@ -457,4 +457,42 @@ describe('Golem HTTP Server', () => {
       });
     });
   });
+
+  // ── Slash commands via HTTP POST /chat ──────────────────────────────────
+  describe('slash commands via POST /chat', () => {
+    function startServerWithDir(token?: string) {
+      const assistant = createAssistant({ dir });
+      server = createGolemServer(assistant, { token }, undefined, dir);
+      return new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
+    }
+
+    it('/help returns JSON command result', async () => {
+      await startServerWithDir();
+      const res = await request(server, 'POST', '/chat', { message: '/help' });
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.type).toBe('command');
+      expect(body.text).toContain('/help');
+      expect(body.text).toContain('/cron');
+      expect(body.commands).toBeDefined();
+    });
+
+    it('/status returns engine info', async () => {
+      await startServerWithDir();
+      const res = await request(server, 'POST', '/chat', { message: '/status' });
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.type).toBe('command');
+      expect(body.text).toContain('Engine');
+    });
+
+    it('/cron returns gateway-only hint (standalone server has no task store)', async () => {
+      await startServerWithDir();
+      const res = await request(server, 'POST', '/chat', { message: '/cron list' });
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.type).toBe('command');
+      expect(body.text).toContain('gateway mode');
+    });
+  });
 });

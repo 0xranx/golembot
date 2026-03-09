@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions, ImageAttachment } from '../channel.js';
 import type { WecomChannelConfig } from '../workspace.js';
 import { importPeer } from '../peer-require.js';
 
@@ -127,7 +127,8 @@ export class WecomAdapter implements ChannelAdapter {
           const msgParsed = await xml2js.parseStringPromise(message, { explicitArray: false });
           const msgXml = msgParsed.xml;
 
-          if (msgXml.MsgType !== 'text') {
+          const msgType = msgXml.MsgType;
+          if (msgType !== 'text' && msgType !== 'image') {
             res.writeHead(200);
             res.end('ok');
             return;
@@ -150,13 +151,41 @@ export class WecomAdapter implements ChannelAdapter {
 
           const senderId = msgXml.FromUserName || '';
           const senderName = await this.resolveUserName(senderId);
+
+          let text = '';
+          const images: ImageAttachment[] = [];
+
+          if (msgType === 'text') {
+            text = msgXml.Content || '';
+          } else if (msgType === 'image') {
+            // WeCom image message: download via media API
+            const mediaId = msgXml.MediaId;
+            if (mediaId) {
+              try {
+                const token = await this.getAccessToken();
+                const mediaResp = await fetch(
+                  `https://qyapi.weixin.qq.com/cgi-bin/media/get?access_token=${token}&media_id=${mediaId}`,
+                );
+                if (mediaResp.ok) {
+                  const buf = Buffer.from(await mediaResp.arrayBuffer());
+                  const ct = mediaResp.headers.get('content-type') || 'image/jpeg';
+                  images.push({ mimeType: ct.split(';')[0], data: buf });
+                }
+              } catch (e) {
+                console.error('[wecom] Failed to download image:', (e as Error).message);
+              }
+            }
+            text = '(image)';
+          }
+
           const channelMsg: ChannelMessage = {
             channelType: 'wecom',
             senderId,
             senderName,
             chatId: senderId,
             chatType: 'dm',
-            text: msgXml.Content || '',
+            text,
+            images: images.length > 0 ? images : undefined,
             raw: msgXml,
           };
 

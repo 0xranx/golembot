@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
 import { resolveInvokeEnv } from '../engine.js';
+import type { AgentEngine, InvokeOpts, StreamEvent, ListModelsOpts } from '../engine.js';
 import { stripAnsi, isOnPath } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
@@ -244,5 +245,23 @@ export class CursorEngine implements AgentEngine {
         }
       }
     }
+  }
+
+  async listModels(_opts: ListModelsOpts): Promise<string[]> {
+    const bin = findAgentBin();
+    return new Promise<string[]>((resolve) => {
+      const child = spawn(bin, ['--list-models'], { timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const chunks: Buffer[] = [];
+      child.stdout.on('data', (c: Buffer) => chunks.push(c));
+      child.on('close', () => {
+        const raw = stripAnsi(Buffer.concat(chunks).toString('utf-8'));
+        const models = raw.split('\n')
+          .map(l => l.match(/^(\S+)\s+-\s+/))
+          .filter((m): m is RegExpMatchArray => !!m)
+          .map(m => m[1]);
+        resolve(models);
+      });
+      child.on('error', () => resolve([]));
+    });
   }
 }

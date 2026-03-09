@@ -51,6 +51,7 @@ describe('ClawHubRegistry', () => {
 describe('ClawHubRegistry integration', () => {
   const registry = new ClawHubRegistry();
   const available = registry.isAvailable();
+  const hasToken = !!process.env.GITHUB_TOKEN;
 
   it.skipIf(!available)('search returns results', async () => {
     const results = await registry.search('markdown', 3);
@@ -73,7 +74,7 @@ describe('ClawHubRegistry integration', () => {
     ).rejects.toThrow();
   }, 30_000);
 
-  it.skipIf(!available)('install downloads skill with SKILL.md', async () => {
+  it.skipIf(!available || !hasToken)('install downloads skill with SKILL.md', async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), 'golem-reg-test-'));
     try {
       const destDir = join(tmpDir, 'my-skill');

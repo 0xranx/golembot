@@ -59,6 +59,11 @@ golembot run
 
 **REPL 命令：**
 - `/help` — 显示可用命令
+- `/status` — 显示当前引擎、模型和技能
+- `/engine [name]` — 查看或切换引擎
+- `/model [list|name]` — 查看、列出可用模型或切换模型
+- `/skill` — 列出已安装技能
+- `/cron` — 管理定时任务（列表、运行、启用、禁用、历史）
 - `/reset` — 清除当前会话
 - `/quit` 或 `/exit` — 退出
 

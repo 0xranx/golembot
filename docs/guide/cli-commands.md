@@ -35,8 +35,20 @@ golembot run [-d <dir>] [--api-key <key>]
 | Command | Description |
 |---------|-------------|
 | `/help` | Show available commands |
+| `/status` | Show current engine, model, and skills |
+| `/engine [name]` | Show or switch engine |
+| `/model [list\|name]` | Show, list available, or switch model |
+| `/skill` | List installed skills |
+| `/cron list` | List all scheduled tasks and their status |
+| `/cron run <id>` | Trigger a scheduled task immediately |
+| `/cron enable <id>` | Enable a scheduled task |
+| `/cron disable <id>` | Disable a scheduled task |
+| `/cron del <id>` | Delete a scheduled task |
+| `/cron history <id>` | Show recent execution history for a task |
 | `/reset` | Clear current session |
 | `/quit`, `/exit` | Exit the REPL |
+
+These slash commands also work in IM channels (Feishu, Telegram, Slack, etc.) and via the HTTP API (`POST /chat` with a slash command as the message returns a JSON response instead of an SSE stream).
 
 Supports multi-line input with `"""` delimiters. Displays duration and cost (when available) on completion.
 

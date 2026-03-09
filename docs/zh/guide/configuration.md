@@ -25,11 +25,29 @@ maxConcurrent: 20            # 最大并发 chat() 数（默认：10）
 maxQueuePerSession: 2        # 每个用户最大排队数（默认：3）
 sessionTtlDays: 14           # 闲置会话保留天数（默认：30）
 
+# 可选：IM 通道流式消息投递
+streaming:
+  mode: streaming            # buffered（默认）| streaming
+  showToolCalls: true        # 在 IM 中显示 🔧 工具提示（默认：false）
+
 # 可选：群聊行为配置（适用于所有通道）
 groupChat:
   groupPolicy: mention-only  # mention-only（默认）| smart | always
   historyLimit: 20           # 注入最近多少条消息作为上下文（默认：20）
   maxTurns: 10               # 每个群最多连续回复次数（默认：10，防死循环）
+
+# 可选：定时任务
+tasks:
+  - id: daily-standup
+    name: daily-standup
+    schedule: "0 9 * * 1-5"
+    prompt: |
+      汇总过去 24 小时的所有 git commit，
+      按作者分组，标注 breaking changes。
+    enabled: true
+    target:
+      channel: feishu
+      chatId: "oc_xxxxx"
 
 # 可选：IM 通道配置
 channels:
@@ -74,8 +92,33 @@ gateway:
 | `maxQueuePerSession` | `number` | `3` | 每个 sessionKey 最大排队请求数 |
 | `sessionTtlDays` | `number` | `30` | 闲置会话超过此天数后在下次启动时清理 |
 | `systemPrompt` | `string` | — | 角色/人设指令，写入 `AGENTS.md` 的 `## System Instructions` 节，引擎将其作为系统级上下文读取一次。**不会**拼接到每条用户消息前，多轮对话的 token 消耗保持平稳 |
+| `streaming` | `object` | — | IM 通道流式消息投递配置 |
+| `tasks` | `array` | — | 定时任务列表，详见 [`tasks`](#tasks) |
 | `channels` | `object` | — | IM 通道配置 |
 | `gateway` | `object` | — | Gateway 服务设置 |
+
+### `streaming`
+
+控制 Gateway 如何向 IM 通道投递消息。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `mode` | `string` | `buffered` | `buffered` — 等待完整回复后一次性发送。`streaming` — 在段落边界和工具调用事件处增量发送 |
+| `showToolCalls` | `boolean` | `false` | 为 `true` 时，Agent 每次调用工具前会向聊天发送 `🔧 toolName...` 提示 |
+
+**buffered** 模式（默认）下，bot 等 Agent 执行完毕后发送一条完整消息。**streaming** 模式下，bot 在语义边界处将文本刷新到 IM：
+
+- **段落分隔**（`\n\n`）— 已完成的段落立即发送
+- **工具调用** — 在发送工具提示前刷新已积累的文本
+- **完成** — 刷新剩余文本
+
+Streaming 模式为多步骤 Agent 长回复提供更快的视觉反馈。
+
+```yaml
+streaming:
+  mode: streaming
+  showToolCalls: true
+```
 
 ### `channels`
 
@@ -134,6 +177,44 @@ GolemBot 自动将对话记录到 `.golem/history/{sessionKey}.jsonl`，并在 s
 | `host` | `string` | `127.0.0.1` | 绑定地址 |
 | `token` | `string` | — | HTTP API 认证 Bearer Token |
 
+### `tasks`
+
+配置定时任务（Cron Jobs），Gateway 会按计划自动执行。
+
+```yaml
+tasks:
+  - id: daily-standup
+    name: daily-standup
+    schedule: "0 9 * * 1-5"
+    prompt: |
+      汇总过去 24 小时的所有 git commit，
+      按作者分组，标注 breaking changes。
+    enabled: true
+    target:
+      channel: feishu
+      chatId: "oc_xxxxx"
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | `string` | 任务唯一标识，用于 `/cron run <id>` 等命令引用 |
+| `name` | `string` | 任务显示名称 |
+| `schedule` | `string` | 执行计划，支持以下格式 |
+| `prompt` | `string` | 每次触发时发送给 Agent 的提示词 |
+| `enabled` | `boolean` | 是否启用（默认 `true`） |
+| `target` | `object` | 可选，指定输出目标通道和会话 |
+| `target.channel` | `string` | 目标 IM 通道（如 `feishu`、`dingtalk`、`wecom`） |
+| `target.chatId` | `string` | 目标群聊 ID |
+
+**支持的 `schedule` 格式：**
+
+| 格式 | 示例 | 说明 |
+|------|------|------|
+| 标准 5 字段 cron | `0 9 * * 1-5` | 工作日每天 9:00 |
+| `every <interval>` | `every 30m` | 每 30 分钟 |
+| `daily HH:MM` | `daily 09:00` | 每天 09:00 |
+| `weekly <day> HH:MM` | `weekly mon 09:00` | 每周一 09:00 |
+
 ## 环境变量占位符
 
 敏感字段支持 `${ENV_VAR}` 语法。加载时，GolemBot 会从 `process.env` 中解析这些值。
@@ -164,7 +245,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxx
 
 | 引擎 | 格式 | 示例 | 查看可用值 |
 |------|------|------|------------|
-| `cursor` | Cursor 模型名称 | `claude-sonnet-4-5` | Cursor → Settings → Models |
+| `cursor` | Cursor 模型名称 | `sonnet-4.6` | Cursor → Settings → Models |
 | `claude-code` | Anthropic model ID | `claude-sonnet-4-6` | `claude models` |
 | `opencode` | `provider/model` | `anthropic/claude-sonnet-4-5` | `opencode models` |
 | `codex` | OpenAI 模型名称 | `codex-mini-latest` | `codex models` |
@@ -188,6 +269,10 @@ interface GolemConfig {
   maxQueuePerSession?: number;  // 默认 3
   sessionTtlDays?: number;      // 默认 30
   systemPrompt?: string;
+  streaming?: {
+    mode?: 'buffered' | 'streaming';  // 默认：'buffered'
+    showToolCalls?: boolean;          // 默认：false
+  };
   groupChat?: {
     groupPolicy?: 'mention-only' | 'smart' | 'always';  // 默认：'mention-only'
     historyLimit?: number;   // 默认：20
@@ -206,6 +291,17 @@ interface GolemConfig {
     // 自定义 adapter：任意 key，需包含 _adapter 字段
     [key: string]: { _adapter: string; [k: string]: unknown } | undefined;
   };
+  tasks?: Array<{
+    id: string;
+    name: string;
+    schedule: string;
+    prompt: string;
+    enabled?: boolean;           // 默认 true
+    target?: {
+      channel: string;
+      chatId: string;
+    };
+  }>;
   gateway?: {
     port?: number;
     host?: string;

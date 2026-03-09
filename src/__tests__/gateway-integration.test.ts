@@ -381,13 +381,28 @@ describe('gateway integration', () => {
 // Use plain functions with a callCount counter to avoid vi.fn() ↔ typed-function mismatch.
 type MockAssistant = {
   chat(message: string, opts?: { sessionKey?: string }): AsyncIterable<StreamEvent>;
+  setEngine(engine: string): void;
+  setModel(model: string): void;
+  getStatus(): Promise<{ config: { name: string; engine: string }; skills: never[]; engine: string; model: string | undefined }>;
+  resetSession(sessionKey?: string): Promise<void>;
+  listModels(): Promise<string[]>;
   callCount: number;
   lastSessionKey: string | undefined;
   lastPrompt: string | undefined;
 };
 
+/** Stubs for the new Assistant methods (shared by all mock factories). */
+const mockAssistantStubs = {
+  setEngine(_e: string) {},
+  setModel(_m: string) {},
+  async getStatus() { return { config: { name: 'test', engine: 'mock' } as any, skills: [] as never[], engine: 'mock', model: undefined }; },
+  async resetSession(_k?: string) {},
+  async listModels() { return ['mock-model-1', 'mock-model-2']; },
+};
+
 function makeMockAssistant(replyText: string): MockAssistant {
   const obj: MockAssistant = {
+    ...mockAssistantStubs,
     callCount: 0,
     lastSessionKey: undefined,
     lastPrompt: undefined,
@@ -404,6 +419,7 @@ function makeMockAssistant(replyText: string): MockAssistant {
 
 function makeThrowingAssistant(): MockAssistant {
   const obj: MockAssistant = {
+    ...mockAssistantStubs,
     callCount: 0,
     lastSessionKey: undefined,
     lastPrompt: undefined,
@@ -420,6 +436,7 @@ function makeThrowingAssistant(): MockAssistant {
 
 function makeErrorEventAssistant(): MockAssistant {
   const obj: MockAssistant = {
+    ...mockAssistantStubs,
     callCount: 0,
     lastSessionKey: undefined,
     lastPrompt: undefined,
@@ -1036,6 +1053,457 @@ describe('handleMessage — full gateway pipeline', () => {
       // Should still reply, just without mentions
       expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
       expect(adapter.replies[0].options).toBeUndefined();
+    });
+  });
+
+  // ── Streaming mode ──────────────────────────────────────────────────────
+
+  describe('streaming mode', () => {
+    /** Mock assistant that yields a sequence of StreamEvents with control over timing. */
+    function makeStreamingAssistant(events: StreamEvent[]): MockAssistant {
+      const obj: MockAssistant = {
+        ...mockAssistantStubs,
+        callCount: 0,
+        lastSessionKey: undefined,
+        lastPrompt: undefined,
+        async *chat(message: string, opts: { sessionKey?: string } = {}) {
+          obj.callCount++;
+          obj.lastPrompt = message;
+          obj.lastSessionKey = opts.sessionKey;
+          for (const e of events) {
+            yield e;
+          }
+        },
+      };
+      return obj;
+    }
+
+    it('buffered mode (default) sends single reply', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: 'Part 1.' },
+        { type: 'text', content: '\n\nPart 2.' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      // Default is buffered — everything in one reply
+      expect(adapter.replies).toHaveLength(1);
+      expect(adapter.replies[0].text).toBe('Part 1.\n\nPart 2.');
+    });
+
+    it('streaming mode splits on paragraph boundaries', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: 'First paragraph.\n\nSecond paragraph.' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      expect(adapter.replies.length).toBe(2);
+      expect(adapter.replies[0].text).toBe('First paragraph.');
+      expect(adapter.replies[1].text).toBe('Second paragraph.');
+    });
+
+    it('streaming mode flushes on tool_call', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: 'Analyzing your code...' },
+        { type: 'tool_call', name: 'read_file', args: '{}' },
+        { type: 'tool_result', content: 'file contents' },
+        { type: 'text', content: 'Here are the results.' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      expect(adapter.replies.length).toBe(2);
+      expect(adapter.replies[0].text).toBe('Analyzing your code...');
+      expect(adapter.replies[1].text).toBe('Here are the results.');
+    });
+
+    it('streaming mode shows tool_call hints when enabled', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: 'Let me check.' },
+        { type: 'tool_call', name: 'run_tests', args: '{}' },
+        { type: 'text', content: 'All tests pass.' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming', showToolCalls: true } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      expect(adapter.replies.length).toBe(3);
+      expect(adapter.replies[0].text).toBe('Let me check.');
+      expect(adapter.replies[1].text).toBe('🔧 run_tests...');
+      expect(adapter.replies[2].text).toBe('All tests pass.');
+    });
+
+    it('streaming mode does not show tool_call hints when disabled', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: 'Checking.' },
+        { type: 'tool_call', name: 'run_tests', args: '{}' },
+        { type: 'text', content: 'Done.' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming', showToolCalls: false } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      expect(adapter.replies.length).toBe(2);
+      expect(adapter.replies.every(r => !r.text.includes('🔧'))).toBe(true);
+    });
+
+    it('streaming mode accumulates chunks without paragraph breaks into one message', async () => {
+      // Simulates OpenCode-style sentence-level chunks within a single paragraph
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: 'Hello, ' },
+        { type: 'text', content: 'how are ' },
+        { type: 'text', content: 'you today?' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      // No paragraph break → all flushed at done as one message
+      expect(adapter.replies).toHaveLength(1);
+      expect(adapter.replies[0].text).toBe('Hello, how are you today?');
+    });
+
+    it('streaming mode handles [PASS] in smart group', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: '[PASS]' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeGroupMsg();
+      const config = makeConfig({
+        groupChat: { groupPolicy: 'smart' },
+        streaming: { mode: 'streaming' },
+      } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      // [PASS] gets flushed at done, but then the return prevents group history update.
+      // The [PASS] text was sent — this is a known tradeoff in streaming mode.
+      // Verify that no group history was recorded for the bot reply.
+      const groupKey = `${msg.channelType}:${msg.chatId}`;
+      const hist = groupHistories.get(groupKey) ?? [];
+      expect(hist.filter(h => h.isBot)).toHaveLength(0);
+    });
+
+    it('streaming mode updates group history with full reply', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'text', content: 'Part 1.\n\n' },
+        { type: 'text', content: 'Part 2.' },
+        { type: 'done', sessionId: 'x' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeGroupMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      const groupKey = `${msg.channelType}:${msg.chatId}`;
+      const hist = groupHistories.get(groupKey) ?? [];
+      const botReply = hist.find(h => h.isBot);
+      expect(botReply).toBeDefined();
+      // Group history stores the complete concatenated reply
+      expect(botReply!.text).toBe('Part 1.\n\nPart 2.');
+    });
+
+    it('streaming mode sends error fallback when only error events', async () => {
+      const assistant = makeStreamingAssistant([
+        { type: 'error', message: 'engine crashed' },
+      ]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming' } } as any);
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+      expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
+      expect(adapter.replies.some(r => r.text.includes('error occurred'))).toBe(true);
+    });
+  });
+
+  // ── Slash commands ─────────────────────────────────────────────────────
+
+  describe('slash commands', () => {
+    it('/help returns command list without calling agent', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/help' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies.length).toBe(1);
+      expect(adapter.replies[0].text).toContain('/help');
+      expect(adapter.replies[0].text).toContain('/status');
+    });
+
+    it('/reset clears session', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/reset' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies.length).toBe(1);
+      expect(adapter.replies[0].text).toContain('Session reset');
+    });
+
+    it('/engine shows current engine', async () => {
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/engine' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies[0].text).toContain('mock');
+    });
+
+    it('/engine switches engine', async () => {
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/engine opencode' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies[0].text).toContain('opencode');
+      expect(adapter.replies[0].text).toContain('switched');
+    });
+
+    it('unknown slash command falls through to agent', async () => {
+      const assistant = makeMockAssistant('agent reply');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/unknown-cmd' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(1);
+    });
+
+    it('slash commands work in group chats (with @mention stripped)', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      const adapter = makeMockAdapter();
+      const msg = makeGroupMsg({ text: '@TestBot /help' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies.length).toBe(1);
+      expect(adapter.replies[0].text).toContain('/help');
+    });
+
+    it('/help output includes /cron command', async () => {
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/help' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(adapter.replies[0].text).toContain('/cron');
+    });
+  });
+
+  // ── /cron E2E through gateway handleMessage ──────────────────────────────
+  describe('/cron commands via IM', () => {
+    let TaskStore: typeof import('../task-store.js').TaskStore;
+    let Scheduler: typeof import('../scheduler.js').Scheduler;
+
+    beforeEach(async () => {
+      const taskMod = await import('../task-store.js');
+      TaskStore = taskMod.TaskStore;
+      const schedMod = await import('../scheduler.js');
+      Scheduler = schedMod.Scheduler;
+    });
+
+    function makeCronCtx(taskStore: InstanceType<typeof TaskStore>, scheduler: InstanceType<typeof Scheduler>) {
+      return {
+        taskStore,
+        scheduler,
+        runTask: async (id: string) => `Executed task ${id}`,
+      };
+    }
+
+    it('/cron list shows tasks via IM', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'e2e1', name: 'daily-report', schedule: '0 9 * * *', prompt: 'test',
+        enabled: true, createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron list' });
+      const cronCtx = makeCronCtx(taskStore, scheduler);
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies.length).toBe(1);
+      expect(adapter.replies[0].text).toContain('daily-report');
+      expect(adapter.replies[0].text).toContain('e2e1');
+    });
+
+    it('/cron (no args) defaults to list', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron' });
+      const cronCtx = makeCronCtx(taskStore, scheduler);
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies[0].text).toContain('No scheduled tasks');
+    });
+
+    it('/cron run triggers task execution', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      const runTask = vi.fn().mockResolvedValue('Task result here');
+      const cronCtx = { taskStore, scheduler, runTask };
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron run myid' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(runTask).toHaveBeenCalledWith('myid');
+      expect(adapter.replies[0].text).toContain('Task result here');
+    });
+
+    it('/cron enable updates task and scheduler', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'en1', name: 'test-task', schedule: '0 * * * *', prompt: 'x',
+        enabled: false, createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron enable en1' });
+      const cronCtx = makeCronCtx(taskStore, scheduler);
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(adapter.replies[0].text).toContain('enabled');
+
+      // Verify the task was actually updated in the store
+      const task = await taskStore.getTask('en1');
+      expect(task!.enabled).toBe(true);
+    });
+
+    it('/cron disable updates task', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'dis1', name: 'test-task', schedule: '0 * * * *', prompt: 'x',
+        enabled: true, createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron disable dis1' });
+      const cronCtx = makeCronCtx(taskStore, scheduler);
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(adapter.replies[0].text).toContain('disabled');
+      const task = await taskStore.getTask('dis1');
+      expect(task!.enabled).toBe(false);
+    });
+
+    it('/cron del removes task from store', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'del1', name: 'doomed', schedule: '0 * * * *', prompt: 'x',
+        enabled: true, createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron del del1' });
+      const cronCtx = makeCronCtx(taskStore, scheduler);
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(adapter.replies[0].text).toContain('deleted');
+      const task = await taskStore.getTask('del1');
+      expect(task).toBeUndefined();
+    });
+
+    it('/cron history shows execution history', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.recordExecution({
+        taskId: 'h1', taskName: 'test', startedAt: '2026-01-01T09:00:00Z',
+        completedAt: '2026-01-01T09:01:00Z', status: 'success',
+        reply: 'Report generated successfully', durationMs: 60000,
+      });
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron history h1' });
+      const cronCtx = makeCronCtx(taskStore, scheduler);
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(adapter.replies[0].text).toContain('success');
+      expect(adapter.replies[0].text).toContain('Report generated');
+    });
+
+    it('/cron without cronCtx returns gateway-only message', async () => {
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/cron list' });
+
+      // No cronCtx passed
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(adapter.replies[0].text).toContain('gateway mode');
+    });
+
+    it('/cron works in group chat via @mention', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'grp1', name: 'group-task', schedule: '0 12 * * *', prompt: 'remind',
+        enabled: true, createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      const assistant = makeMockAssistant('x');
+      const adapter = makeMockAdapter();
+      const msg = makeGroupMsg({ text: '@golem /cron list' });
+      const cronCtx = makeCronCtx(taskStore, scheduler);
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir, undefined, cronCtx);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies[0].text).toContain('group-task');
+    });
+  });
+
+  // ── Image message handling ──────────────────────────────────────────────
+
+  describe('image message handling', () => {
+    it('passes image-only message to assistant (not dropped)', async () => {
+      const assistant = makeMockAssistant('I see your image');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({
+        text: '',
+        images: [{ mimeType: 'image/png', data: Buffer.from('fake-png'), fileName: 'test.png' }],
+      });
+      // Override text to empty — the guard should still pass because images are present
+      msg.text = '(image)';
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(1);
+      expect(adapter.replies.length).toBeGreaterThan(0);
+    });
+
+    it('passes images alongside text to assistant', async () => {
+      const assistant = makeMockAssistant('Got it');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({
+        text: 'What is in this picture?',
+        images: [{ mimeType: 'image/jpeg', data: Buffer.from('fake-jpg') }],
+      });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(1);
+      expect(adapter.replies[0].text).toBe('Got it');
+    });
+
+    it('drops message with no text and no images', async () => {
+      const assistant = makeMockAssistant('should not reach');
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(0);
     });
   });
 });

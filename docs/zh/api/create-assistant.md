@@ -94,9 +94,10 @@ for await (const event of assistant.chat('你好', { sessionKey: 'user-1' })) {
 
 ```typescript
 export type { StreamEvent } from './engine.js';
-export type { GolemConfig, SkillInfo, ChannelsConfig, GatewayConfig } from './workspace.js';
+export type { GolemConfig, SkillInfo, ChannelsConfig, GatewayConfig,
+              StreamingConfig } from './workspace.js';
 export { createGolemServer, startServer, type ServerOpts } from './server.js';
-export type { ChannelAdapter, ChannelMessage } from './channel.js';
+export type { ChannelAdapter, ChannelMessage, ReadReceipt } from './channel.js';
 export { buildSessionKey, stripMention } from './channel.js';
 export { startGateway } from './gateway.js';
 ```

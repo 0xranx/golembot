@@ -1,4 +1,4 @@
-import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions, ImageAttachment } from '../channel.js';
 import type { TelegramChannelConfig } from '../workspace.js';
 import { markdownToHtml } from './telegram-format.js';
 import { importPeer } from '../peer-require.js';
@@ -35,9 +35,36 @@ export class TelegramAdapter implements ChannelAdapter {
 
     this.bot.on('message', async (ctx: any) => {
       const message = ctx.message;
-      // Only handle text messages (grammy's message:text filter skips group
-      // messages that contain mention entities, so we filter manually here)
-      if (!message?.text) return;
+
+      // Handle photo messages
+      const images: ImageAttachment[] = [];
+      if (message?.photo && message.photo.length > 0) {
+        // Telegram sends multiple sizes; pick the largest
+        const photo = message.photo[message.photo.length - 1];
+        try {
+          const file = await this.bot.api.getFile(photo.file_id);
+          if (file.file_path) {
+            const fileUrl = `https://api.telegram.org/file/bot${this.config.botToken}/${file.file_path}`;
+            const resp = await fetch(fileUrl);
+            if (resp.ok) {
+              const buf = Buffer.from(await resp.arrayBuffer());
+              const ext = file.file_path.split('.').pop() || 'jpg';
+              const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+              images.push({ mimeType, data: buf, fileName: `photo.${ext}` });
+            }
+          }
+        } catch (e) {
+          console.error('[telegram] Failed to download photo:', (e as Error).message);
+        }
+      }
+
+      const hasText = !!message?.text;
+      const hasCaption = !!message?.caption;
+      const hasImages = images.length > 0;
+      if (!hasText && !hasCaption && !hasImages) return;
+
+      const rawText = message.text || message.caption || (hasImages ? '(image)' : '');
+      const entities = message.entities || message.caption_entities || [];
       // Deduplicate re-delivered updates (message_id is unique per chat).
       const dedupKey = `${message.chat.id}:${message.message_id}`;
       if (this.seenMsgIds.has(dedupKey)) return;
@@ -48,13 +75,13 @@ export class TelegramAdapter implements ChannelAdapter {
       }
       const chatType: 'dm' | 'group' =
         message.chat.type === 'private' ? 'dm' : 'group';
-      let text: string = message.text;
+      let text: string = rawText;
 
       let mentioned: boolean | undefined;
       if (chatType === 'group') {
         // Detect whether this bot is @mentioned
         const botUsername = this.botUsername;
-        const isMentioned = (message.entities ?? []).some(
+        const isMentioned = entities.some(
           (e: any) =>
             e.type === 'mention' &&
             text.slice(e.offset, e.offset + e.length) === `@${botUsername}`,
@@ -64,7 +91,8 @@ export class TelegramAdapter implements ChannelAdapter {
           // Strip bot @mention from text
           text = text.replace(new RegExp(`@${botUsername}`, 'g'), '').trim();
           // Empty after stripping (bare @mention with no follow-up text)
-          if (!text) return;
+          if (!text && !hasImages) return;
+          if (!text) text = '(image)';
         }
         // For non-mentioned group messages, still forward to gateway so that
         // smart/always groupPolicy modes can observe and act on them.
@@ -77,6 +105,7 @@ export class TelegramAdapter implements ChannelAdapter {
         chatId: String(message.chat.id),
         chatType,
         text,
+        images: images.length > 0 ? images : undefined,
         mentioned,
         raw: message,
       });
@@ -90,6 +119,13 @@ export class TelegramAdapter implements ChannelAdapter {
   async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.bot) return;
     await this.bot.api.sendMessage(Number(msg.chatId), markdownToHtml(text), {
+      parse_mode: 'HTML',
+    });
+  }
+
+  async send(chatId: string, text: string): Promise<void> {
+    if (!this.bot) return;
+    await this.bot.api.sendMessage(Number(chatId), markdownToHtml(text), {
       parse_mode: 'HTML',
     });
   }

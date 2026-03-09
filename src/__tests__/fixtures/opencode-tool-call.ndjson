@@ -1,0 +1,6 @@
+{"type":"text","part":{"text":"我来帮你查看当前目录。\n"}}
+{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"path":"/Users/test/project/golem.yaml"},"output":"name: my-bot\nengine: opencode\n"}}}
+{"type":"text","part":{"text":"这个项目的配置文件 `golem.yaml` 内容如下：\n\n- 名称：my-bot\n- 引擎：opencode\n"}}
+{"type":"tool_use","part":{"tool":"bash","state":{"status":"completed","input":{"command":"pwd"},"output":"/Users/test/project\n"}}}
+{"type":"text","part":{"text":"当前工作目录是 `/Users/test/project`。"}}
+{"type":"step_finish","part":{"finishReason":"end_turn","cost":0.003}}

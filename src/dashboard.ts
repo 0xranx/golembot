@@ -1,5 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import type { GolemConfig, SkillInfo } from './workspace.js';
+import type { TaskRecord, TaskExecution, TaskStore } from './task-store.js';
 import { esc, formatUptime, FAVICON, DOCS_BASE, ENGINE_COLORS, BASE_CSS } from './ui-shared.js';
 
 // ── Public types ─────────────────────────────────────────────────────────────
@@ -37,6 +38,10 @@ export interface DashboardContext {
   metrics: GatewayMetrics;
   startTime: number;
   version: string;
+  /** Optional: live runtime status (engine/model may differ from config after /engine or /model). */
+  getRuntimeStatus?: () => Promise<{ engine: string; model: string | undefined }>;
+  /** Optional: task store for scheduled tasks panel. */
+  taskStore?: TaskStore;
 }
 
 export function createMetrics(): GatewayMetrics {
@@ -97,16 +102,43 @@ interface DashboardData {
   authEnabled: boolean;
   host: string;
   port: number;
+  tasks: TaskRecord[];
+  taskHistory: Map<string, TaskExecution[]>;
 }
 
-export function buildDashboardData(ctx: DashboardContext): DashboardData {
+export async function buildDashboardData(ctx: DashboardContext): Promise<DashboardData> {
   const avg = ctx.metrics.totalMessages > 0
     ? Math.round(ctx.metrics.totalDurationMs / ctx.metrics.totalMessages)
     : 0;
+
+  // Use live runtime status if available (reflects /engine and /model changes)
+  let engine = ctx.config.engine;
+  let model = ctx.config.model;
+  if (ctx.getRuntimeStatus) {
+    try {
+      const status = await ctx.getRuntimeStatus();
+      engine = status.engine;
+      model = status.model;
+    } catch { /* fallback to config */ }
+  }
+
+  // Load tasks + recent history for each task
+  let tasks: TaskRecord[] = [];
+  const taskHistory = new Map<string, TaskExecution[]>();
+  if (ctx.taskStore) {
+    try {
+      tasks = await ctx.taskStore.listTasks();
+      for (const t of tasks) {
+        const hist = await ctx.taskStore.getHistory(t.id, 5);
+        if (hist.length > 0) taskHistory.set(t.id, hist);
+      }
+    } catch { /* best effort */ }
+  }
+
   return {
     name: ctx.config.name,
-    engine: ctx.config.engine,
-    model: ctx.config.model,
+    engine,
+    model,
     version: ctx.version,
     uptime: Date.now() - ctx.startTime,
     channels: ctx.channelStatuses,
@@ -121,6 +153,8 @@ export function buildDashboardData(ctx: DashboardContext): DashboardData {
     authEnabled: !!(ctx.config.gateway?.token || process.env.GOLEM_TOKEN),
     host: ctx.config.gateway?.host ?? '127.0.0.1',
     port: ctx.config.gateway?.port ?? 3000,
+    tasks,
+    taskHistory,
   };
 }
 
@@ -288,6 +322,66 @@ function renderActivityFeed(data: DashboardData): string {
 </div>`;
 }
 
+function renderScheduledTasks(data: DashboardData): string {
+  if (data.tasks.length === 0) return '';
+
+  const rows = data.tasks.map(t => {
+    const statusDot = t.lastStatus === 'success' ? 'dot-green'
+      : t.lastStatus === 'error' ? 'dot-red' : 'dot-gray';
+    const statusText = t.lastStatus ?? 'never run';
+    const lastRun = t.lastRun
+      ? new Date(t.lastRun).toLocaleString()
+      : '-';
+    const target = t.target
+      ? `${esc(t.target.channel)}:${esc(t.target.chatId.slice(0, 12))}…`
+      : '<span class="dim">none</span>';
+    const enabledClass = t.enabled ? 'task-enabled' : 'task-disabled';
+    const enabledLabel = t.enabled ? 'Enabled' : 'Disabled';
+    const toggleAction = t.enabled ? 'disable' : 'enable';
+    const toggleLabel = t.enabled ? 'Disable' : 'Enable';
+
+    // Recent history for this task
+    const hist = data.taskHistory.get(t.id) ?? [];
+    const histHtml = hist.length > 0
+      ? `<div class="task-hist">${hist.map(h => {
+          const hTime = new Date(h.startedAt).toLocaleString();
+          const hDur = (h.durationMs / 1000).toFixed(1) + 's';
+          const hCost = h.costUsd ? '$' + h.costUsd.toFixed(4) : '-';
+          const hStatus = h.status === 'success' ? '<span class="task-ok">OK</span>' : `<span class="task-err">${esc(h.error ?? 'error')}</span>`;
+          return `<div class="task-hist-row"><span>${hTime}</span><span>${hStatus}</span><span>${hDur}</span><span>${hCost}</span></div>`;
+        }).join('')}</div>`
+      : '';
+
+    return `<div class="task-row">
+      <div class="task-main">
+        <span class="ch-dot ${statusDot}"></span>
+        <span class="task-name">${esc(t.name)}</span>
+        <code class="task-schedule">${esc(t.schedule)}</code>
+        <span class="task-target">${target}</span>
+        <span class="${enabledClass}">${enabledLabel}</span>
+        <span class="task-last">${lastRun} · ${statusText}</span>
+        <span class="task-actions">
+          <button class="task-btn" onclick="cronAction('run','${esc(t.id)}')" title="Run now">Run</button>
+          <button class="task-btn task-btn-toggle" onclick="cronAction('${toggleAction}','${esc(t.id)}')" title="${toggleLabel}">${toggleLabel}</button>
+        </span>
+      </div>
+      ${histHtml}
+    </div>`;
+  }).join('\n');
+
+  return `
+<div class="section-label">Scheduled Tasks</div>
+<div class="card" style="margin-bottom:24px">
+  <h2><span class="icon">⏰</span> Cron Tasks <span class="dim" style="font-weight:400;font-size:13px">(${data.tasks.length})</span></h2>
+  <p class="card-desc">Agent tasks that run on a schedule and push results to IM channels. <a href="${DOCS_BASE}/guide/configuration#tasks" target="_blank">Docs</a></p>
+  <div class="task-header">
+    <span></span><span>Name</span><span>Schedule</span><span>Target</span><span>Status</span><span>Last Run</span><span></span>
+  </div>
+  ${rows}
+  <div class="task-result" id="task-result"></div>
+</div>`;
+}
+
 function renderFooter(): string {
   return `<p style="text-align:center;font-size:12px;color:var(--dim)">Powered by <a href="${DOCS_BASE}/" target="_blank">GolemBot</a> &middot; <a href="https://github.com/0xranx/golembot" target="_blank">GitHub</a> &middot; <a href="https://discord.gg/tgU5FXChgM" target="_blank">Discord</a></p>`;
 }
@@ -407,6 +501,15 @@ function renderClientScript(data: DashboardData): string {
       headers: headers,
       body: JSON.stringify({ message: msg, sessionKey: 'dashboard-test' })
     }).then(function(res){
+      var ct = res.headers.get('content-type') || '';
+      if(ct.indexOf('application/json') !== -1){
+        // Slash command response — plain JSON
+        return res.json().then(function(data){
+          testOutput.textContent = data.text || JSON.stringify(data);
+          testBtn.disabled=false; testBtn.textContent='Send';
+        });
+      }
+      // SSE streaming response
       var reader = res.body.getReader();
       var decoder = new TextDecoder();
       function read(){
@@ -453,6 +556,56 @@ function renderClientScript(data: DashboardData): string {
     var pre = btn.parentElement;
     var text = pre.getAttribute('data-copy') || pre.textContent.replace('Copy','').trim();
     navigator.clipboard.writeText(text).then(function(){btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy';},1500);});
+  };
+
+  // Cron task actions (run / enable / disable)
+  window.cronAction = function(action, taskName){
+    var resultEl = document.getElementById('task-result');
+    if(resultEl){resultEl.style.display='block';resultEl.textContent='Running /cron '+action+' '+taskName+'...';}
+    var headers = { 'Content-Type': 'application/json' };
+    if(testToken) headers['Authorization'] = 'Bearer ' + testToken;
+    fetch('/chat', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ message: '/cron '+action+' '+taskName, sessionKey: 'dashboard-cron' })
+    }).then(function(res){
+      var ct = res.headers.get('content-type') || '';
+      if(ct.indexOf('application/json') !== -1){
+        return res.json().then(function(data){
+          if(resultEl) resultEl.textContent = data.text || JSON.stringify(data);
+          if(action !== 'run') setTimeout(function(){location.reload();},800);
+        });
+      }
+      // SSE stream (for /cron run which triggers agent)
+      var reader = res.body.getReader();
+      var decoder = new TextDecoder();
+      var text = '';
+      function read(){
+        reader.read().then(function(result){
+          if(result.done){
+            if(resultEl && text) resultEl.textContent = text;
+            return;
+          }
+          var chunk = decoder.decode(result.value, {stream:true});
+          var lines = chunk.split('\\n');
+          for(var i=0;i<lines.length;i++){
+            var line = lines[i].trim();
+            if(line.startsWith('data: ')){
+              try{
+                var evt = JSON.parse(line.slice(6));
+                if(evt.type==='text') text += evt.content;
+                if(evt.text) text = evt.text;
+              }catch(e){}
+            }
+          }
+          if(resultEl) resultEl.textContent = text || 'Processing...';
+          read();
+        });
+      }
+      read();
+    }).catch(function(e){
+      if(resultEl) resultEl.textContent = 'Error: '+e.message;
+    });
   };
 
   function esc(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -518,11 +671,32 @@ pre{background:var(--bg);border:1px solid var(--border);border-radius:6px;paddin
 .shutdown-btn:hover{opacity:.85}
 .shutdown-btn:disabled{opacity:.5;cursor:not-allowed}
 
+/* Scheduled tasks */
+.task-header{display:grid;grid-template-columns:12px 1fr 120px 120px 70px 1fr auto;gap:8px;padding:6px 0;font-size:11px;font-weight:600;color:var(--dim);border-bottom:2px solid var(--border)}
+.task-row{border-bottom:1px solid var(--border);padding:4px 0}
+.task-main{display:grid;grid-template-columns:12px 1fr 120px 120px 70px 1fr auto;gap:8px;align-items:center;font-size:13px;padding:4px 0}
+.task-name{font-weight:600} .task-schedule{font-size:11px;background:var(--bg);padding:2px 6px;border-radius:4px;border:1px solid var(--border)}
+.task-target{font-size:11px;color:var(--dim)} .task-last{font-size:11px;color:var(--dim)}
+.task-enabled{font-size:11px;color:var(--green)} .task-disabled{font-size:11px;color:var(--dim)}
+.task-actions{display:flex;gap:4px}
+.task-btn{background:var(--border);border:none;color:var(--text);padding:2px 10px;border-radius:4px;font-size:11px;cursor:pointer;white-space:nowrap}
+.task-btn:hover{background:var(--accent);color:#fff}
+.task-btn-toggle{background:transparent;border:1px solid var(--border)}
+.task-btn-toggle:hover{border-color:var(--accent);background:var(--accent);color:#fff}
+.task-hist{padding:4px 0 4px 20px}
+.task-hist-row{display:grid;grid-template-columns:160px 80px 60px 60px;gap:8px;font-size:11px;color:var(--dim);padding:1px 0}
+.task-ok{color:var(--green)} .task-err{color:var(--red)}
+.task-result{margin-top:10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:12px;font-family:"SFMono-Regular",Consolas,monospace;white-space:pre-wrap;max-height:200px;overflow-y:auto;display:none;line-height:1.5}
+.dim{color:var(--dim)}
+
 /* Responsive (dashboard-specific) */
 @media(max-width:768px){
   .feed-row{grid-template-columns:1fr;gap:2px}
   .feed-row.header-row{display:none}
   .stat-grid{grid-template-columns:1fr}
+  .task-header{display:none}
+  .task-main{grid-template-columns:12px 1fr;gap:4px}
+  .task-hist-row{grid-template-columns:1fr 1fr;gap:4px}
 }`.trim();
 
 // ── Main renderer (assembler) ────────────────────────────────────────────────
@@ -542,6 +716,7 @@ export function renderDashboard(data: DashboardData): string {
 ${renderHeader(data)}
 ${renderAccessCards(data)}
 ${renderQuickTest(data)}
+${renderScheduledTasks(data)}
 ${renderMonitoring(data)}
 ${renderActivityFeed(data)}
 ${renderFooter()}

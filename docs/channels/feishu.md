@@ -82,6 +82,17 @@ golembot gateway --verbose
 
 The adapter connects to Feishu via WebSocket on startup. Messages appear in logs with `[feishu]` prefix when `--verbose` is enabled.
 
+## Read Receipts
+
+The Feishu adapter supports tracking when users read messages sent by the bot. When a user opens a chat containing unread bot messages, the adapter receives an `im.message.message_read_v1` event with the reader's ID, message IDs, and read timestamp.
+
+To enable read receipts:
+
+1. In **Event Subscriptions**, subscribe to `im.message.message_read_v1`
+2. The adapter will emit `ReadReceipt` events that can be consumed by custom handlers
+
+This is a passive tracking feature — it tells you when users have seen your bot's messages. No additional permissions are required beyond the existing `im:message` scope.
+
 ## Notes
 
 - WebSocket mode means the bot works behind NAT/firewalls without port forwarding

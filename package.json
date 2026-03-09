@@ -1,6 +1,6 @@
 {
   "name": "golembot",
-  "version": "0.14.0-beta.11",
+  "version": "0.22.0",
   "description": "GolemBot - Local-first AI assistant powered by Coding Agent CLI engines",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,6 +19,7 @@
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "dev:gateway": "pnpm build && node dist/cli.js gateway --verbose",
     "e2e": "tsx examples/e2e-test.ts",
     "e2e:headless": "tsx examples/e2e-headless.ts",
     "e2e:claude-code": "tsx examples/e2e-claude-code.ts",

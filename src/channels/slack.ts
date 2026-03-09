@@ -1,4 +1,4 @@
-import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions, ImageAttachment } from '../channel.js';
 import type { SlackChannelConfig } from '../workspace.js';
 import { markdownToMrkdwn } from './slack-format.js';
 import { importPeer } from '../peer-require.js';
@@ -40,6 +40,32 @@ export class SlackAdapter implements ChannelAdapter {
     }
   }
 
+  /**
+   * Download image files attached to a Slack message.
+   * Slack files require a Bearer token for download.
+   */
+  private async downloadFiles(files: any[] | undefined): Promise<ImageAttachment[]> {
+    if (!files || files.length === 0) return [];
+    const images: ImageAttachment[] = [];
+    for (const file of files) {
+      if (!file.mimetype?.startsWith('image/')) continue;
+      const url = file.url_private_download || file.url_private;
+      if (!url) continue;
+      try {
+        const resp = await fetch(url, {
+          headers: { Authorization: `Bearer ${this.config.botToken}` },
+        });
+        if (resp.ok) {
+          const buf = Buffer.from(await resp.arrayBuffer());
+          images.push({ mimeType: file.mimetype, data: buf, fileName: file.name });
+        }
+      } catch (e) {
+        console.error('[slack] Failed to download file:', (e as Error).message);
+      }
+    }
+    return images;
+  }
+
   async start(onMessage: (msg: ChannelMessage) => void): Promise<void> {
     let boltModule: any;
     try {
@@ -61,8 +87,12 @@ export class SlackAdapter implements ChannelAdapter {
     this.app.message(async ({ message }: any) => {
       if (message.subtype) return; // ignore edits, bot messages, etc.
       if (message.channel_type !== 'im') return; // group messages handled via app_mention
-      if (!message.text) return;
       if (this.dedup(message.client_msg_id || message.ts)) return;
+
+      // Download attached images (Slack file uploads)
+      const images = await this.downloadFiles(message.files);
+
+      if (!message.text && images.length === 0) return;
 
       const senderName = await this.resolveUserName(message.user);
       onMessage({
@@ -71,7 +101,8 @@ export class SlackAdapter implements ChannelAdapter {
         senderName,
         chatId: message.channel,
         chatType: 'dm',
-        text: message.text,
+        text: message.text || (images.length > 0 ? '(image)' : ''),
+        images: images.length > 0 ? images : undefined,
         raw: message,
       });
     });
@@ -110,6 +141,14 @@ export class SlackAdapter implements ChannelAdapter {
     if (!this.app) return;
     await this.app.client.chat.postMessage({
       channel: msg.chatId,
+      text: markdownToMrkdwn(text),
+    });
+  }
+
+  async send(chatId: string, text: string): Promise<void> {
+    if (!this.app) return;
+    await this.app.client.chat.postMessage({
+      channel: chatId,
       text: markdownToMrkdwn(text),
     });
   }

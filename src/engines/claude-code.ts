@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
 import { resolveInvokeEnv } from '../engine.js';
+import type { AgentEngine, InvokeOpts, StreamEvent, ListModelsOpts } from '../engine.js';
 import { isOnPath } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
@@ -242,5 +243,20 @@ export class ClaudeCodeEngine implements AgentEngine {
         }
       }
     }
+  }
+
+  async listModels(opts: ListModelsOpts): Promise<string[]> {
+    const apiKey = opts.apiKey || process.env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/models?limit=100', {
+          headers: { 'anthropic-version': '2023-06-01', 'x-api-key': apiKey },
+          signal: AbortSignal.timeout(10_000),
+        });
+        const data = (await resp.json()) as { data?: Array<{ id: string }> };
+        if (data.data?.length) return data.data.map(m => m.id).sort();
+      } catch { /* fallback below */ }
+    }
+    return ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
   }
 }

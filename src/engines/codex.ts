@@ -3,6 +3,7 @@ import { mkdir, readdir, lstat, unlink, symlink } from 'node:fs/promises';
 import { join, basename, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
 import { resolveInvokeEnv } from '../engine.js';
+import type { AgentEngine, InvokeOpts, StreamEvent, ListModelsOpts } from '../engine.js';
 import { stripAnsi, isOnPath } from './shared.js';
 
 // ── NDJSON event parsing ─────────────────────────────────
@@ -245,5 +246,20 @@ export class CodexEngine implements AgentEngine {
         }
       }
     }
+  }
+
+  async listModels(opts: ListModelsOpts): Promise<string[]> {
+    const apiKey = opts.apiKey || process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY;
+    if (apiKey) {
+      try {
+        const resp = await fetch('https://api.openai.com/v1/models', {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          signal: AbortSignal.timeout(10_000),
+        });
+        const data = (await resp.json()) as { data?: Array<{ id: string }> };
+        if (data.data?.length) return data.data.map(m => m.id).sort();
+      } catch { /* fallback below */ }
+    }
+    return ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'codex-mini-latest'];
   }
 }

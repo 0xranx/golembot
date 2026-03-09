@@ -1,3 +1,13 @@
+/** An image attached to an incoming IM message. */
+export interface ImageAttachment {
+  /** MIME type, e.g. "image/png", "image/jpeg". */
+  mimeType: string;
+  /** Raw image bytes. */
+  data: Buffer;
+  /** Optional original filename. */
+  fileName?: string;
+}
+
 export interface ChannelMessage {
   channelType: string;
   senderId: string;
@@ -5,6 +15,8 @@ export interface ChannelMessage {
   chatId: string;
   chatType: 'dm' | 'group';
   text: string;
+  /** Images attached to the message (downloaded by the adapter). */
+  images?: ImageAttachment[];
   raw: unknown;
   /**
    * Set to `true` by adapters that can reliably detect a bot @mention through
@@ -28,6 +40,18 @@ export interface ReplyOptions {
   mentions?: MentionTarget[];
 }
 
+/**
+ * Read receipt emitted when a user reads a message sent by the bot.
+ * Currently only supported by Feishu (via `im.message.message_read_v1` event).
+ */
+export interface ReadReceipt {
+  channelType: string;
+  messageId: string;
+  readerId: string;
+  chatId: string;
+  readTime: string;
+}
+
 export interface ChannelAdapter {
   readonly name: string;
   /** Optional: override the default 4000-char message split limit for this channel. */
@@ -35,6 +59,12 @@ export interface ChannelAdapter {
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
   reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
+  /**
+   * Optional: send a proactive message to a chat (no incoming message context needed).
+   * Used by scheduled tasks / cron jobs to push results to IM channels.
+   * Not all adapters support this — check before calling.
+   */
+  send?(chatId: string, text: string): Promise<void>;
   /**
    * Optional: send a "typing…" indicator to the chat.
    * Called before a long-running AI invocation so the user sees immediate feedback.
@@ -47,6 +77,12 @@ export interface ChannelAdapter {
    * Called by the gateway when the AI reply contains @mentions.
    */
   getGroupMembers?(chatId: string): Promise<Map<string, string>>;
+  /**
+   * Optional: handler for read receipt events. Set by the gateway before `start()`.
+   * When a user reads a message sent by the bot, the adapter calls this handler.
+   * Currently only Feishu supports this via the `im.message.message_read_v1` event.
+   */
+  readReceiptHandler?: (receipt: ReadReceipt) => void;
 }
 
 export function buildSessionKey(msg: ChannelMessage): string {

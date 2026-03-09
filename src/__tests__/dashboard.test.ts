@@ -87,21 +87,21 @@ describe('recordMessage', () => {
 });
 
 describe('buildDashboardData', () => {
-  it('computes avgDurationMs correctly', () => {
+  it('computes avgDurationMs correctly', async () => {
     const ctx = makeDashboardCtx();
     ctx.metrics.totalMessages = 4;
     ctx.metrics.totalDurationMs = 8000;
-    const data = buildDashboardData(ctx);
+    const data = await buildDashboardData(ctx);
     expect(data.metrics.avgDurationMs).toBe(2000);
   });
 
-  it('returns 0 avg when no messages', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('returns 0 avg when no messages', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     expect(data.metrics.avgDurationMs).toBe(0);
   });
 
-  it('includes all fields', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('includes all fields', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     expect(data.name).toBe('test-bot');
     expect(data.engine).toBe('claude-code');
     expect(data.model).toBe('claude-opus-4-6');
@@ -111,7 +111,7 @@ describe('buildDashboardData', () => {
     expect(data.recentMessages).toEqual([]);
   });
 
-  it('includes recentMessages snapshot', () => {
+  it('includes recentMessages snapshot', async () => {
     const ctx = makeDashboardCtx();
     recordMessage(ctx.metrics, {
       ts: '2026-01-01T00:00:00Z',
@@ -120,15 +120,15 @@ describe('buildDashboardData', () => {
       messagePreview: 'hi',
       responsePreview: 'hello',
     });
-    const data = buildDashboardData(ctx);
+    const data = await buildDashboardData(ctx);
     expect(data.recentMessages).toHaveLength(1);
     expect(data.recentMessages[0].sender).toBe('alice');
   });
 });
 
 describe('renderDashboard', () => {
-  it('returns valid HTML with key elements', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('returns valid HTML with key elements', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('GolemBot');
@@ -138,74 +138,74 @@ describe('renderDashboard', () => {
     expect(html).toContain('v1.2.3');
   });
 
-  it('shows connected channels with green dot', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('shows connected channels with green dot', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('dot-green');
     expect(html).toContain('Telegram');
   });
 
-  it('shows failed channels with red dot and error', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('shows failed channels with red dot and error', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('dot-red');
     expect(html).toContain('missing appId');
   });
 
-  it('shows unconfigured channels with setup guide link', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('shows unconfigured channels with setup guide link', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('Setup Guide');
     expect(html).toContain('/channels/slack');
   });
 
-  it('includes HTTP API curl example with highlighting', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('includes HTTP API curl example with highlighting', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('POST /chat');
     expect(html).toContain('hl-cmd');
     expect(html).toContain('hl-str');
   });
 
-  it('includes embed SDK code example', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('includes embed SDK code example', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('createAssistant');
   });
 
-  it('shows skills list', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('shows skills list', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('general');
     expect(html).toContain('General assistant');
   });
 
-  it('includes Quick Test section', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('includes Quick Test section', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('Quick Test');
     expect(html).toContain('test-msg');
     expect(html).toContain('sendTest');
   });
 
-  it('shows step numbers on access method cards', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('shows step numbers on access method cards', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('"step">1');
     expect(html).toContain('"step">2');
     expect(html).toContain('"step">3');
   });
 
-  it('shows connected count in subtitle', () => {
-    const data = buildDashboardData(makeDashboardCtx());
+  it('shows connected count in subtitle', async () => {
+    const data = await buildDashboardData(makeDashboardCtx());
     const html = renderDashboard(data);
     expect(html).toContain('1 channel connected');
   });
 
-  it('escapes HTML in bot name', () => {
+  it('escapes HTML in bot name', async () => {
     const ctx = makeDashboardCtx();
     ctx.config.name = '<script>alert(1)</script>';
-    const data = buildDashboardData(ctx);
+    const data = await buildDashboardData(ctx);
     const html = renderDashboard(data);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');

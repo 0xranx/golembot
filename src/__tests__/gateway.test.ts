@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { ChannelAdapter, ChannelMessage } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReadReceipt } from '../channel.js';
 import { detectMention } from '../channel.js';
 import {
   buildGroupPrompt,
   resolveGroupChatConfig,
+  resolveStreamingConfig,
   GROUP_TURN_RESET_MS,
   clearGroupChatState,
   purgeIdleGroups,
@@ -242,6 +243,29 @@ describe('group chat helpers - resolveGroupChatConfig', () => {
   });
 });
 
+describe('resolveStreamingConfig', () => {
+  it('fills in default values when streaming is absent', () => {
+    const config = { name: 'bot', engine: 'cursor' };
+    const sc = resolveStreamingConfig(config as any);
+    expect(sc.mode).toBe('buffered');
+    expect(sc.showToolCalls).toBe(false);
+  });
+
+  it('respects custom values', () => {
+    const config = { name: 'bot', engine: 'cursor', streaming: { mode: 'streaming' as const, showToolCalls: true } };
+    const sc = resolveStreamingConfig(config as any);
+    expect(sc.mode).toBe('streaming');
+    expect(sc.showToolCalls).toBe(true);
+  });
+
+  it('fills in missing partial fields', () => {
+    const config = { name: 'bot', engine: 'cursor', streaming: { mode: 'streaming' as const } };
+    const sc = resolveStreamingConfig(config as any);
+    expect(sc.mode).toBe('streaming');
+    expect(sc.showToolCalls).toBe(false);
+  });
+});
+
 describe('group chat helpers - buildGroupPrompt', () => {
   it('includes [Group:] metadata and MemoryFile path', () => {
     const result = buildGroupPrompt([], 'alice', 'hi', false, 'slack:C123', '');
@@ -466,5 +490,29 @@ describe('DiscordAdapter', () => {
     const { DiscordAdapter } = await import('../channels/discord.js');
     const adapter = new (DiscordAdapter as any)({ botToken: 'fake-token' });
     await expect(adapter.stop()).resolves.toBeUndefined();
+  });
+});
+
+describe('ReadReceipt', () => {
+  it('readReceiptHandler is optional on ChannelAdapter', () => {
+    const adapter = createMockAdapter('test');
+    expect(adapter.readReceiptHandler).toBeUndefined();
+  });
+
+  it('readReceiptHandler can be set and invoked', () => {
+    const adapter = createMockAdapter('test');
+    const receipts: Array<{ messageId: string; readerId: string }> = [];
+    adapter.readReceiptHandler = (receipt) => {
+      receipts.push({ messageId: receipt.messageId, readerId: receipt.readerId });
+    };
+    adapter.readReceiptHandler({
+      channelType: 'feishu',
+      messageId: 'msg-001',
+      readerId: 'user-123',
+      chatId: 'chat-456',
+      readTime: new Date().toISOString(),
+    });
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toEqual({ messageId: 'msg-001', readerId: 'user-123' });
   });
 });

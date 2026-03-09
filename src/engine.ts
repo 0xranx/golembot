@@ -20,10 +20,18 @@ export interface InvokeOpts {
   signal?: AbortSignal;
   /** Resolved provider context from ProviderBroker. When set, engines use this for env/model/apiKey. */
   providerContext?: ProviderContext;
+  /** Absolute paths to image files attached to the user message. Engines may use these for native multimodal support. */
+  imagePaths?: string[];
+}
+
+export interface ListModelsOpts {
+  apiKey?: string;
+  model?: string;
 }
 
 export interface AgentEngine {
   invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent>;
+  listModels?(opts: ListModelsOpts): Promise<string[]>;
 }
 
 /**

@@ -18,9 +18,27 @@ Content-Type: application/json
 ```json
 {
   "message": "分析销售数据",
-  "sessionKey": "user-123"
+  "sessionKey": "user-123",
+  "images": [
+    {
+      "mimeType": "image/png",
+      "data": "<base64 编码的图片数据>",
+      "fileName": "screenshot.png"
+    }
+  ]
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `message` | `string` | 是* | 用户消息（*当提供 `images` 时可省略） |
+| `sessionKey` | `string` | 否 | 会话标识（默认：`"default"`） |
+| `images` | `array` | 否 | base64 编码的图片附件数组 |
+| `images[].mimeType` | `string` | 否 | MIME 类型（默认：`"image/png"`） |
+| `images[].data` | `string` | 是 | base64 编码的图片数据 |
+| `images[].fileName` | `string` | 否 | 原始文件名 |
+
+当提供 `images` 但没有 `message` 时，消息默认为 `"(image)"`。图片保存到 `.golem/images/`，通过路径引用注入 prompt，回复后自动清理。
 
 **响应：** `text/event-stream`
 
@@ -31,6 +49,42 @@ data: {"type":"tool_call","name":"readFile","args":"{\"path\":\"sales.csv\"}"}
 
 data: {"type":"done","sessionId":"abc-123","durationMs":8500}
 
+```
+
+**斜杠命令：** 当消息以 `/` 开头时，将作为斜杠命令处理并返回 JSON 响应（非 SSE）：
+
+```bash
+curl -X POST http://localhost:3000/chat \
+  -H "Authorization: Bearer my-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "/model list"}'
+```
+
+```json
+{
+  "type": "command",
+  "engine": "claude-code",
+  "models": ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+  "text": "Available models for claude-code (3):\n  claude-opus-4-6\n  ..."
+}
+```
+
+可用斜杠命令：`/help`、`/status`、`/engine [name]`、`/model [list|name]`、`/skill`、`/cron`、`/reset`。
+
+**定时任务管理：** `/cron` 命令同样可以通过 `POST /chat` 使用：
+
+```bash
+# 列出所有定时任务
+curl -X POST http://localhost:3000/chat \
+  -H "Authorization: Bearer my-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "/cron list"}'
+
+# 立即触发指定任务
+curl -X POST http://localhost:3000/chat \
+  -H "Authorization: Bearer my-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "/cron run daily-standup"}'
 ```
 
 ::: warning SSE 中的错误事件

@@ -1,4 +1,4 @@
-import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, ReplyOptions, ImageAttachment } from '../channel.js';
 import type { DingtalkChannelConfig } from '../workspace.js';
 import { importPeer } from '../peer-require.js';
 
@@ -49,8 +49,64 @@ export class DingtalkAdapter implements ChannelAdapter {
         }
 
         const data = JSON.parse(res.data);
-        const text = data.text?.content?.trim() || '';
-        if (!text) return;
+        const msgtype = data.msgtype;
+        let text = '';
+        const images: ImageAttachment[] = [];
+
+        if (msgtype === 'text' || !msgtype) {
+          text = data.text?.content?.trim() || '';
+        } else if (msgtype === 'picture') {
+          // DingTalk picture messages include a download URL
+          const picURL = data.content?.downloadCode || data.content?.picURL;
+          if (picURL) {
+            try {
+              const accessToken = await this.dwClient?.getAccessToken?.();
+              const headers: Record<string, string> = {};
+              if (accessToken) headers['x-acs-dingtalk-access-token'] = accessToken;
+              const resp = await fetch(picURL, { headers });
+              if (resp.ok) {
+                const buf = Buffer.from(await resp.arrayBuffer());
+                const ct = resp.headers.get('content-type') || 'image/jpeg';
+                images.push({ mimeType: ct.split(';')[0], data: buf });
+              }
+            } catch (e) {
+              console.error('[dingtalk] Failed to download image:', (e as Error).message);
+            }
+          }
+          text = '(image)';
+        } else if (msgtype === 'richText') {
+          // Rich text may contain text + images
+          const richText = data.content?.richText;
+          if (Array.isArray(richText)) {
+            for (const section of richText) {
+              if (section.text) text += section.text;
+              if (section.downloadCode || section.picURL) {
+                const picURL = section.downloadCode || section.picURL;
+                try {
+                  const accessToken = await this.dwClient?.getAccessToken?.();
+                  const headers: Record<string, string> = {};
+                  if (accessToken) headers['x-acs-dingtalk-access-token'] = accessToken;
+                  const resp = await fetch(picURL, { headers });
+                  if (resp.ok) {
+                    const buf = Buffer.from(await resp.arrayBuffer());
+                    const ct = resp.headers.get('content-type') || 'image/jpeg';
+                    images.push({ mimeType: ct.split(';')[0], data: buf });
+                  }
+                } catch (e) {
+                  console.error('[dingtalk] Failed to download rich text image:', (e as Error).message);
+                }
+              }
+            }
+            text = text.trim();
+            if (!text && images.length > 0) text = '(image)';
+          }
+        } else {
+          // Unsupported message type — skip
+          this.dwClient.socketCallBackResponse(res.headers.messageId, { status: 'SUCCESS' });
+          return;
+        }
+
+        if (!text && images.length === 0) return;
 
         const isGroup = data.conversationType === '2';
 
@@ -61,6 +117,7 @@ export class DingtalkAdapter implements ChannelAdapter {
           chatId: data.conversationId || '',
           chatType: isGroup ? 'group' : 'dm',
           text,
+          images: images.length > 0 ? images : undefined,
           mentioned: isGroup ? true : undefined,
           raw: { ...data, _sessionWebhook: data.sessionWebhook },
         };

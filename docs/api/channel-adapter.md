@@ -28,6 +28,14 @@ interface ChannelAdapter {
    *  Returns a map of display name → platform-specific user ID.
    *  Called by the gateway when the AI reply contains @mentions. */
   getGroupMembers?(chatId: string): Promise<Map<string, string>>;
+  /** Optional: handler called when a user reads a message sent by the bot.
+   *  Currently supported by the Feishu adapter. */
+  readReceiptHandler?: (receipt: ReadReceipt) => void;
+  /** Optional: proactively send a message to a chat (no incoming message context needed).
+   *  Used by the scheduled task system to push results to IM channels. */
+  send?(chatId: string, text: string): Promise<void>;
+  /** Whether this adapter supports proactive send(). Defaults to true if send() is defined. */
+  readonly canSend?: boolean;
 }
 ```
 
@@ -40,6 +48,32 @@ interface ChannelAdapter {
 | `stop()` | Gracefully disconnect |
 | `typing(msg)` | *(optional)* Send a "typing…" indicator to the chat. Called before the AI call and refreshed every 4 s. Implement for better UX on platforms that support it (e.g. Telegram `sendChatAction`, Discord `sendTyping`). |
 | `getGroupMembers(chatId)` | *(optional)* Return a `Map<displayName, platformId>` of group members. The gateway calls this when an AI reply contains `@name` patterns to resolve them into native mentions. Implementations should cache results for performance. |
+| `send(chatId, text)` | *(optional)* Proactively send a message to a chat without an incoming message context. Used by the scheduled task system (`/cron`) to push task results to IM channels. |
+| `canSend` | *(optional, read-only)* Whether the adapter supports proactive `send()`. Defaults to `true` if `send()` is defined. |
+
+## ReadReceipt Type
+
+```typescript
+interface ReadReceipt {
+  channelType: string;   // 'feishu'
+  messageId: string;     // Message ID that was read
+  readerId: string;      // User ID of the reader
+  chatId: string;        // Chat/conversation ID
+  readTime: string;      // Timestamp (milliseconds since epoch)
+}
+```
+
+## ImageAttachment Type
+
+```typescript
+interface ImageAttachment {
+  mimeType: string;    // e.g. 'image/png', 'image/jpeg', 'image/webp'
+  data: Buffer;        // Raw image bytes
+  fileName?: string;   // Original filename (if available)
+}
+```
+
+Used in `ChannelMessage.images` and `assistant.chat()` opts. All 6 built-in adapters populate this when users send image messages.
 
 ## ChannelMessage Type
 
@@ -51,6 +85,7 @@ interface ChannelMessage {
   chatId: string;          // Chat/conversation ID
   chatType: 'dm' | 'group';
   text: string;            // Message text content
+  images?: ImageAttachment[];  // Image attachments (if any)
   raw: unknown;            // Raw SDK event object
   /**
    * Set to `true` by adapters that can detect a bot @mention through

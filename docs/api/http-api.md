@@ -18,14 +18,27 @@ Content-Type: application/json
 ```json
 {
   "message": "Analyze the sales data",
-  "sessionKey": "user-123"
+  "sessionKey": "user-123",
+  "images": [
+    {
+      "mimeType": "image/png",
+      "data": "<base64-encoded image data>",
+      "fileName": "screenshot.png"
+    }
+  ]
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `message` | `string` | Yes | The user's message |
+| `message` | `string` | Yes* | The user's message (*optional when `images` is provided) |
 | `sessionKey` | `string` | No | Session identifier (default: `"default"`) |
+| `images` | `array` | No | Array of base64-encoded image attachments |
+| `images[].mimeType` | `string` | No | MIME type (default: `"image/png"`) |
+| `images[].data` | `string` | Yes | Base64-encoded image data |
+| `images[].fileName` | `string` | No | Original filename |
+
+When `images` are provided without a `message`, the message defaults to `"(image)"`. Images are saved to `.golem/images/`, referenced by path in the prompt, and cleaned up after the response.
 
 **Response:** `text/event-stream`
 
@@ -45,6 +58,39 @@ data: {"type":"done","sessionId":"abc-123","durationMs":8500}
 ```
 
 Each event is a JSON-encoded [StreamEvent](/api/stream-events).
+
+**Slash commands:** When the message starts with `/`, it is handled as a slash command and returns a JSON response (not SSE):
+
+```bash
+curl -X POST http://localhost:3000/chat \
+  -H "Authorization: Bearer my-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "/model list"}'
+```
+
+```json
+{
+  "type": "command",
+  "engine": "claude-code",
+  "models": ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+  "text": "Available models for claude-code (3):\n  claude-opus-4-6\n  ..."
+}
+```
+
+Available slash commands: `/help`, `/status`, `/engine [name]`, `/model [list|name]`, `/skill`, `/cron`, `/reset`.
+
+**Scheduled task management via HTTP:**
+
+The `/cron` slash commands work via `POST /chat` like any other slash command. For example, to list all scheduled tasks:
+
+```bash
+curl -X POST http://localhost:3000/chat \
+  -H "Authorization: Bearer my-secret" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"/cron list"}'
+```
+
+Subcommands: `list`, `run <id>`, `enable <id>`, `disable <id>`, `del <id>`, `history <id>`.
 
 ::: warning Error events in SSE
 The `/chat` endpoint always returns `200 OK` — errors are delivered as events inside the stream:

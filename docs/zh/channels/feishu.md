@@ -82,6 +82,17 @@ golembot gateway --verbose
 
 适配器启动时通过 WebSocket 连接飞书。`--verbose` 模式下消息日志带 `[feishu]` 前缀。
 
+## 已读回执
+
+飞书适配器支持追踪用户是否已读机器人发送的消息。当用户打开包含未读 bot 消息的聊天时，适配器会收到 `im.message.message_read_v1` 事件，包含阅读者 ID、消息 ID 列表和阅读时间戳。
+
+启用已读回执：
+
+1. 在**事件订阅**中，订阅 `im.message.message_read_v1`
+2. 适配器会发出 `ReadReceipt` 事件，可由自定义 handler 消费
+
+这是一个被动追踪功能——告诉你用户是否看过 bot 的消息。无需额外权限，现有的 `im:message` scope 即可。
+
 ## 说明
 
 - WebSocket 模式意味着机器人可以在 NAT/防火墙后运行，无需端口转发

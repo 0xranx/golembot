@@ -40,6 +40,9 @@ features:
       src: /icons/folder.svg
     title: Directory Is the Assistant
     details: Skills, memory, config, and work artifacts all live in one directory. Fully transparent, version-controllable, and shareable via git.
+  - icon: "&#x23F0;"
+    title: Scheduled Tasks
+    details: Define cron tasks in golem.yaml — daily standups, dependency audits, test health reports. The agent runs on schedule and pushes results to Slack, Telegram, Feishu, or any channel. Manage with /cron commands from CLI, HTTP, or IM.
 ---
 
 <div class="home-content">
@@ -214,14 +217,14 @@ html:not(.dark) body {
   display: grid;
   gap: 20px;
   margin-top: 24px;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .channels-grid {
   display: grid;
   gap: 16px;
   margin-top: 24px;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .engine-card {
@@ -229,13 +232,14 @@ html:not(.dark) body {
   background: var(--vp-c-bg-soft);
   border: 1px solid var(--vp-c-divider);
   border-radius: 16px;
-  padding: 32px;
+  padding: 32px 24px;
   text-align: left;
-  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.3s, border-color 0.3s;
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.3, 1), box-shadow 0.4s, border-color 0.4s;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  min-height: 280px;
 }
 
 html:not(.dark) .engine-card {
@@ -309,6 +313,8 @@ html:not(.dark) .channel-card {
   width: 48px;
   height: 48px;
   margin: 0 0 20px 0;
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.3, 1);
+  flex-shrink: 0;
 }
 
 .engine-icon-cursor { color: #000; }
@@ -327,6 +333,7 @@ html:not(.dark) .channel-card {
   font-weight: 700;
   margin-bottom: 8px;
   letter-spacing: -0.01em;
+  transition: color 0.4s;
 }
 
 .engine-desc {
@@ -334,13 +341,20 @@ html:not(.dark) .channel-card {
   color: var(--vp-c-text-2);
   margin-bottom: 24px;
   line-height: 1.6;
-  flex: 1;
 }
 
 .engine-env {
   margin-top: auto;
   padding-top: 20px;
   width: 100%;
+}
+
+.engine-card:hover .engine-name {
+  color: var(--vp-c-text-1);
+}
+
+.engine-card:hover .engine-icon {
+  transform: scale(1.1) translateY(-4px);
 }
 
 .engine-env code {
@@ -352,6 +366,7 @@ html:not(.dark) .channel-card {
   color: var(--vp-c-text-2);
   border: 1px solid var(--vp-c-divider);
   display: inline-block;
+  word-break: break-all;
 }
 
 .engine-card:hover .engine-env code {
@@ -396,25 +411,25 @@ html:not(.dark) .channel-card {
 
 @media (max-width: 960px) {
   .engines-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
   .engines-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .channels-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 480px) {
   .engines-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .channels-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

@@ -1,3 +1,66 @@
+# [0.22.0](https://github.com/0xranx/golembot/compare/v0.21.0...v0.22.0) (2026-03-09)
+
+
+### Features
+
+* add image multimodal message support across all IM channels ([99742c0](https://github.com/0xranx/golembot/commit/99742c0b849f78af4acbec0b5e45eeef7c64e52d))
+
+# [0.21.0](https://github.com/0xranx/golembot/compare/v0.20.0...v0.21.0) (2026-03-09)
+
+
+### Features
+
+* add scheduled tasks panel to Dashboard with disable/enable/run controls ([39c3d40](https://github.com/0xranx/golembot/commit/39c3d40ffc62fcea24298988e4bb7a76340196e4))
+
+# [0.20.0](https://github.com/0xranx/golembot/compare/v0.19.0...v0.20.0) (2026-03-09)
+
+
+### Features
+
+* add scheduled task system with cron scheduler and proactive messaging ([0b48e2a](https://github.com/0xranx/golembot/commit/0b48e2abe712f0faccf55d659dcb93fe7bfb6b60))
+
+# [0.19.0](https://github.com/0xranx/golembot/compare/v0.18.1...v0.19.0) (2026-03-09)
+
+
+### Bug Fixes
+
+* reset model when switching engines and fix patchConfig safety ([5e51c00](https://github.com/0xranx/golembot/commit/5e51c000e21c55a209db28ffc0a7b1962bf98c18))
+
+
+### Features
+
+* add /model list command with real-time model discovery ([a55a3b7](https://github.com/0xranx/golembot/commit/a55a3b7296ab74894c2d4f962d6d922e4e1562e5))
+* add unified slash commands across CLI, HTTP API, and IM gateway ([e6b9a85](https://github.com/0xranx/golembot/commit/e6b9a8528b03c95e0d3b79add9200df943c9e681))
+
+## [0.18.1](https://github.com/0xranx/golembot/compare/v0.18.0...v0.18.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* CI coverage, dev:gateway script, and engine snapshot tests ([d6fce87](https://github.com/0xranx/golembot/commit/d6fce871ae8ef0cf1d9b6f6278c5ad26b7726432))
+* skip registry install test without GITHUB_TOKEN ([9cd7f10](https://github.com/0xranx/golembot/commit/9cd7f10308560f15decfd53a9693f4e5da9a7be9))
+
+# [0.18.0-beta.3](https://github.com/0xranx/golembot/compare/v0.18.0-beta.2...v0.18.0-beta.3) (2026-03-09)
+
+
+### Bug Fixes
+
+* skip registry install test without GITHUB_TOKEN ([9cd7f10](https://github.com/0xranx/golembot/commit/9cd7f10308560f15decfd53a9693f4e5da9a7be9))
+
+# [0.18.0-beta.2](https://github.com/0xranx/golembot/compare/v0.18.0-beta.1...v0.18.0-beta.2) (2026-03-09)
+
+
+### Bug Fixes
+
+* CI coverage, dev:gateway script, and engine snapshot tests ([d6fce87](https://github.com/0xranx/golembot/commit/d6fce871ae8ef0cf1d9b6f6278c5ad26b7726432))
+
+# [0.18.0-beta.1](https://github.com/0xranx/golembot/compare/v0.17.4...v0.18.0-beta.1) (2026-03-09)
+
+
+### Features
+
+* streaming message delivery and Feishu read receipts ([7208ee3](https://github.com/0xranx/golembot/commit/7208ee3c0bb30c0341c6ccc88732974051dc8268))
+
 # [0.14.0-beta.11](https://github.com/0xranx/golembot/compare/v0.14.0-beta.10...v0.14.0-beta.11) (2026-03-08)
 
 

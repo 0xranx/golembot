@@ -3,6 +3,7 @@ import { join, basename, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
 import { resolveInvokeEnv } from '../engine.js';
+import type { AgentEngine, InvokeOpts, StreamEvent, ListModelsOpts } from '../engine.js';
 import { isOnPath } from './shared.js';
 
 // ── Provider env resolution ──────────────────────────────
@@ -298,5 +299,30 @@ export class OpenCodeEngine implements AgentEngine {
         }
       }
     }
+  }
+
+  async listModels(opts: ListModelsOpts): Promise<string[]> {
+    const provider = opts.model?.split('/')[0];
+    // OpenRouter: public API, no auth needed
+    if (provider === 'openrouter') {
+      try {
+        const resp = await fetch('https://openrouter.ai/api/v1/models', {
+          signal: AbortSignal.timeout(10_000),
+        });
+        const data = (await resp.json()) as { data?: Array<{ id: string }> };
+        if (data.data?.length) return data.data.map(m => m.id).sort();
+      } catch { /* fallback to CLI */ }
+    }
+    // Fallback: opencode CLI
+    return new Promise<string[]>((resolve) => {
+      const child = spawn('opencode', ['models'], { timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const chunks: Buffer[] = [];
+      child.stdout.on('data', (c: Buffer) => chunks.push(c));
+      child.on('close', () => {
+        const models = Buffer.concat(chunks).toString('utf-8').trim().split('\n').filter(Boolean);
+        resolve(models);
+      });
+      child.on('error', () => resolve([]));
+    });
   }
 }
