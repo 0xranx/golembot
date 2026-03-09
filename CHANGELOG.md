@@ -1,3 +1,10 @@
+# [0.20.0-beta.1](https://github.com/0xranx/golembot/compare/v0.19.0...v0.20.0-beta.1) (2026-03-09)
+
+
+### Features
+
+* add scheduled task system with cron scheduler and proactive messaging ([0b48e2a](https://github.com/0xranx/golembot/commit/0b48e2abe712f0faccf55d659dcb93fe7bfb6b60))
+
 # [0.19.0](https://github.com/0xranx/golembot/compare/v0.18.1...v0.19.0) (2026-03-09)
 
 
