@@ -77,7 +77,8 @@ export function parseClaudeStreamLine(line: string): StreamEvent[] {
     const durationMs = typeof obj.duration_ms === 'number' ? obj.duration_ms : undefined;
     const costUsd = typeof obj.total_cost_usd === 'number' ? obj.total_cost_usd : undefined;
     const numTurns = typeof obj.num_turns === 'number' ? obj.num_turns : undefined;
-    return [{ type: 'done', sessionId, durationMs, costUsd, numTurns }];
+    const fullText = typeof obj.result === 'string' && obj.result ? obj.result : undefined;
+    return [{ type: 'done', sessionId, durationMs, costUsd, numTurns, fullText }];
   }
 
   return [];

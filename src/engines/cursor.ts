@@ -85,7 +85,8 @@ export function parseStreamLine(line: string): StreamEvent | null {
       return { type: 'error', message: (obj.result as string) || 'Agent error' };
     }
     const durationMs = typeof obj.duration_ms === 'number' ? obj.duration_ms : undefined;
-    return { type: 'done', sessionId: sessionId, durationMs };
+    const fullText = typeof obj.result === 'string' && obj.result ? obj.result : undefined;
+    return { type: 'done', sessionId: sessionId, durationMs, fullText };
   }
 
   return null;

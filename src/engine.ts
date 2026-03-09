@@ -6,7 +6,7 @@ export type StreamEvent =
   | { type: 'tool_result'; content: string }
   | { type: 'warning'; message: string }
   | { type: 'error'; message: string }
-  | { type: 'done'; sessionId?: string; durationMs?: number; costUsd?: number; numTurns?: number };
+  | { type: 'done'; sessionId?: string; durationMs?: number; costUsd?: number; numTurns?: number; fullText?: string };
 
 export interface InvokeOpts {
   workspace: string;

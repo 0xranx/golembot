@@ -207,7 +207,7 @@ describe('parseStreamLine', () => {
 
   it('result success → done with sessionId and durationMs', () => {
     const evt = parseStreamLine(SAMPLES.resultSuccess);
-    expect(evt).toEqual({ type: 'done', sessionId: 'sess-abc-123', durationMs: 4500 });
+    expect(evt).toEqual({ type: 'done', sessionId: 'sess-abc-123', durationMs: 4500, fullText: 'Task completed.' });
   });
 
   it('result success without duration_ms → durationMs undefined', () => {
@@ -219,7 +219,7 @@ describe('parseStreamLine', () => {
       session_id: 'sess-no-dur',
     });
     const evt = parseStreamLine(line);
-    expect(evt).toEqual({ type: 'done', sessionId: 'sess-no-dur', durationMs: undefined });
+    expect(evt).toEqual({ type: 'done', sessionId: 'sess-no-dur', durationMs: undefined, fullText: 'Done.' });
   });
 
   it('result success with duration_ms=0 → durationMs 0', () => {
@@ -231,7 +231,7 @@ describe('parseStreamLine', () => {
       duration_ms: 0,
     });
     const evt = parseStreamLine(line);
-    expect(evt).toEqual({ type: 'done', sessionId: 'sess-zero', durationMs: 0 });
+    expect(evt).toEqual({ type: 'done', sessionId: 'sess-zero', durationMs: 0, fullText: undefined });
   });
 
   it('result error → error event (durationMs not exposed on errors)', () => {
@@ -595,6 +595,7 @@ describe('parseClaudeStreamLine', () => {
       durationMs: 12345,
       costUsd: 0.0123,
       numTurns: 2,
+      fullText: 'Done.',
     }]);
   });
 
@@ -606,7 +607,7 @@ describe('parseClaudeStreamLine', () => {
     const events = parseClaudeStreamLine(line);
     expect(events).toEqual([{
       type: 'done', sessionId: 'sess-minimal',
-      durationMs: undefined, costUsd: undefined, numTurns: undefined,
+      durationMs: undefined, costUsd: undefined, numTurns: undefined, fullText: undefined,
     }]);
   });
 
