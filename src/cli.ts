@@ -401,9 +401,11 @@ program
   .action(async (opts: { dir: string; json?: boolean }) => {
     const dir = resolve(opts.dir);
     const { loadConfig, scanSkills } = await import('./workspace.js');
+    const { countSessions } = await import('./session.js');
     try {
       const config = await loadConfig(dir);
       const skills = await scanSkills(dir);
+      const sessionCount = await countSessions(dir);
       const channelNames = config.channels ? Object.keys(config.channels).filter(k => !!(config.channels as any)[k]) : [];
 
       if (opts.json) {
@@ -412,6 +414,7 @@ program
           engine: config.engine,
           model: config.model ?? null,
           skills: skills.map(s => ({ name: s.name, description: s.description })),
+          sessions: sessionCount,
           channels: channelNames,
           gateway: config.gateway ? { port: config.gateway.port ?? 3000, authEnabled: !!config.gateway.token } : null,
           directory: dir,
@@ -424,6 +427,7 @@ program
       console.log(`   Engine:     ${config.engine}`);
       if (config.model) console.log(`   Model:      ${config.model}`);
       console.log(`   Skills:     ${skills.length > 0 ? skills.map(s => s.name).join(', ') : '(none)'}`);
+      console.log(`   Sessions:   ${sessionCount}`);
       console.log(`   Channels:   ${channelNames.length > 0 ? channelNames.join(', ') : '(none)'}`);
       if (config.gateway) {
         const gw = config.gateway;

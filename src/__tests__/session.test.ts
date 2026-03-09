@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, readFile, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadSession, saveSession, clearSession, pruneExpiredSessions, appendHistory, getHistoryPath } from '../session.js';
+import { loadSession, saveSession, clearSession, pruneExpiredSessions, appendHistory, getHistoryPath, countSessions } from '../session.js';
 
 describe('session', () => {
   let dir: string;
@@ -220,6 +220,27 @@ describe('session', () => {
       // Verify final state
       expect(await loadSession(dir, 'user:a')).toBe('a-2');
       expect(await loadSession(dir, 'user:c')).toBe('c-1');
+    });
+  });
+
+  describe('countSessions', () => {
+    it('returns 0 when no sessions exist', async () => {
+      expect(await countSessions(dir)).toBe(0);
+    });
+
+    it('counts saved sessions', async () => {
+      await saveSession(dir, 'sess-1', 'user:a');
+      await saveSession(dir, 'sess-2', 'user:b');
+      await saveSession(dir, 'sess-3', 'user:c');
+      expect(await countSessions(dir)).toBe(3);
+    });
+
+    it('reflects cleared sessions', async () => {
+      await saveSession(dir, 'sess-1', 'user:a');
+      await saveSession(dir, 'sess-2', 'user:b');
+      expect(await countSessions(dir)).toBe(2);
+      await clearSession(dir, 'user:a');
+      expect(await countSessions(dir)).toBe(1);
     });
   });
 });

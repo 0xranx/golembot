@@ -108,6 +108,11 @@ export async function pruneExpiredSessions(dir: string, maxAgeDays: number): Pro
   if (changed) await writeStore(dir, store);
 }
 
+export async function countSessions(dir: string): Promise<number> {
+  const store = await readStore(dir);
+  return Object.keys(store).length;
+}
+
 export async function appendHistory(dir: string, entry: HistoryEntry): Promise<void> {
   const path = historyPath(dir, entry.sessionKey);
   const line = JSON.stringify(entry) + '\n';
