@@ -1,5 +1,7 @@
 // ── Core types ───────────────────────────────────────────
 
+import type { ProviderContext } from './provider.js';
+
 export type StreamEvent =
   | { type: 'text'; content: string }
   | { type: 'tool_call'; name: string; args: string }
@@ -16,10 +18,35 @@ export interface InvokeOpts {
   apiKey?: string;
   skipPermissions?: boolean;
   signal?: AbortSignal;
+  /** Resolved provider context from ProviderBroker. When set, engines use this for env/model/apiKey. */
+  providerContext?: ProviderContext;
 }
 
 export interface AgentEngine {
   invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent>;
+}
+
+/**
+ * Resolve model, apiKey, and env from InvokeOpts.
+ * When providerContext is set, it takes precedence over legacy opts.
+ */
+export function resolveInvokeEnv(opts: InvokeOpts): {
+  model?: string;
+  apiKey?: string;
+  envOverrides: Record<string, string>;
+} {
+  const ctx = opts.providerContext;
+  const model = ctx?.model ?? opts.model;
+  const apiKey = ctx?.apiKey ?? opts.apiKey;
+  const envOverrides: Record<string, string> = ctx ? { ...ctx.env } : {};
+  if (apiKey) {
+    envOverrides.ANTHROPIC_API_KEY = apiKey;
+    envOverrides.OPENAI_API_KEY = apiKey;
+    envOverrides.OPENROUTER_API_KEY = apiKey;
+    envOverrides.CODEX_API_KEY = apiKey;
+    envOverrides.CURSOR_API_KEY = apiKey;
+  }
+  return { model, apiKey, envOverrides };
 }
 
 // ── Re-exports from engine implementations ───────────────

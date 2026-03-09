@@ -4,6 +4,7 @@ import { join, basename, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
+import { resolveInvokeEnv } from '../engine.js';
 import { isOnPath } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
@@ -149,6 +150,8 @@ export class ClaudeCodeEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
     await injectClaudeSkills(opts.workspace, opts.skillPaths);
 
+    const { model, envOverrides } = resolveInvokeEnv(opts);
+
     const claudeBin = findClaudeBin();
     const args = [
       '-p', prompt,
@@ -166,13 +169,13 @@ export class ClaudeCodeEngine implements AgentEngine {
       }
     }
     if (opts.sessionId) args.push('--resume', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
+    if (model) args.push('--model', model);
 
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
+      ...envOverrides,
       PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
     };
-    if (opts.apiKey) env.ANTHROPIC_API_KEY = opts.apiKey;
     // Allow spawning Claude Code from within a Claude Code session
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;

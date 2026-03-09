@@ -2,6 +2,7 @@ import { symlink, readdir, mkdir, lstat, unlink, readFile, writeFile } from 'nod
 import { join, basename, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
+import { resolveInvokeEnv } from '../engine.js';
 import { isOnPath } from './shared.js';
 
 // ── Provider env resolution ──────────────────────────────
@@ -190,16 +191,21 @@ function findOpenCodeBin(): string {
 
 export class OpenCodeEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    const { model, apiKey, envOverrides } = resolveInvokeEnv(opts);
+
     await injectOpenCodeSkills(opts.workspace, opts.skillPaths);
-    await ensureOpenCodeConfig(opts.workspace, opts.model);
+    await ensureOpenCodeConfig(opts.workspace, model);
 
     const bin = findOpenCodeBin();
     const args = ['run', prompt, '--format', 'json'];
     if (opts.sessionId) args.push('--session', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
+    if (model) args.push('--model', model);
 
-    const env: Record<string, string> = { ...process.env as Record<string, string> };
-    Object.assign(env, resolveOpenCodeEnv(opts.model, opts.apiKey));
+    const env: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      ...resolveOpenCodeEnv(model, apiKey),
+      ...envOverrides,
+    };
 
     const child = spawn(bin, args, {
       cwd: opts.workspace,

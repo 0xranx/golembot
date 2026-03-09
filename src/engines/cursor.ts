@@ -4,6 +4,7 @@ import { join, basename, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
+import { resolveInvokeEnv } from '../engine.js';
 import { stripAnsi, isOnPath } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
@@ -137,6 +138,8 @@ function findAgentBin(): string {
 
 export class CursorEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    const { model, envOverrides } = resolveInvokeEnv(opts);
+
     await injectSkills(opts.workspace, opts.skillPaths);
 
     const agentBin = findAgentBin();
@@ -151,14 +154,16 @@ export class CursorEngine implements AgentEngine {
       '--workspace', opts.workspace,
     ];
     if (opts.sessionId) args.push('--resume', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
-    if (opts.apiKey) args.push('--api-key', opts.apiKey);
+    if (model) args.push('--model', model);
+    if (envOverrides.CURSOR_API_KEY ?? opts.apiKey) {
+      args.push('--api-key', envOverrides.CURSOR_API_KEY ?? opts.apiKey ?? '');
+    }
 
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
+      ...envOverrides,
       PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
     };
-    if (opts.apiKey) env.CURSOR_API_KEY = opts.apiKey;
 
     const child = spawn(agentBin, args, {
       cwd: opts.workspace,

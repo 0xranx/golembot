@@ -3,6 +3,7 @@ import { ensureReady, initWorkspace, type GolemConfig, type SkillInfo } from './
 import { existsSync } from 'node:fs';
 import { loadSession, saveSession, clearSession, pruneExpiredSessions, appendHistory, getHistoryPath } from './session.js';
 import { createEngine, type StreamEvent, type AgentEngine } from './engine.js';
+import { ProviderStore, ProviderBroker } from './provider.js';
 
 export type { StreamEvent } from './engine.js';
 export type { GolemConfig, SkillInfo, ChannelsConfig, GatewayConfig, FeishuChannelConfig, DingtalkChannelConfig, WecomChannelConfig, SlackChannelConfig, TelegramChannelConfig, DiscordChannelConfig } from './workspace.js';
@@ -118,8 +119,16 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
   ): AsyncIterable<StreamEvent> {
     const { config, skills } = await ensureReady(dir);
 
-    const engineType = engineOverride || config.engine;
-    const model = modelOverride || config.model;
+    const store = new ProviderStore(dir);
+    const broker = new ProviderBroker(dir, store, {
+      engine: engineOverride || config.engine,
+      model: modelOverride || config.model,
+      apiKey,
+    });
+
+    const providerContext = await broker.resolve();
+    const engineType = providerContext?.engine ?? engineOverride ?? config.engine;
+    const model = providerContext?.model ?? modelOverride ?? config.model;
     const engine: AgentEngine = createEngine(engineType);
 
     const sessionId = await loadSession(dir, sessionKey, engineType);
@@ -163,6 +172,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     let errorMessage = '';
     let fullReply = '';
     let doneEvt: Extract<StreamEvent, { type: 'done' }> | undefined;
+    const providerId = providerContext?.providerId;
 
     try {
       for await (const event of engine.invoke(finalMessage, {
@@ -173,6 +183,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
         apiKey,
         skipPermissions: config.skipPermissions,
         signal: controller.signal,
+        providerContext: providerContext ?? undefined,
       })) {
         if (event.type === 'done') {
           if (event.sessionId) lastSessionId = event.sessionId;
@@ -203,6 +214,14 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
 
     if (lastSessionId) {
       await saveSession(dir, lastSessionId, sessionKey, engineType);
+    }
+
+    if (providerId && providerId !== 'fallback') {
+      if (gotError) {
+        await store.recordFailure(providerId).catch(() => {});
+      } else {
+        await store.recordSuccess(providerId).catch(() => {});
+      }
     }
 
     if (gotError && sessionId && !isRetry) {

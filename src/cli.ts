@@ -624,6 +624,135 @@ skill
     await generateAgentsMd(dir, skills);
   });
 
+// ── Provider Control Plane (Issue #4) ────────────────────
+
+const provider = program
+  .command('provider')
+  .description('Manage AI providers (engine/model/API key) for failover and switching');
+
+provider
+  .command('list')
+  .description('List configured providers')
+  .option('-d, --dir <dir>', 'assistant directory', '.')
+  .option('--json', 'output JSON (agent-friendly)')
+  .action(async (opts: { dir: string; json?: boolean }) => {
+    const dir = resolve(opts.dir);
+    const { ProviderStore } = await import('./provider.js');
+    const store = new ProviderStore(dir);
+    const data = await store.read();
+
+    if (opts.json) {
+      console.log(JSON.stringify(data));
+      return;
+    }
+
+    const ids = Object.keys(data.providers);
+    if (ids.length === 0) {
+      console.log('\n(no providers configured — using golem.yaml engine/model)\n');
+      console.log('Create providers with: golembot provider init');
+      return;
+    }
+
+    console.log(`\nProviders (strategy: ${data.strategy ?? 'single'}):\n`);
+    for (const id of ids) {
+      const p = data.providers[id];
+      const cur = data.currentProviderId === id ? ' *' : '';
+      const health = p.health ? ` [${p.health}]` : '';
+      console.log(`  ${id}${cur}${health}`);
+      console.log(`    engine: ${p.engine}  model: ${p.model ?? '(default)'}`);
+    }
+    console.log();
+  });
+
+provider
+  .command('init')
+  .description('Create providers.json from golem.yaml (adds current engine/model as first provider)')
+  .option('-d, --dir <dir>', 'assistant directory', '.')
+  .action(async (opts: { dir: string }) => {
+    const dir = resolve(opts.dir);
+    const { loadConfig } = await import('./workspace.js');
+    const { ProviderStore } = await import('./provider.js');
+
+    const config = await loadConfig(dir);
+    const store = new ProviderStore(dir);
+    const existing = await store.read();
+
+    if (Object.keys(existing.providers).length > 0) {
+      console.log('providers.json already has providers. Use provider add to add more.');
+      return;
+    }
+
+    const defaultId = 'primary';
+    await store.write({
+      currentProviderId: defaultId,
+      strategy: 'single',
+      providers: {
+        [defaultId]: {
+          id: defaultId,
+          engine: config.engine,
+          model: config.model,
+          apiKey: '${ANTHROPIC_API_KEY}', // placeholder; user can override
+          priority: 0,
+        },
+      },
+    });
+
+    console.log(`\n✅ Created .golem/providers.json with provider "${defaultId}"`);
+    console.log(`   engine: ${config.engine}  model: ${config.model ?? '(default)'}`);
+    console.log('\nEdit .golem/providers.json to add more providers or set apiKey.\n');
+  });
+
+provider
+  .command('add <id>')
+  .description('Add a provider')
+  .requiredOption('-e, --engine <engine>', 'engine (cursor | claude-code | opencode | codex)')
+  .option('-m, --model <model>', 'model string')
+  .option('--api-key <key>', 'API key or ${ENV_VAR}')
+  .option('-p, --priority <n>', 'failover priority (lower = first)', '0')
+  .option('-d, --dir <dir>', 'assistant directory', '.')
+  .action(async (id: string, opts: { engine: string; model?: string; apiKey?: string; priority: string; dir: string }) => {
+    const dir = resolve(opts.dir);
+    const { ProviderStore } = await import('./provider.js');
+    const store = new ProviderStore(dir);
+    const data = await store.read();
+
+    if (data.providers[id]) {
+      console.error(`❌ Provider "${id}" already exists`);
+      process.exit(1);
+    }
+
+    data.providers[id] = {
+      id,
+      engine: opts.engine,
+      model: opts.model,
+      apiKey: opts.apiKey,
+      priority: Number(opts.priority),
+    };
+    if (!data.currentProviderId) data.currentProviderId = id;
+    await store.write(data);
+    console.log(`✅ Added provider "${id}" (${opts.engine}${opts.model ? ` / ${opts.model}` : ''})`);
+  });
+
+provider
+  .command('set-current <id>')
+  .description('Set the current provider (for single strategy)')
+  .option('-d, --dir <dir>', 'assistant directory', '.')
+  .action(async (id: string, opts: { dir: string }) => {
+    const dir = resolve(opts.dir);
+    const { ProviderStore } = await import('./provider.js');
+    const store = new ProviderStore(dir);
+    const data = await store.read();
+
+    if (!data.providers[id]) {
+      console.error(`❌ Provider "${id}" not found`);
+      process.exit(1);
+    }
+
+    data.currentProviderId = id;
+    await store.write(data);
+    console.log(`✅ Current provider set to "${id}"`);
+  });
+
 const fleet = program
   .command('fleet')
   .description('Manage and view all running GolemBot instances');

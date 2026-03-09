@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readdir, lstat, unlink, symlink } from 'node:fs/promises';
 import { join, basename, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
+import { resolveInvokeEnv } from '../engine.js';
 import { stripAnsi, isOnPath } from './shared.js';
 
 // ── NDJSON event parsing ─────────────────────────────────
@@ -145,6 +146,8 @@ function findCodexBin(): string {
 
 export class CodexEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    const { model, envOverrides } = resolveInvokeEnv(opts);
+
     await injectCodexSkills(opts.workspace, opts.skillPaths);
 
     const bin = findCodexBin();
@@ -153,18 +156,15 @@ export class CodexEngine implements AgentEngine {
     //   resume      : codex exec resume [flags] [--model X] <session_id> <prompt>
     // Flags must follow the subcommand they belong to; `resume` has its own flag set.
     const sharedFlags = ['--json', '--full-auto', '--skip-git-repo-check'];
-    const modelFlag = opts.model ? ['--model', opts.model] : [];
+    const modelFlag = model ? ['--model', model] : [];
     const args = opts.sessionId
       ? ['exec', 'resume', ...sharedFlags, ...modelFlag, opts.sessionId, prompt]
       : ['exec', ...sharedFlags, ...modelFlag, prompt];
 
-    const env: Record<string, string> = { ...process.env as Record<string, string> };
-    if (opts.apiKey) {
-      // CODEX_API_KEY is the primary env var per official CI docs;
-      // also set OPENAI_API_KEY for backward compatibility with older CLI versions.
-      env.CODEX_API_KEY = opts.apiKey;
-      env.OPENAI_API_KEY = opts.apiKey;
-    }
+    const env: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      ...envOverrides,
+    };
 
     const child = spawn(bin, args, {
       cwd: opts.workspace,
