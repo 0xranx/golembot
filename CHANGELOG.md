@@ -1,3 +1,16 @@
+# [0.18.0-beta.4](https://github.com/0xranx/golembot/compare/v0.18.0-beta.3...v0.18.0-beta.4) (2026-03-09)
+
+
+### Bug Fixes
+
+* reset model when switching engines and fix patchConfig safety ([5e51c00](https://github.com/0xranx/golembot/commit/5e51c000e21c55a209db28ffc0a7b1962bf98c18))
+
+
+### Features
+
+* add /model list command with real-time model discovery ([a55a3b7](https://github.com/0xranx/golembot/commit/a55a3b7296ab74894c2d4f962d6d922e4e1562e5))
+* add unified slash commands across CLI, HTTP API, and IM gateway ([e6b9a85](https://github.com/0xranx/golembot/commit/e6b9a8528b03c95e0d3b79add9200df943c9e681))
+
 # [0.18.0-beta.3](https://github.com/0xranx/golembot/compare/v0.18.0-beta.2...v0.18.0-beta.3) (2026-03-09)
 
 
