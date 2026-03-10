@@ -1,5 +1,8 @@
 // ── Core types ───────────────────────────────────────────
 
+import type { ProviderContext } from './provider.js';
+export type { ProviderContext } from './provider.js';
+
 export type StreamEvent =
   | { type: 'text'; content: string }
   | { type: 'tool_call'; name: string; args: string }
@@ -20,6 +23,8 @@ export interface InvokeOpts {
   imagePaths?: string[];
   /** When true, the workspace has a .cursor/cli.json with granular permissions; do not pass --trust. */
   hasPermissionsConfig?: boolean;
+  /** Resolved provider context from ProviderBroker. When set, takes precedence over model/apiKey. */
+  providerContext?: ProviderContext;
 }
 
 export interface ListModelsOpts {

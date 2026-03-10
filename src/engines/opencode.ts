@@ -190,16 +190,20 @@ function findOpenCodeBin(): string {
 
 export class OpenCodeEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    const ctx = opts.providerContext;
+    const model = ctx?.model ?? opts.model;
+    const apiKey = ctx?.apiKey ?? opts.apiKey;
+
     await injectOpenCodeSkills(opts.workspace, opts.skillPaths);
-    await ensureOpenCodeConfig(opts.workspace, opts.model);
+    await ensureOpenCodeConfig(opts.workspace, model);
 
     const bin = findOpenCodeBin();
     const args = ['run', prompt, '--format', 'json'];
     if (opts.sessionId) args.push('--session', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
+    if (model) args.push('--model', model);
 
-    const env: Record<string, string> = { ...(process.env as Record<string, string>) };
-    Object.assign(env, resolveOpenCodeEnv(opts.model, opts.apiKey));
+    const env: Record<string, string> = { ...(process.env as Record<string, string>), ...(ctx?.env ?? {}) };
+    if (!ctx) Object.assign(env, resolveOpenCodeEnv(model, apiKey));
 
     const child = spawn(bin, args, {
       cwd: opts.workspace,

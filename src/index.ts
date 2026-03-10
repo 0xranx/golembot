@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { ImageAttachment } from './channel.js';
 import { type AgentEngine, createEngine, type StreamEvent } from './engine.js';
+import { ProviderBroker, ProviderStore } from './provider.js';
 import {
   appendHistory,
   clearSession,
@@ -173,6 +174,9 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
   let modelOverride = opts.model;
   const apiKey = opts.apiKey;
 
+  // ProviderStore initialized once per assistant instance (not per chat call)
+  const providerStore = new ProviderStore(dir);
+
   // Concurrency limits — resolved from opts, then config, then hardcoded defaults
   const maxConcurrentOpt = opts.maxConcurrent;
   const maxQueuePerSessionOpt = opts.maxQueuePerSession;
@@ -192,8 +196,15 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
   ): AsyncIterable<StreamEvent> {
     const { config, skills } = await ensureReady(dir);
 
-    const engineType = engineOverride || config.engine;
-    const model = modelOverride || config.model;
+    const broker = new ProviderBroker(providerStore, {
+      engine: engineOverride ?? config.engine,
+      model: modelOverride ?? config.model,
+      apiKey,
+    });
+    const providerContext = await broker.resolve();
+
+    const engineType = providerContext?.engine ?? engineOverride ?? config.engine;
+    const model = providerContext?.model ?? modelOverride ?? config.model;
     const engine: AgentEngine = createEngine(engineType);
 
     const sessionId = await loadSession(dir, sessionKey, engineType);
@@ -271,6 +282,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
         signal: controller.signal,
         imagePaths: imagePaths.length > 0 ? imagePaths : undefined,
         hasPermissionsConfig: !!config.permissions,
+        providerContext: providerContext ?? undefined,
       })) {
         if (event.type === 'done') {
           if (event.sessionId) lastSessionId = event.sessionId;
@@ -305,6 +317,15 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
 
     if (lastSessionId) {
       await saveSession(dir, lastSessionId, sessionKey, engineType);
+    }
+
+    // Update provider health after each chat call
+    if (providerContext && providerContext.providerId !== 'fallback') {
+      if (gotError) {
+        await providerStore.recordFailure(providerContext.providerId).catch(() => {});
+      } else {
+        await providerStore.recordSuccess(providerContext.providerId).catch(() => {});
+      }
     }
 
     if (gotError && sessionId && !isRetry) {

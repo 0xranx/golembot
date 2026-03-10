@@ -151,18 +151,22 @@ export class CodexEngine implements AgentEngine {
     //   new session : codex exec        [flags] [--model X] <prompt>
     //   resume      : codex exec resume [flags] [--model X] <session_id> <prompt>
     // Flags must follow the subcommand they belong to; `resume` has its own flag set.
+    const ctx = opts.providerContext;
+    const model = ctx?.model ?? opts.model;
+    const apiKey = ctx?.apiKey ?? opts.apiKey;
+
     const sharedFlags = ['--json', '--full-auto', '--skip-git-repo-check'];
-    const modelFlag = opts.model ? ['--model', opts.model] : [];
+    const modelFlag = model ? ['--model', model] : [];
     const args = opts.sessionId
       ? ['exec', 'resume', ...sharedFlags, ...modelFlag, opts.sessionId, prompt]
       : ['exec', ...sharedFlags, ...modelFlag, prompt];
 
-    const env: Record<string, string> = { ...(process.env as Record<string, string>) };
-    if (opts.apiKey) {
+    const env: Record<string, string> = { ...(process.env as Record<string, string>), ...(ctx?.env ?? {}) };
+    if (!ctx && apiKey) {
       // CODEX_API_KEY is the primary env var per official CI docs;
       // also set OPENAI_API_KEY for backward compatibility with older CLI versions.
-      env.CODEX_API_KEY = opts.apiKey;
-      env.OPENAI_API_KEY = opts.apiKey;
+      env.CODEX_API_KEY = apiKey;
+      env.OPENAI_API_KEY = apiKey;
     }
 
     const child = spawn(bin, args, {

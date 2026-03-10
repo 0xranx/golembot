@@ -159,15 +159,20 @@ export class CursorEngine implements AgentEngine {
     if (!opts.hasPermissionsConfig) {
       args.push('--trust');
     }
+    const ctx = opts.providerContext;
+    const model = ctx?.model ?? opts.model;
+    const apiKey = ctx?.apiKey ?? opts.apiKey;
+
     if (opts.sessionId) args.push('--resume', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
-    if (opts.apiKey) args.push('--api-key', opts.apiKey);
+    if (model) args.push('--model', model);
+    if (apiKey) args.push('--api-key', apiKey);
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
+      ...(ctx?.env ?? {}),
       PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
     };
-    if (opts.apiKey) env.CURSOR_API_KEY = opts.apiKey;
+    if (!ctx && apiKey) env.CURSOR_API_KEY = apiKey;
 
     const child = spawn(agentBin, args, {
       cwd: opts.workspace,

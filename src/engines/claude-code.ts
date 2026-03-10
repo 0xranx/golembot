@@ -164,14 +164,19 @@ export class ClaudeCodeEngine implements AgentEngine {
         );
       }
     }
+    const ctx = opts.providerContext;
+    const model = ctx?.model ?? opts.model;
+    const apiKey = ctx?.apiKey ?? opts.apiKey;
+
     if (opts.sessionId) args.push('--resume', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
+    if (model) args.push('--model', model);
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
+      ...(ctx?.env ?? {}),
       PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
     };
-    if (opts.apiKey) env.ANTHROPIC_API_KEY = opts.apiKey;
+    if (!ctx && apiKey) env.ANTHROPIC_API_KEY = apiKey;
     // Allow spawning Claude Code from within a Claude Code session
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
