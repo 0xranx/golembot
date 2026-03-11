@@ -148,6 +148,80 @@ export class DiscordAdapter implements ChannelAdapter {
     await raw.channel?.sendTyping?.().catch(() => {});
   }
 
+  async fetchHistory(chatId: string, since: Date, limit = 50): Promise<ChannelMessage[]> {
+    if (!this.client) return [];
+    const messages: ChannelMessage[] = [];
+
+    try {
+      const channel = await this.client.channels.fetch(chatId);
+      if (!channel?.isTextBased?.()) return [];
+
+      // Discord: fetch messages after `since` using snowflake comparison
+      // Convert Date to Discord snowflake: (timestamp - DISCORD_EPOCH) << 22
+      const DISCORD_EPOCH = 1420070400000n;
+      const afterSnowflake = String((BigInt(since.getTime()) - DISCORD_EPOCH) << 22n);
+
+      const fetched = await channel.messages.fetch({ after: afterSnowflake, limit });
+
+      // Discord returns newest first in Collection; convert to array and reverse
+      const sorted = [...fetched.values()].reverse();
+
+      for (const msg of sorted) {
+        if (msg.author.bot) continue;
+        if (!msg.content) continue;
+
+        messages.push({
+          channelType: 'discord',
+          senderId: msg.author.id,
+          senderName: msg.author.username,
+          chatId,
+          chatType: 'group',
+          text: msg.content,
+          messageId: msg.id,
+          raw: msg,
+        });
+      }
+    } catch (e) {
+      console.error(`[discord] fetchHistory error:`, (e as Error).message);
+    }
+
+    return messages;
+  }
+
+  async listChats(): Promise<Array<{ chatId: string; chatType: 'dm' | 'group' }>> {
+    if (!this.client) return [];
+    const chats: Array<{ chatId: string; chatType: 'dm' | 'group' }> = [];
+
+    try {
+      // List guild text channels
+      for (const [, guild] of this.client.guilds.cache) {
+        const channels = await guild.channels.fetch();
+        for (const [, channel] of channels) {
+          if (channel?.isTextBased?.() && !channel.isVoiceBased?.()) {
+            chats.push({ chatId: channel.id, chatType: 'group' });
+          }
+        }
+      }
+
+      // List open DM channels via REST API
+      try {
+        const dmChannels = (await this.client.rest.get('/users/@me/channels')) as any[];
+        for (const ch of dmChannels) {
+          if (ch.type === 1) {
+            // type 1 = DM; use the real channel ID (fetchHistory needs it)
+            chats.push({ chatId: ch.id, chatType: 'dm' });
+          }
+        }
+      } catch {
+        // DM channel listing is best-effort
+      }
+    } catch (e) {
+      console.error(`[discord] listChats error:`, (e as Error).message);
+    }
+
+    return chats;
+  }
+
   async stop(): Promise<void> {
     this.client?.destroy();
     this.client = null;

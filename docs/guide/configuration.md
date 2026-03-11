@@ -62,6 +62,17 @@ tasks:
       channel: feishu
       chatId: "oc_xxxxx"
 
+# Optional: persistent message queue (crash-safe, sequential processing)
+inbox:
+  enabled: true
+  retentionDays: 7             # days to keep completed entries (default: 7)
+
+# Optional: catch up on missed messages after restart
+historyFetch:
+  enabled: true
+  pollIntervalMinutes: 15      # periodic poll interval (default: 15)
+  initialLookbackMinutes: 60   # first-run lookback window (default: 60)
+
 # Optional: IM channel configuration
 channels:
   feishu:
@@ -109,6 +120,8 @@ gateway:
 | `streaming` | `object` | — | Streaming message delivery for IM channels |
 | `tasks` | `array` | — | Scheduled tasks — see [`tasks`](#tasks) section |
 | `channels` | `object` | — | IM channel configurations |
+| `inbox` | `object` | — | Persistent message queue — see [`inbox`](#inbox) section |
+| `historyFetch` | `object` | — | History fetch for missed messages — see [`historyFetch`](#historyfetch) section |
 | `gateway` | `object` | — | Gateway service settings |
 
 ### `permissions`
@@ -180,27 +193,7 @@ Configure one or more IM platforms. Only configured channels are started by the 
 
 ### `groupChat`
 
-Controls how the bot participates in group chats across all channels.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `groupPolicy` | `string` | `mention-only` | Response policy — see below |
-| `historyLimit` | `number` | `20` | Recent messages to inject as context |
-| `maxTurns` | `number` | `10` | Max consecutive bot replies per group (safety valve) |
-
-**`groupPolicy` values:**
-
-| Value | Agent called | Replies when | Use case |
-|-------|-------------|-------------|---------|
-| `mention-only` | Only on @mention | Only when @mentioned | Low noise, lowest cost |
-| `smart` | Every message | Agent decides (outputs `[PASS]` to stay silent) | Bot observes all and builds memory continuously |
-| `always` | Every message | Every message | High-interaction small groups |
-
-::: tip Smart mode and group memory
-In `smart` mode the agent runs on every group message — even when it stays silent by outputting `[PASS]`. This means the agent can read and update its group memory file (`memory/groups/<group>.md`) continuously, giving it full context of the conversation at all times.
-
-In `mention-only` mode the agent only runs when @mentioned, so memory is only updated at those moments.
-:::
+Controls how the bot participates in group chats — response policies, @mention handling, quote reply, and group memory.
 
 ```yaml
 groupChat:
@@ -208,6 +201,8 @@ groupChat:
   historyLimit: 30       # inject last 30 messages as context (default: 20)
   maxTurns: 5            # stop after 5 consecutive bot replies (default: 10)
 ```
+
+See [Group Chat](/guide/group-chat) for full details on policies, mention handling, quote reply, and group memory.
 
 ### `tasks`
 
@@ -231,9 +226,7 @@ See [Scheduled Tasks](/guide/scheduled-tasks) for full configuration reference, 
 
 ### Conversation History
 
-GolemBot automatically records conversations to `.golem/history/{sessionKey}.jsonl` and restores context when sessions are lost (engine switch, expiry, or resume failure). No configuration needed.
-
-See [Memory](/guide/memory) for the full details on conversation history, personal memory (`notes.md`), and group memory.
+GolemBot automatically records conversations and restores context when sessions are lost. No configuration needed. See [Memory](/guide/memory) for details.
 
 ### `gateway`
 
@@ -242,6 +235,29 @@ See [Memory](/guide/memory) for the full details on conversation history, person
 | `port` | `number` | `3000` | HTTP service port |
 | `host` | `string` | `127.0.0.1` | Bind address |
 | `token` | `string` | — | Bearer token for HTTP API authentication |
+
+### `inbox`
+
+Persistent message queue — messages survive crashes and are consumed sequentially.
+
+```yaml
+inbox:
+  enabled: true          # default: false
+  retentionDays: 7       # days to keep completed entries
+```
+
+### `historyFetch`
+
+Catch up on missed messages after restart with intelligent triage.
+
+```yaml
+historyFetch:
+  enabled: true
+  pollIntervalMinutes: 15
+  initialLookbackMinutes: 60
+```
+
+See [Inbox & History Fetch](/guide/inbox) for full details on crash recovery, smart triage, platform support, and deduplication.
 
 ## Environment Variable Placeholders
 
@@ -280,7 +296,7 @@ The `model` value format is different for each engine:
 
 See the individual engine pages for full model tables and runtime override syntax.
 
-## Full Example with Group Chat
+## Full Example
 
 ```yaml
 name: my-bot
@@ -291,14 +307,19 @@ groupChat:
   historyLimit: 30
   maxTurns: 5
 
+inbox:
+  enabled: true
+  retentionDays: 7
+
+historyFetch:
+  enabled: true
+  pollIntervalMinutes: 15
+  initialLookbackMinutes: 60
+
 channels:
   slack:
     botToken: ${SLACK_BOT_TOKEN}
     appToken: ${SLACK_APP_TOKEN}
-  # Custom adapter example:
-  my-platform:
-    _adapter: ./adapters/my-platform.mjs
-    apiKey: ${MY_PLATFORM_API_KEY}
 
 gateway:
   port: 3000
@@ -360,6 +381,15 @@ interface GolemConfig {
     discord?: { botToken: string; botName?: string };
     // Custom adapter: any key with _adapter field
     [key: string]: { _adapter: string; [k: string]: unknown } | undefined;
+  };
+  inbox?: {
+    enabled?: boolean;           // default: false
+    retentionDays?: number;      // default: 7
+  };
+  historyFetch?: {
+    enabled?: boolean;           // default: false
+    pollIntervalMinutes?: number;    // default: 15
+    initialLookbackMinutes?: number; // default: 60
   };
   gateway?: {
     port?: number;

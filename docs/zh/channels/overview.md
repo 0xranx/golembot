@@ -57,149 +57,30 @@ GolemBot 自动将标准 Markdown 转换为各平台的原生格式：
 
 AI agent 被鼓励使用标准 Markdown 语法（标题、列表、加粗、代码块等），各适配器自动处理平台特定的格式转换。
 
-## 会话路由
+## 群聊、Mention 与引用回复
 
-**私聊消息**使用 per-user key：`${channelType}:${chatId}:${senderId}` — 每个用户拥有独立的对话上下文。Gateway 会注入上下文让 bot 知道自己在私聊中、对方是谁。
+GolemBot 支持群聊响应策略（mention-only / smart / always）、入站和出站 @mention 解析，以及支持平台的引用回复。
 
-**群消息**使用 group-scoped key：`${channelType}:${chatId}` — 同一个群里的所有用户共享一个 session，agent 能看到完整的群对话上下文，包括最近的消息历史。
+详见[群聊](/zh/guide/group-chat)。
 
-## 群聊行为
+## 消息队列与离线追回
 
-通过 `golem.yaml` 中的 `groupChat` 字段配置 bot 在群聊中的响应策略：
+开启后，消息持久化入队，Bot 重启后通过智能分诊追回离线消息。
 
-```yaml
-groupChat:
-  groupPolicy: mention-only   # mention-only（默认）| smart | always
-  historyLimit: 20            # 注入最近多少条消息作为上下文
-  maxTurns: 10                # 最大连续 bot 回复次数（安全阀）
-```
-
-| 策略 | Agent 调用时机 | Bot 何时回复 |
-|------|--------------|------------|
-| `mention-only` | 仅被 @mention 时 | 仅被 @mention 时（零成本跳过） |
-| `smart` | 所有群消息 | Agent 自己决定（输出 `[PASS]` 保持沉默） |
-| `always` | 所有群消息 | 每条消息都回复 |
-
-详见[配置说明](/zh/guide/configuration#groupchat)。
-
-## Mention 处理
-
-### 入站 @mention
-
-GolemBot 在将消息传给 agent 前会自动去除 @mention 标记，兼容飞书 XML 格式（`<at user_id="xxx">BotName</at>`）和纯文本格式（`@BotName`）。
-
-Mention 检测支持词边界——`@mybot` 不会误触发 `@mybotplus`。
-
-### 出站 @mention
-
-当 AI 回复中包含 `@名字` 且匹配已知群成员时，Gateway 自动将其转换为平台原生 mention。这需要 Adapter 实现可选的 `getGroupMembers()` 方法。
-
-目前支持：
-- **飞书** — 通过 API 自动获取群成员，转换为卡片 v2 消息中的原生 `<at>` 标签。需要 `im:chat:readonly` 权限。
-- **Slack** — 通过 `conversations.members` 获取频道成员，将 `@名字` 转换为原生 `<@USER_ID>` mention。
-- **Discord** — 获取服务器成员列表，将 `@名字` 转换为原生 `<@USER_ID>` mention。需要在 Discord Developer Portal 中启用 **Server Members Intent**（特权 Intent）。
-
-未实现 `getGroupMembers()` 的 Adapter（钉钉、企微、Telegram），`@名字` 将作为纯文本发送。
-
-## 引用回复
-
-当用户发送消息时，Bot 会以 **引用回复**（引用原始消息）的形式回复，而不是发送一条独立消息。这让群聊中的对话关系更加清晰。
-
-| 通道 | 引用回复 | 机制 |
-|------|:-------:|------|
-| **飞书** | ✅ | `im.v1.message.reply`（原生引用） |
-| **Telegram** | ✅ | `reply_to_message_id` 参数 |
-| **Slack** | ✅ | 通过 `thread_ts` 线程回复 |
-| **Discord** | ✅ | 原生 `message.reply()`（已支持） |
-| **钉钉** | ❌ | Webhook 模式不支持引用回复 |
-| **企微** | ❌ | API 不支持引用回复 |
-
-无需配置 — 支持的通道会自动启用引用回复。
+详见[消息队列与离线追回](/zh/guide/inbox)，了解完整指南和平台支持表。
 
 ## 自定义 Adapter
 
-通过编写一个简单的 Adapter 类并在 `golem.yaml` 中用 `_adapter` 引用，可以接入任意平台：内部工具、自建 bot、或尚未内置的 IM 平台。
-
-### Adapter 接口
-
-```typescript
-interface ChannelAdapter {
-  readonly name: string;
-  readonly maxMessageLength?: number;  // 可选，覆盖默认的 4000 字符限制
-  start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
-  reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
-  stop(): Promise<void>;
-  typing?(msg: ChannelMessage): Promise<void>;           // 可选，发送"正在输入…"指示器
-  getGroupMembers?(chatId: string): Promise<Map<string, string>>;  // 可选，用于 @mention
-}
-```
-
-### 编写自定义 Adapter
-
-```js
-// adapters/my-platform.mjs
-export default class MyPlatformAdapter {
-  constructor(config) {
-    this.name = config.channelName ?? 'my-platform';
-    this.token = config.token;
-  }
-
-  async start(onMessage) {
-    this._client = new MyPlatformClient(this.token);
-    this._client.on('message', (raw) => {
-      onMessage({
-        channelType: 'my-platform',
-        senderId: raw.userId,
-        senderName: raw.userName,
-        chatId: raw.roomId,
-        chatType: raw.isGroup ? 'group' : 'dm',
-        text: raw.content,
-        raw,
-      });
-    });
-  }
-
-  async reply(originalMsg, text) {
-    await this._client.send(originalMsg.chatId, text);
-  }
-
-  async stop() {
-    await this._client.disconnect();
-  }
-
-  // 可选：在 AI 处理期间显示"正在输入…"指示器
-  async typing(originalMsg) {
-    await this._client.sendTyping(originalMsg.chatId).catch(() => {});
-  }
-}
-```
-
-### 在 golem.yaml 中注册
-
-```yaml
-channels:
-  my-platform:                              # 任意 key
-    _adapter: ./adapters/my-platform.mjs   # 相对路径或 npm 包名
-    channelName: my-platform               # 构造函数 config 参数
-    token: ${MY_PLATFORM_TOKEN}            # 其他字段也会传入 config
-```
-
-**路径解析规则：**
-- 以 `./` 或 `/` 开头的路径相对于 `golem.yaml` 所在目录解析
-- 其他值视为 npm 包名直接 import
-
-Adapter 类必须作为模块的 **default export**。
-
-### npm 包形式的 Adapter
-
-也可以将 Adapter 发布为 npm 包，通过包名引用：
+通过编写 Adapter 类并在 `golem.yaml` 中用 `_adapter` 引用，可以接入任意平台：
 
 ```yaml
 channels:
   my-platform:
-    _adapter: golembot-adapter-myplatform
-    token: ${TOKEN}
+    _adapter: ./adapters/my-platform.mjs   # 或 npm 包名
+    token: ${MY_PLATFORM_TOKEN}
 ```
+
+详见 [Channel Adapter API](/zh/api/channel-adapter)，了解完整接口、实现指南和示例。
 
 ## 图片支持（多模态）
 

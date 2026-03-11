@@ -36,6 +36,12 @@ interface ChannelAdapter {
   send?(chatId: string, text: string): Promise<void>;
   /** Whether this adapter supports proactive send(). Defaults to true if send() is defined. */
   readonly canSend?: boolean;
+  /** Optional: fetch messages after `since` for history catch-up.
+   *  Used by the history fetcher to retrieve missed messages after a restart. */
+  fetchHistory?(chatId: string, since: Date, limit?: number): Promise<ChannelMessage[]>;
+  /** Optional: list all chats the bot has joined.
+   *  Used by the history fetcher to discover which chats to poll. */
+  listChats?(): Promise<Array<{ chatId: string; chatType: 'dm' | 'group' }>>;
 }
 ```
 
@@ -50,6 +56,21 @@ interface ChannelAdapter {
 | `getGroupMembers(chatId)` | *(optional)* Return a `Map<displayName, platformId>` of group members. The gateway calls this when an AI reply contains `@name` patterns to resolve them into native mentions. Implementations should cache results for performance. |
 | `send(chatId, text)` | *(optional)* Proactively send a message to a chat without an incoming message context. Used by the scheduled task system (`/cron`) to push task results to IM channels. |
 | `canSend` | *(optional, read-only)* Whether the adapter supports proactive `send()`. Defaults to `true` if `send()` is defined. |
+| `fetchHistory(chatId, since, limit?)` | *(optional)* Fetch messages posted after `since` in the given chat. Used by the [history fetcher](/guide/configuration#historyfetch) to catch up on missed messages after a restart. Returns an array of `ChannelMessage` objects in chronological order. |
+| `listChats()` | *(optional)* List all chats the bot has joined. Used by the history fetcher to discover which chats to poll. Returns `{ chatId, chatType }` pairs. |
+
+### History Fetch Support
+
+| Adapter | `fetchHistory` | `listChats` | Notes |
+|---------|:-:|:-:|-------|
+| Feishu | ✅ | ✅ | `im.v1.message.list` + `im.v1.chat.list` |
+| Slack | ✅ | ✅ | `conversations.history` + `conversations.list` |
+| Discord | ✅ | ✅ | `channel.messages.fetch` + `guilds.cache` |
+| Telegram | ❌ | ❌ | Bot API has no history endpoint |
+| DingTalk | ❌ | ❌ | Not implemented |
+| WeCom | ❌ | ❌ | Not implemented |
+
+Adapters without these methods are silently skipped by the history fetcher.
 
 ## ReadReceipt Type
 

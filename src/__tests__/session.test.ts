@@ -7,8 +7,10 @@ import {
   clearSession,
   countSessions,
   getHistoryPath,
+  listHistoryFiles,
   loadSession,
   pruneExpiredSessions,
+  readHistory,
   saveSession,
 } from '../session.js';
 
@@ -255,6 +257,46 @@ describe('session', () => {
       expect(await countSessions(dir)).toBe(2);
       await clearSession(dir, 'user:a');
       expect(await countSessions(dir)).toBe(1);
+    });
+  });
+
+  describe('listHistoryFiles', () => {
+    it('returns empty array when no history', async () => {
+      expect(await listHistoryFiles(dir)).toEqual([]);
+    });
+
+    it('lists session keys from history files', async () => {
+      await appendHistory(dir, { ts: new Date().toISOString(), sessionKey: 'user:alice', role: 'user', content: 'hi' });
+      await appendHistory(dir, { ts: new Date().toISOString(), sessionKey: 'user:bob', role: 'user', content: 'hello' });
+      const keys = await listHistoryFiles(dir);
+      expect(keys).toContain('user:alice');
+      expect(keys).toContain('user:bob');
+      expect(keys.length).toBe(2);
+    });
+  });
+
+  describe('readHistory', () => {
+    it('returns empty array for non-existent session', async () => {
+      expect(await readHistory(dir, 'nonexistent')).toEqual([]);
+    });
+
+    it('reads all entries', async () => {
+      await appendHistory(dir, { ts: '2026-01-01T00:00:00Z', sessionKey: 'test', role: 'user', content: 'hello' });
+      await appendHistory(dir, { ts: '2026-01-01T00:00:01Z', sessionKey: 'test', role: 'assistant', content: 'hi back' });
+      const entries = await readHistory(dir, 'test');
+      expect(entries.length).toBe(2);
+      expect(entries[0].role).toBe('user');
+      expect(entries[1].role).toBe('assistant');
+    });
+
+    it('respects limit parameter', async () => {
+      for (let i = 0; i < 10; i++) {
+        await appendHistory(dir, { ts: `2026-01-01T00:00:${String(i).padStart(2, '0')}Z`, sessionKey: 'limited', role: 'user', content: `msg ${i}` });
+      }
+      const entries = await readHistory(dir, 'limited', 3);
+      expect(entries.length).toBe(3);
+      expect(entries[0].content).toBe('msg 7');
+      expect(entries[2].content).toBe('msg 9');
     });
   });
 });

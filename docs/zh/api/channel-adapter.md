@@ -35,6 +35,10 @@ interface ChannelAdapter {
   send?(chatId: string, text: string): Promise<void>;
   /** 该 Adapter 是否支持主动 send()。未定义时默认为 send() 存在则为 true。 */
   readonly canSend?: boolean;
+  /** 可选：拉取 since 之后的历史消息，用于重启后的离线消息追回。 */
+  fetchHistory?(chatId: string, since: Date, limit?: number): Promise<ChannelMessage[]>;
+  /** 可选：列出 Bot 加入的所有会话，用于历史抓取时发现需要轮询的会话。 */
+  listChats?(): Promise<Array<{ chatId: string; chatType: 'dm' | 'group' }>>;
 }
 ```
 
@@ -218,3 +222,16 @@ await adapter.start(async (msg) => {
 | `DiscordAdapter` | `discord` | `discord.js` |
 
 内置 Adapter 由 gateway 服务内部使用。在 `golem.yaml` 里配置对应的 channel 类型即可，无需写 `_adapter` 字段。
+
+### 历史抓取支持
+
+| Adapter | `fetchHistory` | `listChats` | 说明 |
+|---------|:-:|:-:|------|
+| Feishu | ✅ | ✅ | `im.v1.message.list` + `im.v1.chat.list` |
+| Slack | ✅ | ✅ | `conversations.history` + `conversations.list` |
+| Discord | ✅ | ✅ | `channel.messages.fetch` + `guilds.cache` |
+| Telegram | ❌ | ❌ | Bot API 无历史消息接口 |
+| DingTalk | ❌ | ❌ | 暂未实现 |
+| WeCom | ❌ | ❌ | 暂未实现 |
+
+未实现这些方法的 Adapter 会被历史抓取器静默跳过。

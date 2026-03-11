@@ -18,11 +18,12 @@
 - CLI `run` mode displays duration in gray text
 - e2e verification: `collectChat()` returns `durationMs`, assertion `durationMs >= 0`
 
-### P2: Permissions Integration
+### ~~P2: Permissions Integration~~ ✅ Completed
 
-- Allow project-level permissions configuration via `golem.yaml`
-- Automatically generate `.cursor/cli.json` during `init`
-- Valuable for CI/CD security scenarios (restricting bot's file write scope, command execution scope)
+- ~~Allow project-level permissions configuration via `golem.yaml`~~
+- ~~Automatically generate `.cursor/cli.json` during `init`~~
+- ~~Valuable for CI/CD security scenarios (restricting bot's file write scope, command execution scope)~~
+- `PermissionsConfig` type added to `golem.yaml`; `initWorkspace` generates `.cursor/cli.json`; CursorEngine conditionally omits `--trust` when permissions are set
 
 ### P3: `/compress` Long Conversation Compression
 
@@ -50,10 +51,11 @@
 
 ## CLI Layer
 
-### P2: `golembot status`
+### ~~P2: `golembot status`~~ ✅ Completed
 
-- Display current assistant status: name, engine, installed skill list, active session count
-- Quickly understand the state of an assistant directory
+- ~~Display current assistant status: name, engine, installed skill list, active session count~~
+- ~~Quickly understand the state of an assistant directory~~
+- CLI `golembot status` shows name, engine, model, skills, session count, channels, gateway, and directory; supports `--json` for machine-readable output
 
 ### P3: `golembot log`
 

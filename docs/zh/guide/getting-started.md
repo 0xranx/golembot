@@ -34,7 +34,7 @@ mkdir my-bot && cd my-bot
 golembot onboard
 ```
 
-[引导向导](/zh/guide/onboard-wizard)会带你完成引擎选择、命名、IM 通道配置和场景模板选择，共 7 个交互步骤。
+引导向导会带你完成引擎选择、鉴权、命名、IM 通道配置和场景模板选择，共 8 个交互步骤。使用 `--template <name>` 可跳过模板选择（如 `golembot onboard --template customer-support`）。
 
 ### 方式 B：手动初始化
 
@@ -117,8 +117,8 @@ for await (const event of assistant.chat('分析销售数据')) {
 
 ## 下一步
 
-- [嵌入到你的产品](/zh/guide/embed) — 库集成模式（Express、Next.js、队列任务）
 - [配置说明](/zh/guide/configuration) — 了解 `golem.yaml` 和 `${ENV_VAR}` 占位符
-- [CLI 命令](/zh/guide/cli-commands) — 完整命令参考
+- [群聊](/zh/guide/group-chat) — 响应策略、@mention、引用回复、群记忆
+- [消息队列与离线追回](/zh/guide/inbox) — 崩溃安全队列、离线消息追回
 - [引擎](/zh/engines/overview) — 对比 Cursor、Claude Code、OpenCode 和 Codex
-- [技能](/zh/skills/overview) — 扩展助手能力
+- [嵌入到你的产品](/zh/guide/embed) — 库集成模式（Express、Next.js、队列任务）

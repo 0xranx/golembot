@@ -393,6 +393,120 @@ export class FeishuAdapter implements ChannelAdapter {
     }
   }
 
+  async fetchHistory(chatId: string, since: Date, limit = 50): Promise<ChannelMessage[]> {
+    if (!this.client) return [];
+    const token = await this.client.tokenManager.getTenantAccessToken();
+    const messages: ChannelMessage[] = [];
+    let pageToken: string | undefined;
+    // Feishu expects timestamps in seconds (string)
+    const startTime = Math.floor(since.getTime() / 1000).toString();
+
+    outer: do {
+      const url = new URL('https://open.feishu.cn/open-apis/im/v1/messages');
+      url.searchParams.set('container_id_type', 'chat');
+      url.searchParams.set('container_id', chatId);
+      url.searchParams.set('start_time', startTime);
+      url.searchParams.set('sort_type', 'ByCreateTimeAsc');
+      url.searchParams.set('page_size', String(Math.min(limit, 50)));
+      if (pageToken) url.searchParams.set('page_token', pageToken);
+
+      const resp = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await resp.json()) as any;
+      if (json.code !== 0) {
+        console.error(`[feishu] fetchHistory error: ${json.code} ${json.msg}`);
+        break;
+      }
+
+      for (const item of json.data?.items ?? []) {
+        if (messages.length >= limit) break outer;
+        // Skip bot's own messages
+        if (item.sender?.sender_type === 'app') continue;
+
+        const msgType = item.msg_type;
+        if (msgType !== 'text' && msgType !== 'post') continue;
+
+        let text = '';
+        try {
+          const content = JSON.parse(item.body?.content ?? '{}');
+          if (msgType === 'text') {
+            text = content.text || '';
+          } else if (msgType === 'post') {
+            // Extract plain text from post
+            const lines: any[][] = Array.isArray(content.content) ? content.content : [];
+            const parts: string[] = [];
+            if (content.title) parts.push(content.title);
+            for (const line of lines) {
+              if (!Array.isArray(line)) continue;
+              for (const el of line) {
+                if (el.tag === 'text') parts.push(el.text || '');
+                else if (el.tag === 'a') parts.push(el.text || el.href || '');
+                else if (el.tag === 'at') parts.push(el.user_name ? `@${el.user_name}` : '');
+              }
+            }
+            text = parts.join(' ').trim();
+          }
+        } catch {
+          continue;
+        }
+
+        if (!text) continue;
+
+        const senderId = item.sender?.id;
+        const senderName = senderId ? await this.resolveUserName(senderId) : undefined;
+        const createTime = item.create_time ? new Date(Number(item.create_time)).toISOString() : undefined;
+
+        messages.push({
+          channelType: 'feishu',
+          senderId: senderId || 'unknown',
+          senderName: senderName || senderId || 'unknown',
+          chatId,
+          chatType: 'group', // history is typically from group chats
+          text,
+          messageId: item.message_id,
+          raw: { ...item, _fetchedAt: createTime },
+        });
+      }
+
+      pageToken = json.data?.has_more ? json.data?.page_token : undefined;
+    } while (pageToken);
+
+    return messages;
+  }
+
+  async listChats(): Promise<Array<{ chatId: string; chatType: 'dm' | 'group' }>> {
+    if (!this.client) return [];
+    const token = await this.client.tokenManager.getTenantAccessToken();
+    const chats: Array<{ chatId: string; chatType: 'dm' | 'group' }> = [];
+    let pageToken: string | undefined;
+
+    do {
+      const url = new URL('https://open.feishu.cn/open-apis/im/v1/chats');
+      if (pageToken) url.searchParams.set('page_token', pageToken);
+
+      const resp = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await resp.json()) as any;
+      if (json.code !== 0) {
+        console.error(`[feishu] listChats error: ${json.code} ${json.msg}`);
+        break;
+      }
+
+      for (const item of json.data?.items ?? []) {
+        chats.push({
+          chatId: item.chat_id,
+          chatType: item.chat_type === 'p2p' ? 'dm' : 'group',
+        });
+      }
+
+      pageToken = json.data?.has_more ? json.data?.page_token : undefined;
+    } while (pageToken);
+
+    return chats;
+  }
+
   async stop(): Promise<void> {
     // WSClient doesn't expose a clean close method in current SDK version;
     // setting to null allows GC to collect.

@@ -19,6 +19,8 @@ import {
   recordMessage,
 } from './dashboard.js';
 import { registerInstance, unregisterInstance } from './fleet.js';
+import { startHistoryFetcher } from './history-fetcher.js';
+import { type InboxEntry, InboxStore } from './inbox.js';
 import { type Assistant, type CommandContext, createAssistant, executeCommand, parseCommand } from './index.js';
 import { setPeerBase } from './peer-require.js';
 import { createProactiveCoordinator, type ProactiveCoordinator } from './proactive.js';
@@ -502,13 +504,14 @@ export async function handleMessage(
       // but "[PASS]" is non-empty. For smart groups, the [PASS] typically
       // arrives as a single text event and gets flushed. This is acceptable:
       // smart mode is an advanced feature, and the tradeoff is documented.
-      if (fullReply.trim() === '[PASS]') {
-        log(verbose, `[${channelType}] [PASS] — bot chose not to respond`);
+      const trimmed = fullReply.trim();
+      if (trimmed === '[PASS]' || trimmed === '[SKIP]') {
+        log(verbose, `[${channelType}] ${trimmed} — bot chose not to respond`);
         trackMetrics({ passed: true, responsePreview: '' });
         return;
       }
 
-      if (!fullReply.trim() && hasError) {
+      if (!trimmed && hasError) {
         await sendChunk('Sorry, an error occurred while processing your message. Please try again later.');
         fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
       }
@@ -533,9 +536,10 @@ export async function handleMessage(
         }
       }
 
-      // [PASS] sentinel: smart mode bot chose to stay silent
-      if (fullReply.trim() === '[PASS]') {
-        log(verbose, `[${channelType}] [PASS] — bot chose not to respond`);
+      // [PASS] / [SKIP] sentinel: bot chose to stay silent
+      const trimmedBuf = fullReply.trim();
+      if (trimmedBuf === '[PASS]' || trimmedBuf === '[SKIP]') {
+        log(verbose, `[${channelType}] ${trimmedBuf} — bot chose not to respond`);
         trackMetrics({ passed: true, responsePreview: '' });
         return;
       }
@@ -636,6 +640,90 @@ function printBanner(ctx: {
   console.log('');
 }
 
+// ── Inbox consumer loop ──────────────────────────────────────────────────────
+
+/**
+ * Convert a ChannelMessage to inbox entry fields for enqueueing.
+ */
+export function channelMsgToInbox(
+  msg: ChannelMessage,
+  sessionKey: string,
+  fullText: string,
+): Omit<InboxEntry, 'id' | 'ts' | 'status'> {
+  return {
+    sessionKey,
+    message: fullText,
+    source: msg.channelType,
+    channelMsg: {
+      channelType: msg.channelType,
+      senderId: msg.senderId,
+      senderName: msg.senderName,
+      chatId: msg.chatId,
+      chatType: msg.chatType,
+      messageId: msg.messageId,
+      mentioned: msg.mentioned,
+    },
+  };
+}
+
+/**
+ * Start a sequential inbox consumer that processes pending messages one by one.
+ * Returns a stop function.
+ */
+export function startInboxConsumer(
+  inbox: InboxStore,
+  processEntry: (entry: InboxEntry) => Promise<void>,
+  verbose: boolean,
+): { stop: () => void } {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const loop = async () => {
+    while (!stopped) {
+      try {
+        const pending = await inbox.getPending();
+        if (pending.length === 0) {
+          // Sleep 1s before checking again
+          await new Promise<void>((r) => {
+            timer = setTimeout(r, 1000);
+          });
+          continue;
+        }
+
+        for (const entry of pending) {
+          if (stopped) break;
+          log(verbose, `[inbox] processing ${entry.id} from ${entry.source} (session: ${entry.sessionKey})`);
+          await inbox.updateStatus(entry.id, 'processing');
+          try {
+            await processEntry(entry);
+            await inbox.updateStatus(entry.id, 'done');
+          } catch (e) {
+            console.error(`[inbox] Failed to process entry ${entry.id}:`, e);
+            await inbox.updateStatus(entry.id, 'failed', {
+              error: (e as Error).message,
+            });
+          }
+        }
+      } catch (e) {
+        console.error('[inbox] Consumer error:', e);
+        // Sleep before retry
+        await new Promise<void>((r) => {
+          timer = setTimeout(r, 2000);
+        });
+      }
+    }
+  };
+
+  loop();
+
+  return {
+    stop: () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    },
+  };
+}
+
 // ── Gateway startup ──────────────────────────────────────────────────────────
 
 export async function startGateway(opts: GatewayOpts): Promise<void> {
@@ -713,6 +801,11 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
   const adapterMap = new Map<string, ChannelAdapter>();
   const channels: ChannelsConfig | undefined = config.channels;
 
+  // ── Inbox (persistent message queue) ────────────────────────────────────────
+  const inboxEnabled = config.inbox?.enabled === true;
+  const inboxStore = inboxEnabled ? new InboxStore(dir) : undefined;
+  let inboxConsumer: { stop: () => void } | undefined;
+
   if (channels) {
     for (const [type, channelConfig] of Object.entries(channels)) {
       if (!channelConfig) continue;
@@ -725,19 +818,40 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
           log(verbose, `[${type}] read receipt: message ${receipt.messageId} read by ${receipt.readerId}`);
         };
 
-        await adapter.start((msg: ChannelMessage) =>
-          handleMessage(
-            msg,
-            config,
-            assistant,
-            adapter,
-            type,
-            verbose,
-            dir,
-            metrics,
-            coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined,
-          ),
-        );
+        if (inboxStore) {
+          // Inbox mode: enqueue messages for sequential consumption
+          await adapter.start((msg: ChannelMessage) => {
+            // Dedup by messageId
+            if (msg.messageId && inboxStore.has(type, msg.messageId)) {
+              log(verbose, `[${type}] duplicate message ${msg.messageId}, skipping`);
+              return;
+            }
+
+            // Build sessionKey + fullText the same way handleMessage does,
+            // but we need the ChannelMessage for reply routing, so we store the
+            // raw msg reference keyed by entry ID in a local map.
+            const sessionKey = msg.chatType === 'group' ? `${msg.channelType}:${msg.chatId}` : buildSessionKey(msg);
+
+            const entry = channelMsgToInbox(msg, sessionKey, msg.text);
+            log(verbose, `[${type}] enqueued message from ${msg.senderName || msg.senderId}`);
+            inboxStore.enqueue(entry);
+          });
+        } else {
+          // Direct mode (original behavior)
+          await adapter.start((msg: ChannelMessage) =>
+            handleMessage(
+              msg,
+              config,
+              assistant,
+              adapter,
+              type,
+              verbose,
+              dir,
+              metrics,
+              coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined,
+            ),
+          );
+        }
 
         adapters.push(adapter);
         adapterMap.set(type, adapter);
@@ -765,6 +879,120 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
     if (!channelStatuses.some((c) => c.type === type)) {
       channelStatuses.push({ type, status: 'not_configured' });
     }
+  }
+
+  // ── Start inbox consumer ───────────────────────────────────────────────────
+  if (inboxStore) {
+    // Recover any messages left in 'processing' state from a previous crash
+    const recovered = await inboxStore.getPending();
+    if (recovered.length > 0) {
+      log(verbose, `[inbox] Recovered ${recovered.length} pending message(s) from previous session`);
+    }
+
+    inboxConsumer = startInboxConsumer(
+      inboxStore,
+      async (entry) => {
+        // Reconstruct a ChannelMessage from the stored entry for handleMessage
+        const chMsg = entry.channelMsg;
+        if (!chMsg) {
+          log(verbose, `[inbox] Entry ${entry.id} has no channelMsg, skipping`);
+          return;
+        }
+
+        const adapter = adapterMap.get(chMsg.channelType);
+        if (!adapter) {
+          log(verbose, `[inbox] No adapter for ${chMsg.channelType}, skipping entry ${entry.id}`);
+          return;
+        }
+
+        const msg: ChannelMessage = {
+          channelType: chMsg.channelType,
+          senderId: chMsg.senderId,
+          senderName: chMsg.senderName,
+          chatId: chMsg.chatId,
+          chatType: chMsg.chatType,
+          messageId: chMsg.messageId,
+          text: entry.message,
+          raw: {},
+          // Restore mentioned state: use stored value, or force true for history-fetch triage
+          mentioned: entry.source === 'history-fetch' ? true : chMsg.mentioned,
+        };
+
+        // For inbox entries (especially history-fetch), the raw object is empty,
+        // so adapter.reply() may fail (e.g. Discord needs raw.reply()).
+        // Wrap adapter to fallback to send() when reply() throws.
+        const wrappedAdapter: Pick<ChannelAdapter, 'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers'> = {
+          maxMessageLength: adapter.maxMessageLength,
+          typing: adapter.typing?.bind(adapter),
+          getGroupMembers: adapter.getGroupMembers?.bind(adapter),
+          reply: async (m, text, opts) => {
+            try {
+              await adapter.reply(m, text, opts);
+            } catch {
+              // Fallback: send directly to chatId (no quote reply)
+              if (adapter.send) {
+                await adapter.send(m.chatId, text);
+              } else {
+                log(verbose, `[inbox] reply failed and no send() available for ${chMsg.channelType}`);
+              }
+            }
+          },
+        };
+
+        await handleMessage(
+          msg,
+          config,
+          assistant,
+          wrappedAdapter,
+          chMsg.channelType,
+          verbose,
+          dir,
+          metrics,
+          coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined,
+        );
+      },
+      verbose,
+    );
+    log(verbose, '[inbox] Consumer started');
+
+    // Schedule periodic compaction
+    const retentionDays = config.inbox?.retentionDays ?? 7;
+    const compactTimer = setInterval(
+      async () => {
+        const removed = await inboxStore.compact(retentionDays);
+        if (removed > 0) log(verbose, `[inbox] Compacted ${removed} old entries`);
+      },
+      6 * 60 * 60 * 1000, // every 6 hours
+    );
+    compactTimer.unref();
+  }
+
+  // ── History fetcher (offline message awareness) ─────────────────────────────
+  let historyPoller: { stop: () => void } | undefined;
+  if (inboxStore && config.historyFetch?.enabled) {
+    const fetcher = startHistoryFetcher({
+      dir,
+      adapters: adapterMap,
+      inbox: inboxStore,
+      config: config.historyFetch,
+      verbose,
+    });
+
+    // Fetch missed messages immediately on startup
+    try {
+      const count = await fetcher.fetchNow();
+      if (count > 0) {
+        log(verbose, `[history-fetch] Startup: enqueued triage for ${count} chat(s) with missed messages`);
+      } else {
+        log(verbose, '[history-fetch] Startup: no missed messages');
+      }
+    } catch (e) {
+      console.error('[history-fetch] Startup fetch failed:', (e as Error).message);
+    }
+
+    // Start periodic polling
+    historyPoller = fetcher.startPolling();
+    log(verbose, `[history-fetch] Periodic polling every ${config.historyFetch.pollIntervalMinutes ?? 15}m`);
   }
 
   // ── Scheduled tasks ─────────────────────────────────────────────────────────
@@ -812,6 +1040,8 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
   const shutdown = async () => {
     console.log('\nShutting down Gateway...');
     clearInterval(purgeTimer);
+    if (historyPoller) historyPoller.stop();
+    if (inboxConsumer) inboxConsumer.stop();
     if (coordinator) coordinator.stop();
     for (const adapter of adapters) {
       try {

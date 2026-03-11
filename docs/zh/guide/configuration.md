@@ -63,6 +63,17 @@ tasks:
       channel: feishu
       chatId: "oc_xxxxx"
 
+# 可选：持久化消息队列（防崩溃丢消息，顺序消费）
+inbox:
+  enabled: true
+  retentionDays: 7             # 已完成条目保留天数（默认：7）
+
+# 可选：重启后抓取离线消息
+historyFetch:
+  enabled: true
+  pollIntervalMinutes: 15      # 定时轮询间隔（默认：15）
+  initialLookbackMinutes: 60   # 首次启动回看时长（默认：60）
+
 # 可选：IM 通道配置
 channels:
   feishu:
@@ -110,6 +121,8 @@ gateway:
 | `streaming` | `object` | — | IM 通道流式消息投递配置 |
 | `tasks` | `array` | — | 定时任务列表，详见 [`tasks`](#tasks) |
 | `channels` | `object` | — | IM 通道配置 |
+| `inbox` | `object` | — | 持久化消息队列，详见 [`inbox`](#inbox) |
+| `historyFetch` | `object` | — | 历史消息抓取，详见 [`historyFetch`](#historyfetch) |
 | `gateway` | `object` | — | Gateway 服务设置 |
 
 ### `permissions`
@@ -181,27 +194,7 @@ streaming:
 
 ### `groupChat`
 
-控制 bot 在群聊中的响应行为，适用于所有通道。
-
-| 字段 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `groupPolicy` | `string` | `mention-only` | 响应策略，见下表 |
-| `historyLimit` | `number` | `20` | 注入多少条历史消息作为上下文 |
-| `maxTurns` | `number` | `10` | 每个群最多连续 bot 回复次数（安全阀） |
-
-**`groupPolicy` 取值：**
-
-| 值 | Agent 调用时机 | Bot 何时回复 | 适用场景 |
-|----|--------------|------------|---------|
-| `mention-only` | 仅被 @mention 时 | 仅被 @mention 时（零成本跳过） | 低噪音，最省成本 |
-| `smart` | 所有群消息 | Agent 自己决定（输出 `[PASS]` 保持沉默） | Bot 持续观察并积累群记忆，按需发言 |
-| `always` | 所有群消息 | 每条消息都回复 | 高互动的专用小群 |
-
-::: tip smart 模式与群记忆
-`smart` 模式下，agent 对每条群消息都会运行——即使它最终输出 `[PASS]` 保持沉默。这意味着 agent 可以持续读写群记忆文件（`memory/groups/<group>.md`），始终掌握完整的群对话上下文。
-
-`mention-only` 模式下，agent 只在被 @mention 时才运行，记忆文件也只在此时更新。
-:::
+控制 bot 在群聊中的响应策略、@mention 处理、引用回复和群记忆。
 
 ```yaml
 groupChat:
@@ -210,11 +203,11 @@ groupChat:
   maxTurns: 5            # 连续回复超过 5 次后自动沉默（默认：10）
 ```
 
+详见[群聊](/zh/guide/group-chat)，了解策略、Mention 处理、引用回复和群记忆的完整说明。
+
 ### 会话历史
 
-GolemBot 自动将对话记录到 `.golem/history/{sessionKey}.jsonl`，并在 session 丢失时（切换引擎、过期、恢复失败）自动恢复上下文。无需配置。
-
-详见[记忆系统](/zh/guide/memory)，了解对话历史、个人记忆（`notes.md`）和群聊记忆的完整说明。
+GolemBot 自动记录对话并在 session 丢失时恢复上下文。无需配置。详见[记忆系统](/zh/guide/memory)。
 
 ### `gateway`
 
@@ -223,6 +216,29 @@ GolemBot 自动将对话记录到 `.golem/history/{sessionKey}.jsonl`，并在 s
 | `port` | `number` | `3000` | HTTP 服务端口 |
 | `host` | `string` | `127.0.0.1` | 绑定地址 |
 | `token` | `string` | — | HTTP API 认证 Bearer Token |
+
+### `inbox`
+
+持久化消息队列——消息不丢失，顺序消费。
+
+```yaml
+inbox:
+  enabled: true          # 默认：false
+  retentionDays: 7       # 已完成条目保留天数
+```
+
+### `historyFetch`
+
+重启后智能追回离线消息。
+
+```yaml
+historyFetch:
+  enabled: true
+  pollIntervalMinutes: 15
+  initialLookbackMinutes: 60
+```
+
+详见[消息队列与离线追回](/zh/guide/inbox)，了解崩溃恢复、智能分诊、平台支持和去重机制的完整说明。
 
 ### `tasks`
 
@@ -337,6 +353,15 @@ interface GolemConfig {
       chatId: string;
     };
   }>;
+  inbox?: {
+    enabled?: boolean;           // 默认：false
+    retentionDays?: number;      // 默认：7
+  };
+  historyFetch?: {
+    enabled?: boolean;           // 默认：false
+    pollIntervalMinutes?: number;    // 默认：15
+    initialLookbackMinutes?: number; // 默认：60
+  };
   gateway?: {
     port?: number;
     host?: string;

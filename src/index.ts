@@ -44,6 +44,10 @@ export {
   unregisterInstance,
 } from './fleet.js';
 export { startGateway } from './gateway.js';
+export type { HistoryFetchConfig } from './history-fetcher.js';
+export { buildTriagePrompt, startHistoryFetcher, WatermarkStore } from './history-fetcher.js';
+export type { InboxConfig, InboxEntry } from './inbox.js';
+export { InboxStore } from './inbox.js';
 export type { ProactiveCoordinatorOpts } from './proactive.js';
 export { createProactiveCoordinator, ProactiveCoordinator } from './proactive.js';
 export { createProviderFromPreset, type ProviderPreset, providerPresets } from './provider-presets.js';

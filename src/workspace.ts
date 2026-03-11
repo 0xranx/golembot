@@ -3,6 +3,8 @@ import { basename, join } from 'node:path';
 import yaml from 'js-yaml';
 import type { ScheduledTaskDef, TaskTarget } from './scheduler.js';
 
+export type { HistoryFetchConfig } from './history-fetcher.js';
+export type { InboxConfig } from './inbox.js';
 export type { ScheduledTaskDef, TaskTarget } from './scheduler.js';
 
 export interface FeishuChannelConfig {
@@ -141,6 +143,10 @@ export interface GolemConfig {
   tasks?: ScheduledTaskDef[];
   /** Custom LLM provider — decouples engine from API backend. */
   provider?: ProviderConfig;
+  /** Persistent message inbox for IM channels. */
+  inbox?: import('./inbox.js').InboxConfig;
+  /** Historical message fetching for offline awareness. */
+  historyFetch?: import('./history-fetcher.js').HistoryFetchConfig;
 }
 
 export interface SkillInfo {
@@ -212,6 +218,20 @@ export async function loadConfig(dir: string): Promise<GolemConfig> {
   if (doc.provider && typeof doc.provider === 'object') {
     config.provider = resolveEnvPlaceholders(doc.provider as ProviderConfig);
   }
+  if (doc.historyFetch && typeof doc.historyFetch === 'object') {
+    const hf = doc.historyFetch as Record<string, unknown>;
+    config.historyFetch = {
+      enabled: typeof hf.enabled === 'boolean' ? hf.enabled : undefined,
+      pollIntervalMinutes: typeof hf.pollIntervalMinutes === 'number' ? hf.pollIntervalMinutes : undefined,
+      initialLookbackMinutes: typeof hf.initialLookbackMinutes === 'number' ? hf.initialLookbackMinutes : undefined,
+    };
+  }
+  if (doc.inbox && typeof doc.inbox === 'object') {
+    const inbox = doc.inbox as Record<string, unknown>;
+    config.inbox = {
+      enabled: typeof inbox.enabled === 'boolean' ? inbox.enabled : undefined,
+      retentionDays: typeof inbox.retentionDays === 'number' ? inbox.retentionDays : undefined,
+  };
   if (Array.isArray(doc.tasks)) {
     config.tasks = (doc.tasks as Record<string, unknown>[]).map((t, i) => ({
       id: typeof t.id === 'string' ? t.id : '',
@@ -271,6 +291,8 @@ export async function writeConfig(dir: string, config: GolemConfig): Promise<voi
   if (config.permissions) content.permissions = config.permissions;
   if (config.tasks) content.tasks = config.tasks;
   if (config.provider) content.provider = config.provider;
+  if (config.inbox) content.inbox = config.inbox;
+  if (config.historyFetch) content.historyFetch = config.historyFetch;
   await writeFile(configPath, yaml.dump(content, { lineWidth: -1 }), 'utf-8');
 }
 

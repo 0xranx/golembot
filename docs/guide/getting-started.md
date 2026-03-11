@@ -34,7 +34,7 @@ mkdir my-bot && cd my-bot
 golembot onboard
 ```
 
-The [onboard wizard](/guide/onboard-wizard) walks you through engine selection, naming, IM channel setup, and scenario template selection in 7 interactive steps.
+The onboard wizard walks you through engine selection, authentication, naming, IM channel setup, and scenario template selection in 8 interactive steps. Use `--template <name>` to skip template selection (e.g., `golembot onboard --template customer-support`).
 
 ### Option B: Manual Init
 
@@ -117,8 +117,8 @@ This pattern works for embedding into Slack bots, internal tools, SaaS products,
 
 ## What's Next
 
-- [Embed in Your Product](/guide/embed) — library integration patterns (Express, Next.js, queues)
 - [Configuration](/guide/configuration) — understand `golem.yaml` and `${ENV_VAR}` placeholders
-- [CLI Commands](/guide/cli-commands) — full command reference
+- [Group Chat](/guide/group-chat) — response policies, @mention, quote reply, group memory
+- [Inbox & History Fetch](/guide/inbox) — crash-safe queue, offline message catch-up
 - [Engines](/engines/overview) — compare Cursor, Claude Code, OpenCode, and Codex
-- [Skills](/skills/overview) — extend your assistant's capabilities
+- [Embed in Your Product](/guide/embed) — library integration patterns (Express, Next.js, queues)

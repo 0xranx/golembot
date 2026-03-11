@@ -82,43 +82,15 @@ Entries are organized by topic and tagged with `[YYYY-MM-DD]` dates. To-do items
 
 ## Group Memory
 
-In group chats, the agent maintains per-group memory files at:
+In group chats, the agent maintains per-group memory files at `memory/groups/<group-key>.md`. The group key is derived from the channel type and chat ID (e.g., `slack-C123`).
 
-```
-memory/groups/<group-key>.md
-```
+See [Group Chat — Group Memory](/guide/group-chat#group-memory) for the full details on file structure and how response policies affect memory accumulation.
 
-The group key is derived from the channel type and chat ID (e.g., `slack-C123`, `telegram--100456`). GolemBot creates the `memory/groups/` directory automatically.
+## Persistent Message Queue (Inbox)
 
-### File structure
+When [`inbox`](/guide/configuration#inbox) is enabled, GolemBot writes incoming IM messages to `.golem/inbox.jsonl` and consumes them sequentially. This is separate from conversation history — it's an operational queue for crash safety, not a memory layer.
 
-```markdown
-# Group: slack-C123
-
-## Members
-- Alice: frontend lead
-- Bob: backend engineer
-
-## Project Context
-- Building a dashboard for monitoring API latency
-- Using React + Go stack
-
-## Decisions
-- [2026-03-01] Chose Prometheus over Datadog for cost reasons
-- [2026-03-03] Sprint deadline moved to March 15
-```
-
-### Smart mode vs mention-only
-
-The `groupPolicy` setting in [`groupChat` configuration](/guide/configuration#groupchat) affects how group memory accumulates:
-
-| Policy | Agent runs on | Memory updates |
-|--------|--------------|----------------|
-| `smart` | Every message (even when staying silent) | Continuous — agent observes all messages and updates memory in real time |
-| `mention-only` | Only when @mentioned | Intermittent — memory only updates when the bot is invoked |
-| `always` | Every message | Continuous |
-
-In `smart` mode, the agent processes every group message — even when it outputs `[PASS]` to stay silent. This means group memory stays up to date with the full conversation context.
+See [Inbox & History Fetch](/guide/inbox) for the full guide.
 
 ## File Layout
 
@@ -133,6 +105,8 @@ my-assistant/
 │       └── telegram--100456.md           ← group memory
 ├── .golem/                               ← gitignored
 │   ├── sessions.json                     ← active engine session IDs
+│   ├── inbox.jsonl                       ← persistent message queue (when inbox enabled)
+│   ├── watermarks.json                   ← history fetch watermarks (when historyFetch enabled)
 │   └── history/
 │       ├── default.jsonl                 ← DM conversation history
 │       ├── slack-C123.jsonl              ← group conversation history

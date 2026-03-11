@@ -1,5 +1,5 @@
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { join, basename } from 'node:path';
 
 const GOLEM_DIR = '.golem';
 const SESSION_FILE = 'sessions.json';
@@ -102,6 +102,37 @@ export async function pruneExpiredSessions(dir: string, maxAgeDays: number): Pro
 export async function countSessions(dir: string): Promise<number> {
   const store = await readStore(dir);
   return Object.keys(store).length;
+}
+
+export async function listHistoryFiles(dir: string): Promise<string[]> {
+  const histDir = join(dir, GOLEM_DIR, 'history');
+  try {
+    const files = await readdir(histDir);
+    return files.filter((f) => f.endsWith('.jsonl')).map((f) => f.replace(/\.jsonl$/, ''));
+  } catch {
+    return [];
+  }
+}
+
+export async function readHistory(
+  dir: string,
+  sessionKey: string,
+  limit?: number,
+): Promise<HistoryEntry[]> {
+  const path = historyPath(dir, sessionKey);
+  try {
+    const raw = await readFile(path, 'utf-8');
+    const lines = raw
+      .split('\n')
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as HistoryEntry);
+    if (limit && limit > 0) {
+      return lines.slice(-limit);
+    }
+    return lines;
+  } catch {
+    return [];
+  }
 }
 
 export async function appendHistory(dir: string, entry: HistoryEntry): Promise<void> {

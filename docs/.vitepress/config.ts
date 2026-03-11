@@ -5,13 +5,19 @@ const sidebarEn = [
     text: 'Guide',
     items: [
       { text: 'Getting Started', link: '/guide/getting-started' },
-      { text: 'Embed in Your Product', link: '/guide/embed' },
-      { text: 'Onboard Wizard', link: '/guide/onboard-wizard' },
       { text: 'Configuration', link: '/guide/configuration' },
-      { text: 'Scheduled Tasks', link: '/guide/scheduled-tasks' },
-      { text: 'Memory', link: '/guide/memory' },
       { text: 'CLI Commands', link: '/guide/cli-commands' },
       { text: 'Docker Deployment', link: '/guide/docker' },
+    ],
+  },
+  {
+    text: 'Features',
+    items: [
+      { text: 'Group Chat', link: '/guide/group-chat' },
+      { text: 'Inbox & History Fetch', link: '/guide/inbox' },
+      { text: 'Scheduled Tasks', link: '/guide/scheduled-tasks' },
+      { text: 'Memory', link: '/guide/memory' },
+      { text: 'Embed in Your Product', link: '/guide/embed' },
     ],
   },
   {
@@ -79,13 +85,19 @@ const sidebarZh = [
     text: '指南',
     items: [
       { text: '快速开始', link: '/zh/guide/getting-started' },
-      { text: '嵌入到你的产品', link: '/zh/guide/embed' },
-      { text: '引导向导', link: '/zh/guide/onboard-wizard' },
       { text: '配置说明', link: '/zh/guide/configuration' },
-      { text: '定时任务', link: '/zh/guide/scheduled-tasks' },
-      { text: '记忆系统', link: '/zh/guide/memory' },
       { text: 'CLI 命令', link: '/zh/guide/cli-commands' },
       { text: 'Docker 部署', link: '/zh/guide/docker' },
+    ],
+  },
+  {
+    text: '功能',
+    items: [
+      { text: '群聊', link: '/zh/guide/group-chat' },
+      { text: '消息队列与离线追回', link: '/zh/guide/inbox' },
+      { text: '定时任务', link: '/zh/guide/scheduled-tasks' },
+      { text: '记忆系统', link: '/zh/guide/memory' },
+      { text: '嵌入到你的产品', link: '/zh/guide/embed' },
     ],
   },
   {

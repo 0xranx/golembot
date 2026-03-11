@@ -85,6 +85,18 @@ export interface ChannelAdapter {
    * Currently only Feishu supports this via the `im.message.message_read_v1` event.
    */
   readReceiptHandler?: (receipt: ReadReceipt) => void;
+  /**
+   * Optional: fetch message history for a chat since a given timestamp.
+   * Used by the history fetcher to retrieve missed messages after bot restart.
+   * Supported by: Feishu, Slack, Discord. Not available on Telegram, DingTalk, WeCom.
+   */
+  fetchHistory?(chatId: string, since: Date, limit?: number): Promise<ChannelMessage[]>;
+  /**
+   * Optional: list all chats (DM + group) the bot is a member of.
+   * Used by the history fetcher to discover which chats to poll.
+   * Supported by: Feishu, Slack, Discord. Not available on Telegram, DingTalk, WeCom.
+   */
+  listChats?(): Promise<Array<{ chatId: string; chatType: 'dm' | 'group' }>>;
 }
 
 export function buildSessionKey(msg: ChannelMessage): string {

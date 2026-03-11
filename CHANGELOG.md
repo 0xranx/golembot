@@ -1,3 +1,25 @@
+# [0.25.0](https://github.com/0xranx/golembot/compare/v0.24.2...v0.25.0) (2026-03-11)
+
+
+### Bug Fixes
+
+* **feishu:** correct fetchHistory timestamp parsing — create_time is already milliseconds ([a42996c](https://github.com/0xranx/golembot/commit/a42996c3373105710cb7be0c4a2fd7959a3c0324))
+* **inbox:** preserve mentioned field, fix dedup key to use channelType, and avoid watermark boundary duplicates ([2ef8ad3](https://github.com/0xranx/golembot/commit/2ef8ad3bd2f60b8a804bcda740ee0d6a0c9ca223))
+* **slack:** pass explicit token in listChats/fetchHistory and gracefully degrade without groups:read scope ([a579e3d](https://github.com/0xranx/golembot/commit/a579e3d335f17005df3c527e9e6a206995061f98))
+
+
+### Features
+
+* **gateway:** add [SKIP] sentinel for history-fetch triage — bot can stay silent when no reply needed ([849a7e8](https://github.com/0xranx/golembot/commit/849a7e8de55e031c7866a261681baf2d7e2b7d93))
+* **inbox:** add persistent message queue and historical message fetching ([fd1cb39](https://github.com/0xranx/golembot/commit/fd1cb39baf4935f8e3363bdca73f9c94c6896626)), closes [hi#water](https://github.com/hi/issues/water)
+
+## [0.24.2](https://github.com/0xranx/golembot/compare/v0.24.1...v0.24.2) (2026-03-11)
+
+
+### Bug Fixes
+
+* add missing listHistoryFiles and readHistory exports ([6ce0fee](https://github.com/0xranx/golembot/commit/6ce0fee08bca715a86ef61c764b2f9127675d55a))
+
 ## [0.24.1](https://github.com/0xranx/golembot/compare/v0.24.0...v0.24.1) (2026-03-10)
 
 
