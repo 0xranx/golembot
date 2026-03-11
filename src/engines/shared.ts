@@ -14,3 +14,29 @@ export function isOnPath(cmd: string): boolean {
     return false;
   }
 }
+
+// ── Engine discovery ─────────────────────────────────────
+
+export interface DiscoveredEngine {
+  name: string;
+  binary: string;
+  path?: string;
+}
+
+const ENGINE_BINARIES: Record<string, string> = {
+  'claude-code': 'claude',
+  cursor: 'agent',
+  opencode: 'opencode',
+  codex: 'codex',
+};
+
+/** Discover which CLI engines are installed on the system. */
+export async function discoverEngines(): Promise<DiscoveredEngine[]> {
+  const results: DiscoveredEngine[] = [];
+  for (const [name, binary] of Object.entries(ENGINE_BINARIES)) {
+    if (isOnPath(binary)) {
+      results.push({ name, binary });
+    }
+  }
+  return results;
+}

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { lstat, mkdir, readdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
+import { openCodeProviderEnv } from './provider-env.js';
 import { isOnPath } from './shared.js';
 
 // ── Provider env resolution ──────────────────────────────
@@ -199,6 +200,7 @@ export class OpenCodeEngine implements AgentEngine {
     if (opts.model) args.push('--model', opts.model);
 
     const env: Record<string, string> = { ...(process.env as Record<string, string>) };
+    if (opts.provider) Object.assign(env, openCodeProviderEnv(opts.provider, opts.model));
     Object.assign(env, resolveOpenCodeEnv(opts.model, opts.apiKey));
 
     const child = spawn(bin, args, {

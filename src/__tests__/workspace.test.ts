@@ -93,6 +93,34 @@ describe('workspace', () => {
     });
   });
 
+  describe('writeConfig provider', () => {
+    it('round-trips provider config', async () => {
+      await writeConfig(dir, {
+        name: 'test',
+        engine: 'claude-code',
+        provider: {
+          baseUrl: 'https://api.minimax.chat/v1',
+          apiKey: 'sk-test',
+          model: 'minimax-text-01',
+          models: { 'claude-code': 'minimax-text-01' },
+        },
+      });
+      const cfg = await loadConfig(dir);
+      expect(cfg.provider).toEqual({
+        baseUrl: 'https://api.minimax.chat/v1',
+        apiKey: 'sk-test',
+        model: 'minimax-text-01',
+        models: { 'claude-code': 'minimax-text-01' },
+      });
+    });
+
+    it('omits provider when undefined', async () => {
+      await writeConfig(dir, { name: 'test', engine: 'cursor' });
+      const raw = await readFile(join(dir, 'golem.yaml'), 'utf-8');
+      expect(raw).not.toContain('provider');
+    });
+  });
+
   // ── scanSkills ────────────────────────────────────
 
   describe('scanSkills', () => {

@@ -246,6 +246,10 @@ program
       historySize: 200,
       completer,
     });
+    let isClosing = false;
+    rl.on('close', () => {
+      isClosing = true;
+    });
 
     const spinner = new Spinner();
 
@@ -259,11 +263,14 @@ program
     };
 
     const doPrompt = () => {
+      if (isClosing) return;
       rl.question('> ', async (input) => {
+        if (isClosing) return;
         const trimmed = input.trim();
         if (!trimmed) return doPrompt();
 
         if (trimmed === '/quit' || trimmed === '/exit') {
+          isClosing = true;
           console.log('Bye!');
           rl.close();
           process.exit(0);
@@ -339,7 +346,7 @@ program
         }
 
         console.log();
-        doPrompt();
+        if (!isClosing) doPrompt();
       });
     };
 

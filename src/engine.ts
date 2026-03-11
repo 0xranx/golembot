@@ -1,3 +1,5 @@
+import type { ProviderConfig } from './workspace.js';
+
 // ── Core types ───────────────────────────────────────────
 
 export type StreamEvent =
@@ -20,6 +22,8 @@ export interface InvokeOpts {
   imagePaths?: string[];
   /** When true, the workspace has a .cursor/cli.json with granular permissions; do not pass --trust. */
   hasPermissionsConfig?: boolean;
+  /** Provider config from golem.yaml, for custom LLM API routing */
+  provider?: ProviderConfig;
 }
 
 export interface ListModelsOpts {
@@ -44,7 +48,8 @@ export {
   parseOpenCodeStreamLine,
   resolveOpenCodeEnv,
 } from './engines/opencode.js';
-export { isOnPath, stripAnsi } from './engines/shared.js';
+export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, openCodeProviderEnv } from './engines/provider-env.js';
+export { type DiscoveredEngine, discoverEngines, isOnPath, stripAnsi } from './engines/shared.js';
 
 // ── Engine factory ───────────────────────────────────────
 

@@ -96,6 +96,25 @@ export interface PermissionsConfig {
   deniedCommands?: string[];
 }
 
+export interface ProviderConfig {
+  /** API base URL (e.g. "https://api.minimax.chat/v1") */
+  baseUrl?: string;
+  /** API key (supports ${ENV_VAR} placeholders) */
+  apiKey?: string;
+  /** Default model override */
+  model?: string;
+  /** Per-engine model overrides (key = engine name) */
+  models?: Record<string, string>;
+  /** Codex profile name from ~/.codex/config.toml (e.g. "m21") */
+  codexProfile?: string;
+  /** Codex custom provider id for -c model_provider="..." (e.g. "minimax") */
+  codexProviderId?: string;
+  /** Codex wire API mode for custom providers. Current Codex releases require "responses". */
+  codexWireApi?: 'responses';
+  /** Codex custom provider key env var name (e.g. "MINIMAX_API_KEY") */
+  codexEnvKey?: string;
+}
+
 export interface GolemConfig {
   name: string;
   engine: string;
@@ -120,6 +139,8 @@ export interface GolemConfig {
   /** Agent permissions (allowed/denied paths and commands). */
   permissions?: PermissionsConfig;
   tasks?: ScheduledTaskDef[];
+  /** Custom LLM provider — decouples engine from API backend. */
+  provider?: ProviderConfig;
 }
 
 export interface SkillInfo {
@@ -188,6 +209,9 @@ export async function loadConfig(dir: string): Promise<GolemConfig> {
   if (doc.permissions && typeof doc.permissions === 'object') {
     config.permissions = doc.permissions as PermissionsConfig;
   }
+  if (doc.provider && typeof doc.provider === 'object') {
+    config.provider = resolveEnvPlaceholders(doc.provider as ProviderConfig);
+  }
   if (Array.isArray(doc.tasks)) {
     config.tasks = (doc.tasks as Record<string, unknown>[]).map((t, i) => ({
       id: typeof t.id === 'string' ? t.id : '',
@@ -246,6 +270,7 @@ export async function writeConfig(dir: string, config: GolemConfig): Promise<voi
   if (config.streaming) content.streaming = config.streaming;
   if (config.permissions) content.permissions = config.permissions;
   if (config.tasks) content.tasks = config.tasks;
+  if (config.provider) content.provider = config.provider;
   await writeFile(configPath, yaml.dump(content, { lineWidth: -1 }), 'utf-8');
 }
 

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { ImageAttachment } from './channel.js';
-import { type AgentEngine, createEngine, type StreamEvent } from './engine.js';
+import { type AgentEngine, createEngine, type DiscoveredEngine, discoverEngines, type StreamEvent } from './engine.js';
 import {
   appendHistory,
   clearSession,
@@ -16,16 +16,19 @@ import {
   type GolemConfig,
   initWorkspace,
   loadConfig,
+  type ProviderConfig,
   patchConfig,
   type SkillInfo,
   scanSkills,
+  writeConfig,
 } from './workspace.js';
 
 export type { ChannelAdapter, ChannelMessage, ImageAttachment, ReadReceipt } from './channel.js';
 export { buildSessionKey, stripMention } from './channel.js';
 export { type CommandContext, type CommandResult, executeCommand, parseCommand } from './commands.js';
 export type { ChannelStatus, DashboardContext, GatewayMetrics, RecentMessage } from './dashboard.js';
-export type { StreamEvent } from './engine.js';
+export type { DiscoveredEngine, StreamEvent } from './engine.js';
+export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, openCodeProviderEnv } from './engine.js';
 export type { FleetEntry, FleetInstance, FleetServerOpts } from './fleet.js';
 export {
   findInstance,
@@ -43,6 +46,7 @@ export {
 export { startGateway } from './gateway.js';
 export type { ProactiveCoordinatorOpts } from './proactive.js';
 export { createProactiveCoordinator, ProactiveCoordinator } from './proactive.js';
+export { createProviderFromPreset, type ProviderPreset, providerPresets } from './provider-presets.js';
 export type { CronFields, ScheduledTaskDef, TaskTarget } from './scheduler.js';
 export { getNextCronDelay, getNextCronTime, normalizeSchedule, parseCron, Scheduler } from './scheduler.js';
 export { createGolemServer, type GolemServer, type ServerOpts, startServer } from './server.js';
@@ -55,6 +59,7 @@ export type {
   FeishuChannelConfig,
   GatewayConfig,
   GolemConfig,
+  ProviderConfig,
   SkillInfo,
   SlackChannelConfig,
   StreamingConfig,
@@ -149,6 +154,10 @@ export interface Assistant {
   getStatus(): Promise<{ config: GolemConfig; skills: SkillInfo[]; engine: string; model: string | undefined }>;
   /** List available models for the current engine. */
   listModels(): Promise<string[]>;
+  /** Discover CLI engines installed on the system. */
+  discoverEngines(): Promise<DiscoveredEngine[]>;
+  /** Set provider config at runtime (updates in-memory state and writes to golem.yaml). */
+  setProvider(provider: ProviderConfig): void;
 }
 
 export interface CreateAssistantOpts {
@@ -172,6 +181,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
   let engineOverride = opts.engine;
   let modelOverride = opts.model;
   const apiKey = opts.apiKey;
+  let providerOverride: ProviderConfig | undefined;
 
   // Concurrency limits — resolved from opts, then config, then hardcoded defaults
   const maxConcurrentOpt = opts.maxConcurrent;
@@ -193,7 +203,9 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     const { config, skills } = await ensureReady(dir);
 
     const engineType = engineOverride || config.engine;
-    const model = modelOverride || config.model;
+    const provider = providerOverride || config.provider;
+    // Model priority: per-engine provider override > modelOverride > provider.model > config.model
+    const model = provider?.models?.[engineType] || modelOverride || provider?.model || config.model;
     const engine: AgentEngine = createEngine(engineType);
 
     const sessionId = await loadSession(dir, sessionKey, engineType);
@@ -266,11 +278,12 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
         skillPaths,
         sessionId,
         model,
-        apiKey,
+        apiKey: apiKey || provider?.apiKey,
         skipPermissions: config.skipPermissions,
         signal: controller.signal,
         imagePaths: imagePaths.length > 0 ? imagePaths : undefined,
         hasPermissionsConfig: !!config.permissions,
+        provider,
       })) {
         if (event.type === 'done') {
           if (event.sessionId) lastSessionId = event.sessionId;
@@ -424,6 +437,21 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
       const engine = createEngine(engineType);
       if (!engine.listModels) return [];
       return engine.listModels({ apiKey, model });
+    },
+
+    async discoverEngines(): Promise<DiscoveredEngine[]> {
+      return discoverEngines();
+    },
+
+    setProvider(provider: ProviderConfig): void {
+      providerOverride = provider;
+      // Persist to golem.yaml
+      loadConfig(dir)
+        .then((config) => {
+          config.provider = provider;
+          return writeConfig(dir, config);
+        })
+        .catch(() => {});
     },
   };
 }

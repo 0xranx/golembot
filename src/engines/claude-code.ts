@@ -4,6 +4,7 @@ import { lstat, mkdir, readdir, symlink, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
+import { claudeProviderEnv } from './provider-env.js';
 import { isOnPath } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
@@ -71,7 +72,14 @@ export function parseClaudeStreamLine(line: string): StreamEvent[] {
   if (type === 'result') {
     const isError = obj.is_error as boolean;
     if (isError) {
-      const message = (obj.result as string) || (obj.error as string) || 'Agent error';
+      const errors = Array.isArray(obj.errors)
+        ? (obj.errors as unknown[]).map((e) => (typeof e === 'string' ? e : '')).filter((e) => e.trim().length > 0)
+        : [];
+      const message =
+        (obj.result as string) ||
+        (obj.error as string) ||
+        (errors.length > 0 ? errors.join(' | ') : '') ||
+        'Agent error';
       return [{ type: 'error', message }];
     }
     const durationMs = typeof obj.duration_ms === 'number' ? obj.duration_ms : undefined;
@@ -165,12 +173,26 @@ export class ClaudeCodeEngine implements AgentEngine {
       }
     }
     if (opts.sessionId) args.push('--resume', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
+    // In provider mode, exclude user-level Claude settings (e.g.
+    // ~/.claude/settings.json apiKeyHelper / env overrides) so injected
+    // provider env vars are authoritative.
+    if (opts.provider) args.push('--setting-sources', 'project,local');
+    // When a custom provider is configured, the model is set via ANTHROPIC_MODEL
+    // env var instead of --model flag (which triggers client-side validation
+    // against Anthropic's model list and rejects third-party model names).
+    if (opts.model && !opts.provider) args.push('--model', opts.model);
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
       PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
     };
+    if (opts.provider) Object.assign(env, claudeProviderEnv(opts.provider));
+    // When provider is set but provider.model is not, the resolved model (from
+    // modelOverride or config.model) must still be communicated via env var,
+    // since --model flag is suppressed in provider mode.
+    if (opts.provider && opts.model && !env.ANTHROPIC_MODEL) {
+      env.ANTHROPIC_MODEL = opts.model;
+    }
     if (opts.apiKey) env.ANTHROPIC_API_KEY = opts.apiKey;
     // Allow spawning Claude Code from within a Claude Code session
     delete env.CLAUDECODE;
@@ -181,6 +203,7 @@ export class ClaudeCodeEngine implements AgentEngine {
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    const stderrTail: string[] = [];
 
     const queue: Array<StreamEvent | null> = [];
     let resolver: (() => void) | null = null;
@@ -222,6 +245,16 @@ export class ClaudeCodeEngine implements AgentEngine {
       processBuffer();
     });
 
+    child.stderr!.on('data', (chunk: Buffer) => {
+      const raw = chunk.toString();
+      for (const line of raw.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        stderrTail.push(trimmed);
+        if (stderrTail.length > 20) stderrTail.shift();
+      }
+    });
+
     child.on('close', (exitCode: number | null) => {
       if (buffer.trim()) {
         buffer += '\n';
@@ -229,7 +262,8 @@ export class ClaudeCodeEngine implements AgentEngine {
       }
       const code = exitCode ?? 1;
       if (code !== 0 && !queue.some((e) => e && (e.type === 'done' || e.type === 'error'))) {
-        enqueue({ type: 'error', message: `Claude Code process exited with code ${code}` });
+        const tail = stderrTail.length > 0 ? `; stderr: ${stderrTail.join(' | ')}` : '';
+        enqueue({ type: 'error', message: `Claude Code process exited with code ${code}${tail}` });
       }
       enqueue(null);
     });

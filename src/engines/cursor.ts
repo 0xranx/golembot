@@ -4,6 +4,7 @@ import { lstat, mkdir, readdir, symlink, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
+import { cursorProviderEnv } from './provider-env.js';
 import { isOnPath, stripAnsi } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
@@ -167,6 +168,7 @@ export class CursorEngine implements AgentEngine {
       ...(process.env as Record<string, string>),
       PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
     };
+    if (opts.provider) Object.assign(env, cursorProviderEnv(opts.provider));
     if (opts.apiKey) env.CURSOR_API_KEY = opts.apiKey;
 
     const child = spawn(agentBin, args, {

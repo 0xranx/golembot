@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { lstat, mkdir, readdir, symlink, unlink } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
+import { codexProviderEnv } from './provider-env.js';
 import { isOnPath, stripAnsi } from './shared.js';
 
 // ── NDJSON event parsing ─────────────────────────────────
@@ -147,17 +148,32 @@ export class CodexEngine implements AgentEngine {
     await injectCodexSkills(opts.workspace, opts.skillPaths);
 
     const bin = findCodexBin();
+    const codexProfile = opts.provider?.codexProfile;
+    const codexProviderId = opts.provider?.codexProviderId;
+    const codexEnvKey = opts.provider?.codexEnvKey;
+
     // Build args respecting the `exec` / `exec resume` subcommand structure:
     //   new session : codex exec        [flags] [--model X] <prompt>
     //   resume      : codex exec resume [flags] [--model X] <session_id> <prompt>
     // Flags must follow the subcommand they belong to; `resume` has its own flag set.
     const sharedFlags = ['--json', '--full-auto', '--skip-git-repo-check'];
+    if (codexProfile) sharedFlags.push('--profile', codexProfile);
+    if (codexProviderId) sharedFlags.push('-c', `model_provider="${codexProviderId}"`);
+    if (codexProviderId && opts.provider?.codexWireApi === 'responses') {
+      sharedFlags.push('-c', `model_providers.${codexProviderId}.wire_api="responses"`);
+    }
     const modelFlag = opts.model ? ['--model', opts.model] : [];
     const args = opts.sessionId
       ? ['exec', 'resume', ...sharedFlags, ...modelFlag, opts.sessionId, prompt]
       : ['exec', ...sharedFlags, ...modelFlag, prompt];
 
     const env: Record<string, string> = { ...(process.env as Record<string, string>) };
+    // If a Codex profile is provided, let Codex load provider/base_url/model
+    // from ~/.codex/config.toml to avoid conflicting with env-based overrides.
+    if (opts.provider && !codexProfile) Object.assign(env, codexProviderEnv(opts.provider));
+    if (opts.provider?.apiKey && codexEnvKey) {
+      env[codexEnvKey] = opts.provider.apiKey;
+    }
     if (opts.apiKey) {
       // CODEX_API_KEY is the primary env var per official CI docs;
       // also set OPENAI_API_KEY for backward compatibility with older CLI versions.
