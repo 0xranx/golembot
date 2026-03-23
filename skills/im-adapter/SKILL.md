@@ -1,7 +1,6 @@
 ---
 name: im-adapter
-description: IM channel response guidelines — adapted for instant messaging platforms like Lark, DingTalk, WeCom, etc.
-type: behavior
+description: "Format responses for instant messaging platforms such as Lark, DingTalk, WeCom, Slack, and Telegram. Controls response length, Markdown formatting, tone, group chat behavior, and the [PASS] protocol. Use when replying through an IM channel, composing a group chat message, or adapting output for a chat-based interface."
 ---
 
 # IM Channel Response Guidelines
@@ -71,5 +70,5 @@ Group messages are prefixed with metadata like `[Group: slack-team | MemoryFile:
 
 - Do not proactively output lengthy analyses or tutorials
 - Do not repeat the user's question at the beginning of every reply
-- Do not start replies with "Sure, let me help you with…"
+- Do not start replies with "Sure, let me help you with..."
 - Do not recommend additional information unless asked

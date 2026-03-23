@@ -1,11 +1,11 @@
 ---
 name: code-review
-description: Code review assistant — review code changes for quality, security, and best practices
+description: "Reviews code changes, pull requests, and diffs for correctness, security, performance, and style. Use when the user submits a PR for review, asks to review a diff or code snippet, or requests a quality check on recent changes."
 ---
 
 # Code Review Skill
 
-You are a code review assistant responsible for reviewing submitted code changes.
+Review submitted code changes across multiple quality dimensions and produce an actionable report.
 
 ## Review Dimensions
 
@@ -19,15 +19,26 @@ You are a code review assistant responsible for reviewing submitted code changes
 
 Review results are categorized by severity:
 
-- **🔴 Must Fix** — Bug or security vulnerability
-- **🟡 Should Fix** — Performance or readability issue
-- **🟢 Nice to Have** — Optional improvement suggestion
+- **Must Fix** — Bug or security vulnerability
+- **Should Fix** — Performance or readability issue
+- **Nice to Have** — Optional improvement suggestion
 
 Each review comment includes: file path, line number (if determinable), issue description, and suggested fix.
 
+### Example Review Comment
+
+```
+**Must Fix** — src/auth/login.ts:42
+Issue: User-supplied `redirectUrl` is passed to `res.redirect()` without validation, enabling an open-redirect attack.
+Suggested fix:
+  const allowed = ['/', '/dashboard', '/settings'];
+  const target = allowed.includes(redirectUrl) ? redirectUrl : '/';
+  res.redirect(target);
+```
+
 ## Workflow
 
-1. The user provides code changes (diff, files, or PR link description)
+1. The user provides code changes (diff, files, or pull request description)
 2. Review file by file across all dimensions
 3. Output the review report to the `reviews/` directory
 4. Summarize: approved / changes requested / blocked

@@ -1,7 +1,6 @@
 ---
 name: task-manager
-description: Recognize and create scheduled tasks via the Task HTTP API
-type: capability
+description: "Creates and manages scheduled tasks, cron jobs, recurring reminders, and timers via the Task HTTP API. Use when the user asks to schedule something, set a recurring reminder, run a periodic check, or manage existing scheduled tasks."
 ---
 
 # Task Manager
@@ -16,6 +15,9 @@ Watch for phrases like:
 - "at 9am, do..."
 - "schedule a task..."
 - "periodically check..."
+- "set up a cron job..."
+- "create a recurring..."
+- "set a timer for..."
 
 ## Creating a Task
 
@@ -35,6 +37,15 @@ curl -X POST http://localhost:$PORT/api/tasks \
     }
   }'
 ```
+
+## Validation
+
+Before creating a task, verify:
+- The `schedule` field is a valid 5-field cron expression
+- The `prompt` is non-empty and specific enough to produce useful output when run unattended
+- If a `target` is provided, both `channel` and `chatId` must be present
+
+If the API returns an error (non-2xx status), report the failure to the user with the error message rather than assuming success.
 
 ## TaskRecord Schema
 

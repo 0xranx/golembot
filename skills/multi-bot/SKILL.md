@@ -1,7 +1,6 @@
 ---
 name: multi-bot
-description: Multi-bot collaboration — peer awareness, domain-based response coordination, and cross-bot capability access
-type: protocol
+description: "Coordinates responses between multiple GolemBot instances in a shared fleet. Use when the bot operates in a group chat with other bots, needs to decide whether to respond or pass, or must call a peer bot's API to fetch cross-domain data."
 ---
 
 # Multi-Bot Collaboration
@@ -44,6 +43,23 @@ curl -s -X POST http://<peer-url>/chat \
 
 # Check a peer's status
 curl -s http://<peer-url>/health
+```
+
+### Error Handling for Peer Calls
+
+Peer bots may be temporarily unavailable. Always check the HTTP status code before using the response:
+
+```bash
+response=$(curl -s -w "\n%{http_code}" -X POST http://<peer-url>/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "your question", "sessionKey": "cross-bot-ctx"}')
+status=$(echo "$response" | tail -1)
+body=$(echo "$response" | sed '$d')
+
+if [ "$status" -ne 200 ]; then
+  # Peer unavailable — answer with your own knowledge or inform the user
+  echo "Peer bot returned status $status; falling back to local knowledge."
+fi
 ```
 
 ### When to Call a Peer
