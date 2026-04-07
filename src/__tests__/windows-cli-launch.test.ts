@@ -68,6 +68,7 @@ describe('Windows CLI launch smoke', () => {
       'utf-8',
     );
 
+    await writeFile(join(fakeBin, 'claude'), '#!/bin/sh\r\necho plain text from extensionless shim\r\n', 'utf-8');
     await writeFile(
       join(fakeBin, 'claude.cmd'),
       ['@echo off', 'echo plain text from cmd shim', ''].join('\r\n'),

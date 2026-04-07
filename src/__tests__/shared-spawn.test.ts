@@ -106,7 +106,7 @@ describe('engine shared spawn helpers', () => {
         return {
           ...original,
           execFileSync: vi.fn((cmd: string, args: string[]) => {
-            if (cmd === 'where' && args[0] === 'claude') return 'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.cmd\r\n';
+            if (cmd === 'where' && args[0] === 'claude') return 'C:\\Program Files\\nodejs\\claude\r\n';
             if (cmd === 'where' && args[0] === 'powershell.exe')
               return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\r\n';
             return '';
@@ -117,7 +117,7 @@ describe('engine shared spawn helpers', () => {
         const original = await importOriginal<typeof import('node:fs')>();
         return {
           ...original,
-          existsSync: vi.fn((path: string) => path === 'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.ps1'),
+          existsSync: vi.fn((path: string) => path === 'C:\\Program Files\\nodejs\\claude.ps1'),
         };
       });
 
@@ -134,7 +134,7 @@ describe('engine shared spawn helpers', () => {
           '-ExecutionPolicy',
           'Bypass',
           '-File',
-          'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.ps1',
+          'C:\\Program Files\\nodejs\\claude.ps1',
           '--version',
         ],
         options,

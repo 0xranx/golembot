@@ -47,15 +47,26 @@ export function prependPathEntries(
 
 export function spawnCommand(command: string, args: string[], options: SpawnOptions) {
   const resolved = resolveOnPath(command) || command;
-  if (process.platform === 'win32' && /\.cmd$/i.test(resolved)) {
-    const ps1Path = resolved.replace(/\.cmd$/i, '.ps1');
+  if (process.platform === 'win32') {
+    const shimBase = /\.cmd$/i.test(resolved)
+      ? resolved.replace(/\.cmd$/i, '')
+      : /\.ps1$/i.test(resolved)
+        ? resolved.replace(/\.ps1$/i, '')
+        : /\.[^\\/]+$/i.test(resolved)
+          ? undefined
+          : resolved;
+    const ps1Path = shimBase ? `${shimBase}.ps1` : undefined;
+    const cmdPath = shimBase ? `${shimBase}.cmd` : undefined;
     const powershell = resolveOnPath('powershell.exe') || resolveOnPath('pwsh.exe');
-    if (existsSync(ps1Path) && powershell) {
+    if (ps1Path && existsSync(ps1Path) && powershell) {
       return crossSpawn(
         powershell,
         ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1Path, ...args],
         options,
       );
+    }
+    if (cmdPath && existsSync(cmdPath)) {
+      return crossSpawn(cmdPath, args, options);
     }
   }
   return crossSpawn(resolved, args, options);
