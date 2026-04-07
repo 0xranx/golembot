@@ -1,3 +1,10 @@
+## [0.45.2-beta.8](https://github.com/0xranx/golembot/compare/v0.45.2-beta.7...v0.45.2-beta.8) (2026-04-07)
+
+
+### Bug Fixes
+
+* prefer sibling windows shims over bare command ([35414e3](https://github.com/0xranx/golembot/commit/35414e357b387602125cf864a5e17e63c849a1d5))
+
 ## [0.45.2-beta.7](https://github.com/0xranx/golembot/compare/v0.45.2-beta.6...v0.45.2-beta.7) (2026-04-07)
 
 
