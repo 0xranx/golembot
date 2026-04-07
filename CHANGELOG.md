@@ -1,3 +1,10 @@
+## [0.45.2-beta.6](https://github.com/0xranx/golembot/compare/v0.45.2-beta.5...v0.45.2-beta.6) (2026-04-07)
+
+
+### Bug Fixes
+
+* preview non-json cli stdout ([4c91f93](https://github.com/0xranx/golembot/commit/4c91f9371caab5bcf8f4d2463f149993c3f981a9))
+
 ## [0.45.2-beta.5](https://github.com/0xranx/golembot/compare/v0.45.2-beta.4...v0.45.2-beta.5) (2026-04-07)
 
 
