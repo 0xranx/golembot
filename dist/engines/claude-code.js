@@ -212,6 +212,9 @@ export class ClaudeCodeEngine {
         const queue = [];
         let resolver = null;
         let buffer = '';
+        let rawLineCount = 0;
+        let parsedEventCount = 0;
+        let sawTerminalEvent = false;
         function enqueue(evt) {
             queue.push(evt);
             if (resolver) {
@@ -225,11 +228,17 @@ export class ClaudeCodeEngine {
             for (const line of lines) {
                 if (!line.trim())
                     continue;
+                rawLineCount++;
                 const summary = summarizeJsonEventLine(line);
                 if (summary)
                     debugEventLog(debugEventsEnabled, `[event-debug] claude ${summary}`);
-                for (const evt of parseClaudeStreamLine(line))
+                const events = parseClaudeStreamLine(line);
+                parsedEventCount += events.length;
+                for (const evt of events) {
+                    if (evt.type === 'done' || evt.type === 'error')
+                        sawTerminalEvent = true;
                     enqueue(evt);
+                }
             }
         }
         if (opts.signal) {
@@ -268,7 +277,12 @@ export class ClaudeCodeEngine {
                 processBuffer();
             }
             const code = exitCode ?? 1;
-            if (code !== 0 && !queue.some((e) => e && (e.type === 'done' || e.type === 'error'))) {
+            debugEventLog(debugEventsEnabled, `[event-debug] claude close code=${code} rawLines=${rawLineCount} parsedEvents=${parsedEventCount} stderrLines=${stderrTail.length} terminal=${sawTerminalEvent}`);
+            if (code === 0 && rawLineCount === 0 && parsedEventCount === 0) {
+                const tail = stderrTail.length > 0 ? `; stderrLines=${stderrTail.length}` : '';
+                enqueue({ type: 'error', message: `Claude Code exited without emitting stream-json events${tail}` });
+            }
+            else if (code !== 0 && !queue.some((e) => e && (e.type === 'done' || e.type === 'error'))) {
                 const tail = stderrTail.length > 0 ? `; stderr: ${stderrTail.join(' | ')}` : '';
                 enqueue({ type: 'error', message: `Claude Code process exited with code ${code}${tail}` });
             }

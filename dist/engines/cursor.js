@@ -180,6 +180,9 @@ export class CursorEngine {
         const queue = [];
         let resolver = null;
         let buffer = '';
+        let rawLineCount = 0;
+        let parsedEventCount = 0;
+        let sawTerminalEvent = false;
         // Dedup: with --stream-partial-output, Cursor emits character-level deltas
         // followed by a summary event that repeats all text for each segment.
         let segmentAccum = '';
@@ -196,12 +199,14 @@ export class CursorEngine {
             for (const line of lines) {
                 if (!line.trim())
                     continue;
+                rawLineCount++;
                 const summary = summarizeJsonEventLine(line);
                 if (summary)
                     debugEventLog(debugEventsEnabled, `[event-debug] cursor ${summary}`);
                 const evt = parseStreamLine(line);
                 if (!evt)
                     continue;
+                parsedEventCount++;
                 if (evt.type === 'text') {
                     if (segmentAccum.length > 0 && evt.content === segmentAccum) {
                         segmentAccum = '';
@@ -212,6 +217,8 @@ export class CursorEngine {
                 else if (evt.type === 'tool_call' || evt.type === 'tool_result') {
                     segmentAccum = '';
                 }
+                if (evt.type === 'done' || evt.type === 'error')
+                    sawTerminalEvent = true;
                 enqueue(evt);
             }
         }
@@ -240,7 +247,11 @@ export class CursorEngine {
                 processBuffer();
             }
             const code = exitCode ?? 1;
-            if (code !== 0 && !queue.some((e) => e && (e.type === 'done' || e.type === 'error'))) {
+            debugEventLog(debugEventsEnabled, `[event-debug] cursor close code=${code} rawLines=${rawLineCount} parsedEvents=${parsedEventCount} terminal=${sawTerminalEvent}`);
+            if (code === 0 && rawLineCount === 0 && parsedEventCount === 0) {
+                enqueue({ type: 'error', message: 'Cursor Agent exited without emitting stream events' });
+            }
+            else if (code !== 0 && !queue.some((e) => e && (e.type === 'done' || e.type === 'error'))) {
                 enqueue({ type: 'error', message: `Agent process exited with code ${code}` });
             }
             enqueue(null);

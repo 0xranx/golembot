@@ -10,6 +10,12 @@ class FakeChild extends EventEmitter {
   kill = vi.fn(() => true);
 }
 
+function closeSoon(code = 0): FakeChild {
+  const child = new FakeChild();
+  setTimeout(() => child.emit('close', code), 10);
+  return child;
+}
+
 async function makeWorkspace(prefix: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), prefix));
   await writeFile(join(dir, 'AGENTS.md'), '# test\n');
@@ -117,6 +123,39 @@ describe('engine abort handling', () => {
       const { CursorEngine } = await import('../engines/cursor.js');
       const message = await collectAbortMessage(new CursorEngine(), workspace);
       expect(message).toContain('stopped by user');
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it('Claude Code surfaces a zero-output exit instead of silently finishing', async () => {
+    vi.resetModules();
+    const workspace = await makeWorkspace('golem-engine-claude-empty-');
+    try {
+      vi.doMock('node:child_process', () => ({ spawn: vi.fn(() => closeSoon(0)) }));
+      vi.doMock('node:fs', async (importOriginal) => {
+        const original = await importOriginal<typeof import('node:fs')>();
+        return { ...original, existsSync: () => false };
+      });
+      vi.doMock('../engines/shared.js', async (importOriginal) => {
+        const original = await importOriginal<typeof import('../engines/shared.js')>();
+        return {
+          ...original,
+          resolveCliBinary: () => 'claude',
+          spawnCommand: vi.fn(() => closeSoon(0)),
+        };
+      });
+      const { ClaudeCodeEngine } = await import('../engines/claude-code.js');
+      const events: Array<{ type: string; message?: string }> = [];
+      for await (const evt of new ClaudeCodeEngine().invoke('hello', { workspace, skillPaths: [] })) {
+        events.push(evt);
+      }
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: 'error',
+          message: expect.stringContaining('without emitting stream-json events'),
+        }),
+      ]);
     } finally {
       await rm(workspace, { recursive: true, force: true });
     }
