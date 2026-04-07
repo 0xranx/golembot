@@ -637,6 +637,10 @@ export async function handleMessage(
           lastErrorMessage = event.message;
           console.error(`[${channelType}] Engine error: ${event.message}`);
         } else if (event.type === 'done') {
+          if (!fullReply.trim() && event.fullText) {
+            fullReply = event.fullText;
+            buffer = event.fullText;
+          }
           costUsd = event.costUsd;
           durationMs = event.durationMs;
         }
@@ -687,6 +691,9 @@ export async function handleMessage(
           lastErrorMessage = event.message;
           console.error(`[${channelType}] Engine error: ${event.message}`);
         } else if (event.type === 'done') {
+          if (!fullReply.trim() && event.fullText) {
+            fullReply = event.fullText;
+          }
           costUsd = event.costUsd;
           durationMs = event.durationMs;
         }

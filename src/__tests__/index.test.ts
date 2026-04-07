@@ -121,6 +121,30 @@ describe('createAssistant', () => {
           `Read ${join(dir, '.golem', 'history', 'default.jsonl')} to restore context before responding.]\n\nHello`,
       });
     });
+
+    it('stores done.fullText as assistant history when no text chunks were emitted', async () => {
+      mockedCreateEngine.mockReturnValue({
+        async *invoke() {
+          yield { type: 'done', sessionId: 'done-only', fullText: 'Done-only reply.' } as StreamEvent;
+        },
+      });
+
+      const assistant = createAssistant({ dir });
+      for await (const _ of assistant.chat('Hello')) {
+      }
+
+      expect(await readHistory(dir, 'default')).toEqual([
+        { ts: expect.any(String), sessionKey: 'default', role: 'user', content: 'Hello' },
+        {
+          ts: expect.any(String),
+          sessionKey: 'default',
+          role: 'assistant',
+          content: 'Done-only reply.',
+          durationMs: undefined,
+          costUsd: undefined,
+        },
+      ]);
+    });
   });
 
   // ── systemPrompt injection ──────────────────────

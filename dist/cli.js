@@ -283,10 +283,12 @@ program
             }
             try {
                 spinner.start();
+                let printedText = false;
                 for await (const event of assistant.chat(userMessage)) {
                     switch (event.type) {
                         case 'text':
                             spinner.stop();
+                            printedText = true;
                             process.stdout.write(event.content);
                             break;
                         case 'tool_call':
@@ -309,6 +311,10 @@ program
                             break;
                         case 'done': {
                             spinner.stop();
+                            if (!printedText && event.fullText) {
+                                printedText = true;
+                                process.stdout.write(event.fullText);
+                            }
                             const parts = [];
                             if (event.durationMs)
                                 parts.push(`${(event.durationMs / 1000).toFixed(1)}s`);

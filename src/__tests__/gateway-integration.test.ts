@@ -1444,6 +1444,18 @@ describe('handleMessage — full gateway pipeline', () => {
         { type: 'update', id: 'status-1', text: '✅ Done' },
       ]);
     });
+
+    it('sends done.fullText when no text chunks were emitted', async () => {
+      const assistant = makeStreamingAssistant([{ type: 'done', sessionId: 'x', fullText: 'Final answer from done.' }]);
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg();
+      const config = makeConfig({ streaming: { mode: 'streaming' } } as any);
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(adapter.replies).toHaveLength(1);
+      expect(adapter.replies[0].text).toBe('Final answer from done.');
+    });
   });
 
   // ── Slash commands ─────────────────────────────────────────────────────

@@ -241,6 +241,9 @@ export function createAssistant(opts) {
                 if (event.type === 'done') {
                     if (event.sessionId)
                         lastSessionId = event.sessionId;
+                    if (!fullReply.trim() && event.fullText) {
+                        fullReply = event.fullText;
+                    }
                     doneEvt = event;
                 }
                 if (event.type === 'error') {
