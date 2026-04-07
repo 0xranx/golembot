@@ -4,7 +4,7 @@ import { basename, join, resolve } from 'node:path';
 import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { claudeProviderEnv } from './provider-env.js';
-import { prependPathEntries, resolveCliBinary, spawnCommand } from './shared.js';
+import { prependPathEntries, resolveCliBinary, spawnCommand, stripAnsi } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
 
@@ -226,6 +226,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     let rawLineCount = 0;
     let parsedEventCount = 0;
     let sawTerminalEvent = false;
+    let firstNonJsonPreview: string | undefined;
 
     function enqueue(evt: StreamEvent | null) {
       queue.push(evt);
@@ -242,7 +243,16 @@ export class ClaudeCodeEngine implements AgentEngine {
         if (!line.trim()) continue;
         rawLineCount++;
         const summary = summarizeJsonEventLine(line);
-        if (summary) debugEventLog(debugEventsEnabled, `[event-debug] claude ${summary}`);
+        if (summary) {
+          debugEventLog(debugEventsEnabled, `[event-debug] claude ${summary}`);
+        } else {
+          const preview = stripAnsi(line).replace(/\s+/g, ' ').trim().slice(0, 120);
+          if (preview && !firstNonJsonPreview) firstNonJsonPreview = preview;
+          debugEventLog(
+            debugEventsEnabled,
+            `[event-debug] claude raw non-json chars=${line.trim().length} preview="${preview}"`,
+          );
+        }
         const events = parseClaudeStreamLine(line);
         parsedEventCount += events.length;
         for (const evt of events) {
@@ -291,11 +301,14 @@ export class ClaudeCodeEngine implements AgentEngine {
       const code = exitCode ?? 1;
       debugEventLog(
         debugEventsEnabled,
-        `[event-debug] claude close code=${code} rawLines=${rawLineCount} parsedEvents=${parsedEventCount} stderrLines=${stderrTail.length} terminal=${sawTerminalEvent}`,
+        `[event-debug] claude close code=${code} rawLines=${rawLineCount} parsedEvents=${parsedEventCount} stderrLines=${stderrTail.length} terminal=${sawTerminalEvent}${firstNonJsonPreview ? ` firstNonJson="${firstNonJsonPreview}"` : ''}`,
       );
       if (code === 0 && rawLineCount === 0 && parsedEventCount === 0) {
         const tail = stderrTail.length > 0 ? `; stderrLines=${stderrTail.length}` : '';
         enqueue({ type: 'error', message: `Claude Code exited without emitting stream-json events${tail}` });
+      } else if (code === 0 && rawLineCount > 0 && parsedEventCount === 0) {
+        const sample = firstNonJsonPreview ? `; stdout: ${firstNonJsonPreview}` : '';
+        enqueue({ type: 'error', message: `Claude Code emitted non-JSON stdout instead of stream-json${sample}` });
       } else if (code !== 0 && !queue.some((e) => e && (e.type === 'done' || e.type === 'error'))) {
         const tail = stderrTail.length > 0 ? `; stderr: ${stderrTail.join(' | ')}` : '';
         enqueue({ type: 'error', message: `Claude Code process exited with code ${code}${tail}` });

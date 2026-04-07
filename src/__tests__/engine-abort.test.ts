@@ -160,4 +160,42 @@ describe('engine abort handling', () => {
       await rm(workspace, { recursive: true, force: true });
     }
   });
+
+  it('Claude Code surfaces non-json stdout instead of silently finishing', async () => {
+    vi.resetModules();
+    const workspace = await makeWorkspace('golem-engine-claude-nonjson-');
+    try {
+      const child = new FakeChild();
+      setTimeout(() => {
+        child.stdout.emit('data', Buffer.from('Hello from plain stdout\n'));
+        child.emit('close', 0);
+      }, 10);
+      vi.doMock('node:child_process', () => ({ spawn: vi.fn(() => child) }));
+      vi.doMock('node:fs', async (importOriginal) => {
+        const original = await importOriginal<typeof import('node:fs')>();
+        return { ...original, existsSync: () => false };
+      });
+      vi.doMock('../engines/shared.js', async (importOriginal) => {
+        const original = await importOriginal<typeof import('../engines/shared.js')>();
+        return {
+          ...original,
+          resolveCliBinary: () => 'claude',
+          spawnCommand: vi.fn(() => child),
+        };
+      });
+      const { ClaudeCodeEngine } = await import('../engines/claude-code.js');
+      const events: Array<{ type: string; message?: string }> = [];
+      for await (const evt of new ClaudeCodeEngine().invoke('hello', { workspace, skillPaths: [] })) {
+        events.push(evt);
+      }
+      expect(events).toEqual([
+        expect.objectContaining({
+          type: 'error',
+          message: expect.stringContaining('non-JSON stdout'),
+        }),
+      ]);
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
 });

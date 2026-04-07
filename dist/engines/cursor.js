@@ -183,6 +183,7 @@ export class CursorEngine {
         let rawLineCount = 0;
         let parsedEventCount = 0;
         let sawTerminalEvent = false;
+        let firstNonJsonPreview;
         // Dedup: with --stream-partial-output, Cursor emits character-level deltas
         // followed by a summary event that repeats all text for each segment.
         let segmentAccum = '';
@@ -201,8 +202,15 @@ export class CursorEngine {
                     continue;
                 rawLineCount++;
                 const summary = summarizeJsonEventLine(line);
-                if (summary)
+                if (summary) {
                     debugEventLog(debugEventsEnabled, `[event-debug] cursor ${summary}`);
+                }
+                else {
+                    const preview = stripAnsi(line).replace(/\s+/g, ' ').trim().slice(0, 120);
+                    if (preview && !firstNonJsonPreview)
+                        firstNonJsonPreview = preview;
+                    debugEventLog(debugEventsEnabled, `[event-debug] cursor raw non-json chars=${line.trim().length} preview="${preview}"`);
+                }
                 const evt = parseStreamLine(line);
                 if (!evt)
                     continue;
@@ -247,9 +255,13 @@ export class CursorEngine {
                 processBuffer();
             }
             const code = exitCode ?? 1;
-            debugEventLog(debugEventsEnabled, `[event-debug] cursor close code=${code} rawLines=${rawLineCount} parsedEvents=${parsedEventCount} terminal=${sawTerminalEvent}`);
+            debugEventLog(debugEventsEnabled, `[event-debug] cursor close code=${code} rawLines=${rawLineCount} parsedEvents=${parsedEventCount} terminal=${sawTerminalEvent}${firstNonJsonPreview ? ` firstNonJson="${firstNonJsonPreview}"` : ''}`);
             if (code === 0 && rawLineCount === 0 && parsedEventCount === 0) {
                 enqueue({ type: 'error', message: 'Cursor Agent exited without emitting stream events' });
+            }
+            else if (code === 0 && rawLineCount > 0 && parsedEventCount === 0) {
+                const sample = firstNonJsonPreview ? `; stdout: ${firstNonJsonPreview}` : '';
+                enqueue({ type: 'error', message: `Cursor Agent emitted non-JSON stdout instead of stream-json${sample}` });
             }
             else if (code !== 0 && !queue.some((e) => e && (e.type === 'done' || e.type === 'error'))) {
                 enqueue({ type: 'error', message: `Agent process exited with code ${code}` });
