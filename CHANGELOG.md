@@ -1,3 +1,10 @@
+## [0.45.2-beta.4](https://github.com/0xranx/golembot/compare/v0.45.2-beta.3...v0.45.2-beta.4) (2026-04-07)
+
+
+### Bug Fixes
+
+* add safe event debug summaries ([158eae7](https://github.com/0xranx/golembot/commit/158eae75823253ca4e4439de86cd9ef1cf8cca6c))
+
 ## [0.45.2-beta.3](https://github.com/0xranx/golembot/compare/v0.45.2-beta.2...v0.45.2-beta.3) (2026-04-07)
 
 
