@@ -1,6 +1,7 @@
 import { lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { claudeProviderEnv } from './provider-env.js';
 import { prependPathEntries, resolveCliBinary, spawnCommand } from './shared.js';
@@ -157,6 +158,7 @@ function findClaudeBin(): string {
 
 export class ClaudeCodeEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    const debugEventsEnabled = isDebugEventsEnabled();
     await injectClaudeSkills(opts.workspace, opts.skillPaths);
 
     if (opts.mcpConfig && Object.keys(opts.mcpConfig).length > 0) {
@@ -235,6 +237,8 @@ export class ClaudeCodeEngine implements AgentEngine {
       buffer = lines.pop() || '';
       for (const line of lines) {
         if (!line.trim()) continue;
+        const summary = summarizeJsonEventLine(line);
+        if (summary) debugEventLog(debugEventsEnabled, `[event-debug] claude ${summary}`);
         for (const evt of parseClaudeStreamLine(line)) enqueue(evt);
       }
     }

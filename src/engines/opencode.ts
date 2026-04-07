@@ -1,5 +1,6 @@
 import { lstat, mkdir, readdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
+import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { openCodeProviderEnv } from './provider-env.js';
 import { isOnPath, spawnCommand } from './shared.js';
@@ -204,6 +205,7 @@ function findOpenCodeBin(): string {
 
 export class OpenCodeEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    const debugEventsEnabled = isDebugEventsEnabled();
     await injectOpenCodeSkills(opts.workspace, opts.skillPaths);
     await ensureOpenCodeConfig(opts.workspace, opts.model, opts.mcpConfig);
 
@@ -243,6 +245,8 @@ export class OpenCodeEngine implements AgentEngine {
       buffer = lines.pop() || '';
       for (const line of lines) {
         if (!line.trim()) continue;
+        const summary = summarizeJsonEventLine(line);
+        if (summary) debugEventLog(debugEventsEnabled, `[event-debug] opencode ${summary}`);
         for (const evt of parseOpenCodeStreamLine(line)) {
           if (evt.type === 'done') {
             if (evt.sessionId) lastSessionId = evt.sessionId;

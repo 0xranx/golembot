@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { assessCodexProviderCompatibility, codexProviderWarningFingerprint } from './codex-provider-compat.js';
+import { debugEventLog, isDebugEventsEnabled, summarizeStreamEvent } from './debug-events.js';
 import { createEngine, discoverEngines } from './engine.js';
 import { compressImages } from './image-compress.js';
 import { appendHistory, clearSession, getHistoryPath, loadSession, pruneExpiredSessions, resetConversation, saveSession, } from './session.js';
@@ -113,6 +114,7 @@ export function createAssistant(opts) {
         return Date.now() - lastExpiryWarningAt > 3_600_000;
     }
     async function* doChat(message, sessionKey, isRetry, controller, images, files) {
+        const debugEventsEnabled = isDebugEventsEnabled();
         const { config, skills } = await ensureReady(dir);
         const engineType = engineOverride || config.engine;
         const baseProvider = providerOverride || config.provider;
@@ -223,6 +225,7 @@ export function createAssistant(opts) {
         let fullReply = '';
         let doneEvt;
         try {
+            debugEventLog(debugEventsEnabled, `[event-debug] invoke engine=${engineType} resume=${!!sessionId} images=${imagePaths.length} files=${filePaths.length} provider=${!!provider} mcp=${config.mcp ? Object.keys(config.mcp).length : 0} model=${model ?? '(default)'}`);
             for await (const event of engine.invoke(finalMessage, {
                 workspace: dir,
                 skillPaths,
@@ -238,6 +241,7 @@ export function createAssistant(opts) {
                 oauthToken: config.oauthToken,
                 mcpConfig: config.mcp,
             })) {
+                debugEventLog(debugEventsEnabled, `[event-debug] assistant ${summarizeStreamEvent(event)}`);
                 if (event.type === 'done') {
                     if (event.sessionId)
                         lastSessionId = event.sessionId;

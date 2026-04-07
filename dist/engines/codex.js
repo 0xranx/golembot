@@ -1,6 +1,7 @@
 import { lstat, mkdir, readdir, symlink, unlink } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { assessCodexProviderCompatibility } from '../codex-provider-compat.js';
+import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import { codexProviderEnv } from './provider-env.js';
 import { isOnPath, spawnCommand, stripAnsi } from './shared.js';
 export function resolveCodexMode(opts) {
@@ -172,6 +173,7 @@ function findCodexBin() {
 }
 export class CodexEngine {
     async *invoke(prompt, opts) {
+        const debugEventsEnabled = isDebugEventsEnabled();
         await injectCodexSkills(opts.workspace, opts.skillPaths);
         const bin = findCodexBin();
         const codexProfile = opts.provider?.codexProfile;
@@ -225,6 +227,9 @@ export class CodexEngine {
             for (const line of lines) {
                 if (!line.trim())
                     continue;
+                const summary = summarizeJsonEventLine(line);
+                if (summary)
+                    debugEventLog(debugEventsEnabled, `[event-debug] codex ${summary}`);
                 for (const evt of parseCodexStreamLine(line, state)) {
                     if (evt.type === 'done') {
                         gotDone = true;

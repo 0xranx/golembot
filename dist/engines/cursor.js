@@ -1,6 +1,7 @@
 import { lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import { cursorProviderEnv } from './provider-env.js';
 import { prependPathEntries, resolveCliBinary, spawnCommand, stripAnsi } from './shared.js';
 // ── stream-json event parsing ───────────────────────────
@@ -127,6 +128,7 @@ function findAgentBin() {
 }
 export class CursorEngine {
     async *invoke(prompt, opts) {
+        const debugEventsEnabled = isDebugEventsEnabled();
         await injectSkills(opts.workspace, opts.skillPaths);
         if (opts.mcpConfig && Object.keys(opts.mcpConfig).length > 0) {
             const cursorDir = join(opts.workspace, '.cursor');
@@ -194,6 +196,9 @@ export class CursorEngine {
             for (const line of lines) {
                 if (!line.trim())
                     continue;
+                const summary = summarizeJsonEventLine(line);
+                if (summary)
+                    debugEventLog(debugEventsEnabled, `[event-debug] cursor ${summary}`);
                 const evt = parseStreamLine(line);
                 if (!evt)
                     continue;

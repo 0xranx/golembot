@@ -19,6 +19,7 @@ import {
   KNOWN_CHANNELS,
   recordMessage,
 } from './dashboard.js';
+import { debugEventLog, isDebugEventsEnabled, summarizeStreamEvent } from './debug-events.js';
 import { listInstances, registerInstance, unregisterInstance } from './fleet.js';
 import { startHistoryFetcher } from './history-fetcher.js';
 import { type InboxEntry, InboxStore } from './inbox.js';
@@ -486,6 +487,7 @@ export async function handleMessage(
 
   const maxLen = adapter.maxMessageLength ?? 4000;
   const streamingConfig = resolveStreamingConfig(config);
+  const debugEventsEnabled = verbose || isDebugEventsEnabled();
   let hasVisibleStatus = false;
   let thinkingStatusTimer: ReturnType<typeof setTimeout> | undefined;
   let statusMessageId: string | undefined;
@@ -502,6 +504,10 @@ export async function handleMessage(
   const sendStatusUpdate = async (text: string): Promise<void> => {
     if (!text.trim()) return;
     cancelThinkingStatus();
+    debugEventLog(
+      debugEventsEnabled,
+      `[event-debug] gateway status textChars=${text.trim().length} hasStatus=${!!statusMessageId}`,
+    );
     if (adapter.sendStatus && adapter.updateStatus && adapter.clearStatus) {
       if (!statusMessageId) {
         statusMessageId = await adapter.sendStatus(msg, text.trim());
@@ -519,6 +525,7 @@ export async function handleMessage(
   const finalizeStatusUpdate = async (finalText = '✅ Done'): Promise<void> => {
     cancelThinkingStatus();
     if (!statusMessageId) return;
+    debugEventLog(debugEventsEnabled, `[event-debug] gateway status-final textChars=${finalText.length}`);
     if (adapter.updateStatus) {
       await adapter.updateStatus(msg, statusMessageId, finalText);
       statusMessageText = finalText;
@@ -554,6 +561,10 @@ export async function handleMessage(
       return;
     }
     const chunks = splitMessage(text.trim(), maxLen);
+    debugEventLog(
+      debugEventsEnabled,
+      `[event-debug] gateway reply totalChars=${text.trim().length} chunks=${chunks.length} chatType=${msg.chatType}`,
+    );
     let mentions: MentionTarget[] = [];
     if (msg.chatType === 'group' && adapter.getGroupMembers) {
       try {
@@ -603,6 +614,7 @@ export async function handleMessage(
       };
 
       for await (const event of assistant.chat(fullText, { sessionKey, images: msg.images, files: msg.files })) {
+        debugEventLog(debugEventsEnabled, `[event-debug] gateway ${summarizeStreamEvent(event)}`);
         if (event.type === 'text') {
           fullReply += event.content;
           buffer += event.content;
@@ -682,6 +694,7 @@ export async function handleMessage(
     } else {
       // ── Buffered mode (default): accumulate all text, send at end ──
       for await (const event of assistant.chat(fullText, { sessionKey, images: msg.images, files: msg.files })) {
+        debugEventLog(debugEventsEnabled, `[event-debug] gateway ${summarizeStreamEvent(event)}`);
         if (event.type === 'text') {
           fullReply += event.content;
         } else if (event.type === 'warning') {

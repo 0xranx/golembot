@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildConversationKey, buildSessionKey, detectMention, stripMention, } from './channel.js';
 import { createMetrics, KNOWN_CHANNELS, recordMessage, } from './dashboard.js';
+import { debugEventLog, isDebugEventsEnabled, summarizeStreamEvent } from './debug-events.js';
 import { listInstances, registerInstance, unregisterInstance } from './fleet.js';
 import { startHistoryFetcher } from './history-fetcher.js';
 import { InboxStore } from './inbox.js';
@@ -362,6 +363,7 @@ peers) {
     let durationMs;
     const maxLen = adapter.maxMessageLength ?? 4000;
     const streamingConfig = resolveStreamingConfig(config);
+    const debugEventsEnabled = verbose || isDebugEventsEnabled();
     let hasVisibleStatus = false;
     let thinkingStatusTimer;
     let statusMessageId;
@@ -377,6 +379,7 @@ peers) {
         if (!text.trim())
             return;
         cancelThinkingStatus();
+        debugEventLog(debugEventsEnabled, `[event-debug] gateway status textChars=${text.trim().length} hasStatus=${!!statusMessageId}`);
         if (adapter.sendStatus && adapter.updateStatus && adapter.clearStatus) {
             if (!statusMessageId) {
                 statusMessageId = await adapter.sendStatus(msg, text.trim());
@@ -396,6 +399,7 @@ peers) {
         cancelThinkingStatus();
         if (!statusMessageId)
             return;
+        debugEventLog(debugEventsEnabled, `[event-debug] gateway status-final textChars=${finalText.length}`);
         if (adapter.updateStatus) {
             await adapter.updateStatus(msg, statusMessageId, finalText);
             statusMessageText = finalText;
@@ -430,6 +434,7 @@ peers) {
             return;
         }
         const chunks = splitMessage(text.trim(), maxLen);
+        debugEventLog(debugEventsEnabled, `[event-debug] gateway reply totalChars=${text.trim().length} chunks=${chunks.length} chatType=${msg.chatType}`);
         let mentions = [];
         if (msg.chatType === 'group' && adapter.getGroupMembers) {
             try {
@@ -474,6 +479,7 @@ peers) {
                 buffer = '';
             };
             for await (const event of assistant.chat(fullText, { sessionKey, images: msg.images, files: msg.files })) {
+                debugEventLog(debugEventsEnabled, `[event-debug] gateway ${summarizeStreamEvent(event)}`);
                 if (event.type === 'text') {
                     fullReply += event.content;
                     buffer += event.content;
@@ -552,6 +558,7 @@ peers) {
         else {
             // ── Buffered mode (default): accumulate all text, send at end ──
             for await (const event of assistant.chat(fullText, { sessionKey, images: msg.images, files: msg.files })) {
+                debugEventLog(debugEventsEnabled, `[event-debug] gateway ${summarizeStreamEvent(event)}`);
                 if (event.type === 'text') {
                     fullReply += event.content;
                 }

@@ -1,6 +1,7 @@
 import { lstat, mkdir, readdir, symlink, unlink } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { assessCodexProviderCompatibility } from '../codex-provider-compat.js';
+import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { codexProviderEnv } from './provider-env.js';
 import { isOnPath, spawnCommand, stripAnsi } from './shared.js';
@@ -189,6 +190,7 @@ function findCodexBin(): string {
 
 export class CodexEngine implements AgentEngine {
   async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    const debugEventsEnabled = isDebugEventsEnabled();
     await injectCodexSkills(opts.workspace, opts.skillPaths);
 
     const bin = findCodexBin();
@@ -251,6 +253,8 @@ export class CodexEngine implements AgentEngine {
       buffer = lines.pop() || '';
       for (const line of lines) {
         if (!line.trim()) continue;
+        const summary = summarizeJsonEventLine(line);
+        if (summary) debugEventLog(debugEventsEnabled, `[event-debug] codex ${summary}`);
         for (const evt of parseCodexStreamLine(line, state)) {
           if (evt.type === 'done') {
             gotDone = true;

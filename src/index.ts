@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { FileAttachment, ImageAttachment } from './channel.js';
 import { assessCodexProviderCompatibility, codexProviderWarningFingerprint } from './codex-provider-compat.js';
+import { debugEventLog, isDebugEventsEnabled, summarizeStreamEvent } from './debug-events.js';
 import { type AgentEngine, createEngine, type DiscoveredEngine, discoverEngines, type StreamEvent } from './engine.js';
 import { compressImages } from './image-compress.js';
 import {
@@ -233,6 +234,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     images?: ImageAttachment[],
     files?: FileAttachment[],
   ): AsyncIterable<StreamEvent> {
+    const debugEventsEnabled = isDebugEventsEnabled();
     const { config, skills } = await ensureReady(dir);
 
     const engineType = engineOverride || config.engine;
@@ -358,6 +360,10 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     let doneEvt: Extract<StreamEvent, { type: 'done' }> | undefined;
 
     try {
+      debugEventLog(
+        debugEventsEnabled,
+        `[event-debug] invoke engine=${engineType} resume=${!!sessionId} images=${imagePaths.length} files=${filePaths.length} provider=${!!provider} mcp=${config.mcp ? Object.keys(config.mcp).length : 0} model=${model ?? '(default)'}`,
+      );
       for await (const event of engine.invoke(finalMessage, {
         workspace: dir,
         skillPaths,
@@ -373,6 +379,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
         oauthToken: config.oauthToken,
         mcpConfig: config.mcp,
       })) {
+        debugEventLog(debugEventsEnabled, `[event-debug] assistant ${summarizeStreamEvent(event)}`);
         if (event.type === 'done') {
           if (event.sessionId) lastSessionId = event.sessionId;
           if (!fullReply.trim() && event.fullText) {
