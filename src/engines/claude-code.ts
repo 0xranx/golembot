@@ -1,10 +1,9 @@
-import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { claudeProviderEnv } from './provider-env.js';
-import { isOnPath, prependPathEntries, spawnCommand } from './shared.js';
+import { prependPathEntries, resolveCliBinary, spawnCommand } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
 
@@ -145,14 +144,15 @@ let _warnedSkipPermissions = false;
 
 function findClaudeBin(): string {
   const localBin = join(homedir(), '.local', 'bin', 'claude');
-  if (!existsSync(localBin) && !isOnPath('claude')) {
+  const resolved = resolveCliBinary('claude', localBin);
+  if (!resolved) {
     throw new Error(
-      `Claude Code CLI ("claude") not found at ${localBin}\n` +
+      `Claude Code CLI ("claude") not found in PATH or at ${localBin}\n` +
         `Install it with: npm install -g @anthropic-ai/claude-code\n` +
         `See: https://code.claude.com/docs/en/overview`,
     );
   }
-  return existsSync(localBin) ? localBin : 'claude';
+  return resolved;
 }
 
 export class ClaudeCodeEngine implements AgentEngine {

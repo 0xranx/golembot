@@ -66,7 +66,11 @@ describe('engine abort handling', () => {
       });
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
-        return { ...original, isOnPath: () => true, spawnCommand: vi.fn(() => new FakeChild()) };
+        return {
+          ...original,
+          resolveCliBinary: () => 'claude',
+          spawnCommand: vi.fn(() => new FakeChild()),
+        };
       });
       const { ClaudeCodeEngine } = await import('../engines/claude-code.js');
       const message = await collectAbortMessage(new ClaudeCodeEngine(), workspace);
@@ -104,7 +108,11 @@ describe('engine abort handling', () => {
       });
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
-        return { ...original, isOnPath: () => true, spawnCommand: vi.fn(() => new FakeChild()) };
+        return {
+          ...original,
+          resolveCliBinary: () => 'agent',
+          spawnCommand: vi.fn(() => new FakeChild()),
+        };
       });
       const { CursorEngine } = await import('../engines/cursor.js');
       const message = await collectAbortMessage(new CursorEngine(), workspace);

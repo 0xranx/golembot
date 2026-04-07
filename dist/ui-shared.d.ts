@@ -1,0 +1,7 @@
+export declare function esc(s: string): string;
+export declare function formatUptime(ms: number): string;
+export declare const FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 150' fill='none'><defs><linearGradient id='clay' x1='0' y1='0' x2='0' y2='1'><stop offset='0%25' stop-color='%23D4A574'/><stop offset='100%25' stop-color='%23A0724A'/></linearGradient><linearGradient id='glow' x1='0' y1='0' x2='1' y2='1'><stop offset='0%25' stop-color='%237DF9FF'/><stop offset='100%25' stop-color='%234FC3F7'/></linearGradient></defs><rect x='0' y='0' width='150' height='150' rx='22' fill='url(%23clay)'/><rect x='26' y='53' width='34' height='24' rx='5' fill='%230D1117'/><rect x='90' y='53' width='34' height='24' rx='5' fill='%230D1117'/><rect x='29' y='56' width='28' height='18' rx='3' fill='url(%23glow)'/><rect x='93' y='56' width='28' height='18' rx='3' fill='url(%23glow)'/><rect x='42' y='105' width='66' height='7' rx='3' fill='%238B6942'/></svg>";
+export declare const DOCS_BASE = "https://0xranx.github.io/golembot";
+export declare const ENGINE_COLORS: Record<string, string>;
+export declare const BASE_CSS: string;
+//# sourceMappingURL=ui-shared.d.ts.map
