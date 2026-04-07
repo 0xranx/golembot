@@ -1,3 +1,10 @@
+## [0.45.2-beta.7](https://github.com/0xranx/golembot/compare/v0.45.2-beta.6...v0.45.2-beta.7) (2026-04-07)
+
+
+### Bug Fixes
+
+* prefer powershell cli shims on Windows ([92ffcb6](https://github.com/0xranx/golembot/commit/92ffcb627a50fc55a2a642924d87cbcfcf6976db))
+
 ## [0.45.2-beta.6](https://github.com/0xranx/golembot/compare/v0.45.2-beta.5...v0.45.2-beta.6) (2026-04-07)
 
 
