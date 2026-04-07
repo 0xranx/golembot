@@ -1,3 +1,10 @@
+## [0.45.2-beta.1](https://github.com/0xranx/golembot/compare/v0.45.1...v0.45.2-beta.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* prefer PATH-resolved cli shims on Windows ([99d7e79](https://github.com/0xranx/golembot/commit/99d7e791e2ef3408d9af7f6af1a5fbf396beca7f))
+
 ## [0.45.1](https://github.com/0xranx/golembot/compare/v0.45.0...v0.45.1) (2026-04-07)
 
 
