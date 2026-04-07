@@ -1,0 +1,265 @@
+/**
+ * Feishu message format utilities.
+ *
+ * Converts Markdown text to Feishu post (rich text) or interactive card format.
+ * Reference: OpenClaw feishu plugin markdown.ts
+ */
+// ---------------------------------------------------------------------------
+// Markdown detection
+// ---------------------------------------------------------------------------
+const MD_PATTERNS = [
+    /^#{1,6}\s/m, // headings
+    /\*\*[^*]+\*\*/, // bold
+    /\*[^*]+\*/, // italic
+    /\[[^\]]+\]\([^)]+\)/, // links
+    /^[-*]\s/m, // unordered list
+    /^\d+\.\s/m, // ordered list
+    /^[-*]\s+\[[ xX]\]/m, // checkbox
+    /`[^`]+`/, // inline code
+    /^[-*_]{3,}$/m, // horizontal rule
+    /^```/m, // code block
+    /^\|.+\|/m, // table
+    /^>/m, // blockquote
+    /~~[^~]+~~/, // strikethrough
+];
+/** Detect whether text contains Markdown formatting. */
+export function hasMarkdown(text) {
+    return MD_PATTERNS.some((p) => p.test(text));
+}
+// ---------------------------------------------------------------------------
+// Markdown -> Post (rich text)
+// ---------------------------------------------------------------------------
+/** Convert Markdown text to Feishu post rich-text structure. */
+export function markdownToPost(markdown) {
+    const lines = markdown.split('\n');
+    const content = [];
+    let inCodeBlock = false;
+    let codeBlockLang = '';
+    for (const line of lines) {
+        const codeBlockMatch = line.match(/^\s*```(\w*)\s*$/);
+        if (codeBlockMatch) {
+            if (!inCodeBlock) {
+                inCodeBlock = true;
+                codeBlockLang = codeBlockMatch[1] || 'code';
+                content.push([{ tag: 'text', text: `\u250C\u2500 ${codeBlockLang} \u2500\u2510` }]);
+            }
+            else {
+                inCodeBlock = false;
+                content.push([
+                    { tag: 'text', text: '\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518' },
+                ]);
+                codeBlockLang = '';
+            }
+            continue;
+        }
+        if (inCodeBlock) {
+            content.push([{ tag: 'text', text: `\u2502 ${line}` }]);
+            continue;
+        }
+        const elements = parseLine(line);
+        if (elements.length > 0) {
+            content.push(elements);
+        }
+    }
+    // Close unclosed code block
+    if (inCodeBlock) {
+        content.push([
+            { tag: 'text', text: '\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518' },
+        ]);
+    }
+    return { zh_cn: { content } };
+}
+/** Parse a single line of Markdown into PostElements. */
+function parseLine(line) {
+    const trimmed = line.trim();
+    if (!trimmed)
+        return [];
+    // Heading -> bold
+    const headingMatch = trimmed.match(/^#{1,6}\s+(.+)$/);
+    if (headingMatch) {
+        return [{ tag: 'text', text: headingMatch[1], style: ['bold'] }];
+    }
+    // Checkbox (must check before plain list)
+    const checkboxMatch = trimmed.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
+    if (checkboxMatch) {
+        const icon = checkboxMatch[1].toLowerCase() === 'x' ? '\u2705 ' : '\u2B1C ';
+        return [{ tag: 'text', text: icon }, ...parseInline(checkboxMatch[2])];
+    }
+    // Unordered list: - item → • item
+    const ulMatch = trimmed.match(/^[-*]\s+(.+)$/);
+    if (ulMatch) {
+        return [{ tag: 'text', text: '• ' }, ...parseInline(ulMatch[1])];
+    }
+    // Horizontal rule
+    if (/^[-*_]{3,}$/.test(trimmed)) {
+        return [{ tag: 'text', text: '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500' }];
+    }
+    // Blockquote
+    const quoteMatch = trimmed.match(/^>\s*(.*)$/);
+    if (quoteMatch) {
+        return [{ tag: 'text', text: '\u275D ' }, ...parseInline(quoteMatch[1])];
+    }
+    // Plain line
+    return parseInline(trimmed);
+}
+/** Parse inline Markdown elements. */
+function parseInline(text) {
+    const elements = [];
+    let remaining = text;
+    while (remaining.length > 0) {
+        // Link [text](url)
+        const linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+        if (linkMatch) {
+            elements.push({ tag: 'a', text: linkMatch[1], href: linkMatch[2] });
+            remaining = remaining.slice(linkMatch[0].length);
+            continue;
+        }
+        // Bold **text** or __text__
+        const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/) || remaining.match(/^__([^_]+)__/);
+        if (boldMatch) {
+            elements.push({ tag: 'text', text: boldMatch[1], style: ['bold'] });
+            remaining = remaining.slice(boldMatch[0].length);
+            continue;
+        }
+        // Strikethrough ~~text~~
+        const strikeMatch = remaining.match(/^~~([^~]+)~~/);
+        if (strikeMatch) {
+            elements.push({ tag: 'text', text: strikeMatch[1], style: ['lineThrough'] });
+            remaining = remaining.slice(strikeMatch[0].length);
+            continue;
+        }
+        // Italic *text* or _text_
+        const italicMatch = remaining.match(/^\*([^*]+)\*/) || remaining.match(/^_([^_]+)_/);
+        if (italicMatch) {
+            elements.push({ tag: 'text', text: italicMatch[1], style: ['italic'] });
+            remaining = remaining.slice(italicMatch[0].length);
+            continue;
+        }
+        // Inline triple-backtick code ```code```
+        const inlineCodeBlockMatch = remaining.match(/^```(\w*)\s+(.+?)```/) || remaining.match(/^```(.+?)```/);
+        if (inlineCodeBlockMatch) {
+            const code = inlineCodeBlockMatch[2] || inlineCodeBlockMatch[1];
+            elements.push({ tag: 'text', text: `\u300C${code}\u300D` });
+            remaining = remaining.slice(inlineCodeBlockMatch[0].length);
+            continue;
+        }
+        // Inline code `code`
+        const codeMatch = remaining.match(/^`([^`]+)`/);
+        if (codeMatch) {
+            elements.push({ tag: 'text', text: `\u300C${codeMatch[1]}\u300D` });
+            remaining = remaining.slice(codeMatch[0].length);
+            continue;
+        }
+        // Plain characters until next special char
+        const nextSpecial = remaining.search(/[[\]*_`~]/);
+        if (nextSpecial === -1) {
+            elements.push({ tag: 'text', text: remaining });
+            break;
+        }
+        else if (nextSpecial === 0) {
+            elements.push({ tag: 'text', text: remaining[0] });
+            remaining = remaining.slice(1);
+        }
+        else {
+            elements.push({ tag: 'text', text: remaining.slice(0, nextSpecial) });
+            remaining = remaining.slice(nextSpecial);
+        }
+    }
+    return elements;
+}
+// ---------------------------------------------------------------------------
+// Markdown -> Card (interactive)
+// ---------------------------------------------------------------------------
+/**
+ * Convert Markdown text to a Feishu interactive card v2 structure.
+ *
+ * Uses the card v2 `markdown` component which natively renders full CommonMark
+ * syntax including bold, italic, strikethrough, links, lists, code blocks,
+ * blockquotes, headings, and tables.
+ *
+ * Only checkboxes need preprocessing (not supported by card markdown).
+ */
+export function markdownToCard(markdown) {
+    const preprocessed = preprocessForCard(markdown);
+    return {
+        schema: '2.0',
+        body: {
+            elements: [
+                {
+                    tag: 'markdown',
+                    content: preprocessed,
+                },
+            ],
+        },
+    };
+}
+/**
+ * Replace `@name` patterns in post content with Feishu `{ tag: 'at', user_id }` elements.
+ * Mutates the post in-place.
+ */
+export function injectMentionsIntoPost(post, mentions) {
+    if (!mentions.length)
+        return;
+    const mentionMap = new Map(mentions.map((m) => [m.name, m.platformId]));
+    for (let i = 0; i < post.zh_cn.content.length; i++) {
+        const line = post.zh_cn.content[i];
+        const newLine = [];
+        for (const el of line) {
+            if (el.tag !== 'text' || !el.text) {
+                newLine.push(el);
+                continue;
+            }
+            // Split text on @name patterns and replace with at elements
+            const remaining = el.text;
+            const mentionPattern = /@([\w\u4e00-\u9fff]{1,20})/g;
+            let lastIdx = 0;
+            let match;
+            // Reset regex state
+            mentionPattern.lastIndex = 0;
+            const parts = [];
+            while ((match = mentionPattern.exec(remaining)) !== null) {
+                const name = match[1];
+                const userId = mentionMap.get(name);
+                if (!userId)
+                    continue;
+                // Text before the mention
+                if (match.index > lastIdx) {
+                    const beforeText = remaining.slice(lastIdx, match.index);
+                    parts.push({ ...el, text: beforeText });
+                }
+                // The @mention element
+                parts.push({ tag: 'at', user_id: userId });
+                lastIdx = match.index + match[0].length;
+            }
+            if (parts.length === 0) {
+                // No mentions found in this element
+                newLine.push(el);
+            }
+            else {
+                // Remaining text after last mention
+                if (lastIdx < remaining.length) {
+                    parts.push({ ...el, text: remaining.slice(lastIdx) });
+                }
+                newLine.push(...parts);
+            }
+        }
+        post.zh_cn.content[i] = newLine;
+    }
+}
+/** Preprocess Markdown for card v2 markdown component. */
+function preprocessForCard(text) {
+    return text
+        .split('\n')
+        .map((line) => {
+        const trimmed = line.trim();
+        // Checkbox -> emoji (not supported by card markdown)
+        const cbMatch = trimmed.match(/^[-*]\s+\[([ xX])\]\s+(.+)$/);
+        if (cbMatch) {
+            const icon = cbMatch[1].toLowerCase() === 'x' ? '\u2705' : '\u2B1C';
+            return `${icon} ${cbMatch[2]}`;
+        }
+        return line;
+    })
+        .join('\n');
+}
+//# sourceMappingURL=feishu-format.js.map

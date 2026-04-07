@@ -1,4 +1,5 @@
 import { execFileSync, type SpawnOptions } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { delimiter } from 'node:path';
 import crossSpawn from 'cross-spawn';
 
@@ -25,6 +26,13 @@ export function resolveOnPath(cmd: string): string | undefined {
 
 export function isOnPath(cmd: string): boolean {
   return !!resolveOnPath(cmd);
+}
+
+export function resolveCliBinary(command: string, localPath?: string, platform: NodeJS.Platform = process.platform) {
+  const resolved = resolveOnPath(command);
+  const hasLocal = !!localPath && existsSync(localPath);
+  if (platform === 'win32') return resolved ?? (hasLocal ? localPath : undefined);
+  return hasLocal ? localPath : resolved;
 }
 
 export function prependPathEntries(

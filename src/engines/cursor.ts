@@ -1,10 +1,9 @@
-import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { cursorProviderEnv } from './provider-env.js';
-import { isOnPath, prependPathEntries, spawnCommand, stripAnsi } from './shared.js';
+import { prependPathEntries, resolveCliBinary, spawnCommand, stripAnsi } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
 
@@ -126,14 +125,15 @@ export async function injectSkills(workspace: string, skillPaths: string[]): Pro
 
 function findAgentBin(): string {
   const localBin = join(homedir(), '.local', 'bin', 'agent');
-  if (!existsSync(localBin) && !isOnPath('agent')) {
+  const resolved = resolveCliBinary('agent', localBin);
+  if (!resolved) {
     throw new Error(
-      `Cursor CLI ("agent") not found at ${localBin}\n` +
+      `Cursor CLI ("agent") not found in PATH or at ${localBin}\n` +
         `Install it with: curl https://cursor.com/install -fsS | bash\n` +
         `See: https://cursor.com/docs/cli/installation`,
     );
   }
-  return existsSync(localBin) ? localBin : 'agent';
+  return resolved;
 }
 
 export class CursorEngine implements AgentEngine {

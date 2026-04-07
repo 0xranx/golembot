@@ -27,6 +27,48 @@ describe('engine shared spawn helpers', () => {
     );
   });
 
+  it('resolveCliBinary prefers PATH on Windows when both PATH and local bin exist', async () => {
+    vi.doMock('node:child_process', async (importOriginal) => {
+      const original = await importOriginal<typeof import('node:child_process')>();
+      return {
+        ...original,
+        execFileSync: vi.fn(() => 'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.cmd\r\n'),
+      };
+    });
+    vi.doMock('node:fs', async (importOriginal) => {
+      const original = await importOriginal<typeof import('node:fs')>();
+      return {
+        ...original,
+        existsSync: vi.fn(() => true),
+      };
+    });
+
+    const { resolveCliBinary } = await import('../engines/shared.js');
+    expect(resolveCliBinary('claude', 'C:\\Users\\me\\.local\\bin\\claude', 'win32')).toBe(
+      'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.cmd',
+    );
+  });
+
+  it('resolveCliBinary prefers local bin on Unix when it exists', async () => {
+    vi.doMock('node:child_process', async (importOriginal) => {
+      const original = await importOriginal<typeof import('node:child_process')>();
+      return {
+        ...original,
+        execFileSync: vi.fn(() => '/usr/local/bin/claude\n'),
+      };
+    });
+    vi.doMock('node:fs', async (importOriginal) => {
+      const original = await importOriginal<typeof import('node:fs')>();
+      return {
+        ...original,
+        existsSync: vi.fn((path: string) => path === '/Users/me/.local/bin/claude'),
+      };
+    });
+
+    const { resolveCliBinary } = await import('../engines/shared.js');
+    expect(resolveCliBinary('claude', '/Users/me/.local/bin/claude', 'darwin')).toBe('/Users/me/.local/bin/claude');
+  });
+
   it('spawnCommand uses the resolved executable path', async () => {
     const crossSpawnMock = vi.fn();
     vi.doMock('cross-spawn', () => ({
