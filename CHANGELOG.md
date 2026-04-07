@@ -1,3 +1,10 @@
+## [0.45.2-beta.5](https://github.com/0xranx/golembot/compare/v0.45.2-beta.4...v0.45.2-beta.5) (2026-04-07)
+
+
+### Bug Fixes
+
+* surface zero-output agent exits ([00cf145](https://github.com/0xranx/golembot/commit/00cf145a329e60a9c85cb53d5bee891daab02eb2))
+
 ## [0.45.2-beta.4](https://github.com/0xranx/golembot/compare/v0.45.2-beta.3...v0.45.2-beta.4) (2026-04-07)
 
 
