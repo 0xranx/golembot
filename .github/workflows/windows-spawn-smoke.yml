@@ -1,0 +1,38 @@
+name: Windows Spawn Smoke
+
+on:
+  push:
+    branches:
+      - temp/windows-spawn-smoke
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Windows spawn regression tests
+        run: >
+          pnpm vitest run
+          src/__tests__/shared-spawn.test.ts
+          src/__tests__/engine-abort.test.ts
+          src/__tests__/error-paths.test.ts
+          src/__tests__/windows-cli-launch.test.ts
+          --reporter=verbose
