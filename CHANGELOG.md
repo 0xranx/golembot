@@ -1,3 +1,10 @@
+## [0.45.2-beta.3](https://github.com/0xranx/golembot/compare/v0.45.2-beta.2...v0.45.2-beta.3) (2026-04-07)
+
+
+### Bug Fixes
+
+* surface done-only agent replies ([86fd42d](https://github.com/0xranx/golembot/commit/86fd42deeced929a89ef38467eb28be53c6557fa))
+
 ## [0.45.2-beta.2](https://github.com/0xranx/golembot/compare/v0.45.2-beta.1...v0.45.2-beta.2) (2026-04-07)
 
 
