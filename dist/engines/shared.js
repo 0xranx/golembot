@@ -38,6 +38,13 @@ export function prependPathEntries(currentPath, entries, pathDelimiter = delimit
 }
 export function spawnCommand(command, args, options) {
     const resolved = resolveOnPath(command) || command;
+    if (process.platform === 'win32' && /\.cmd$/i.test(resolved)) {
+        const ps1Path = resolved.replace(/\.cmd$/i, '.ps1');
+        const powershell = resolveOnPath('powershell.exe') || resolveOnPath('pwsh.exe');
+        if (existsSync(ps1Path) && powershell) {
+            return crossSpawn(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1Path, ...args], options);
+        }
+    }
     return crossSpawn(resolved, args, options);
 }
 const ENGINE_BINARIES = {

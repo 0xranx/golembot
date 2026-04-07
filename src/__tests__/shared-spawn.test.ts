@@ -92,4 +92,55 @@ describe('engine shared spawn helpers', () => {
       options,
     );
   });
+
+  it('spawnCommand prefers a sibling PowerShell shim on Windows when available', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const crossSpawnMock = vi.fn();
+    try {
+      vi.doMock('cross-spawn', () => ({
+        default: crossSpawnMock,
+      }));
+      vi.doMock('node:child_process', async (importOriginal) => {
+        const original = await importOriginal<typeof import('node:child_process')>();
+        return {
+          ...original,
+          execFileSync: vi.fn((cmd: string, args: string[]) => {
+            if (cmd === 'where' && args[0] === 'claude') return 'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.cmd\r\n';
+            if (cmd === 'where' && args[0] === 'powershell.exe')
+              return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\r\n';
+            return '';
+          }),
+        };
+      });
+      vi.doMock('node:fs', async (importOriginal) => {
+        const original = await importOriginal<typeof import('node:fs')>();
+        return {
+          ...original,
+          existsSync: vi.fn((path: string) => path === 'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.ps1'),
+        };
+      });
+
+      const { spawnCommand } = await import('../engines/shared.js');
+      const options = { stdio: 'ignore' as const };
+      spawnCommand('claude', ['--version'], options);
+
+      expect(crossSpawnMock).toHaveBeenCalledWith(
+        'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          'C:\\Users\\me\\AppData\\Roaming\\npm\\claude.ps1',
+          '--version',
+        ],
+        options,
+      );
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
 });
