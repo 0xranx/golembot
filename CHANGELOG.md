@@ -1,3 +1,10 @@
+## [0.45.2-beta.2](https://github.com/0xranx/golembot/compare/v0.45.2-beta.1...v0.45.2-beta.2) (2026-04-07)
+
+
+### Bug Fixes
+
+* reset session history by default ([bab3b30](https://github.com/0xranx/golembot/commit/bab3b304ced855bcda59990b06ca3aa454b2e5e8))
+
 ## [0.45.2-beta.1](https://github.com/0xranx/golembot/compare/v0.45.1...v0.45.2-beta.1) (2026-04-07)
 
 
