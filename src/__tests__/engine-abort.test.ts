@@ -45,7 +45,7 @@ describe('engine abort handling', () => {
       vi.doMock('node:child_process', () => ({ spawn: vi.fn(() => new FakeChild()) }));
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
-        return { ...original, isOnPath: () => true };
+        return { ...original, isOnPath: () => true, spawnCommand: vi.fn(() => new FakeChild()) };
       });
       const { CodexEngine } = await import('../engines/codex.js');
       const message = await collectAbortMessage(new CodexEngine(), workspace);
@@ -66,7 +66,7 @@ describe('engine abort handling', () => {
       });
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
-        return { ...original, isOnPath: () => true };
+        return { ...original, isOnPath: () => true, spawnCommand: vi.fn(() => new FakeChild()) };
       });
       const { ClaudeCodeEngine } = await import('../engines/claude-code.js');
       const message = await collectAbortMessage(new ClaudeCodeEngine(), workspace);
@@ -83,7 +83,7 @@ describe('engine abort handling', () => {
       vi.doMock('node:child_process', () => ({ spawn: vi.fn(() => new FakeChild()) }));
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
-        return { ...original, isOnPath: () => true };
+        return { ...original, isOnPath: () => true, spawnCommand: vi.fn(() => new FakeChild()) };
       });
       const { OpenCodeEngine } = await import('../engines/opencode.js');
       const message = await collectAbortMessage(new OpenCodeEngine(), workspace);
@@ -104,7 +104,7 @@ describe('engine abort handling', () => {
       });
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
-        return { ...original, isOnPath: () => true };
+        return { ...original, isOnPath: () => true, spawnCommand: vi.fn(() => new FakeChild()) };
       });
       const { CursorEngine } = await import('../engines/cursor.js');
       const message = await collectAbortMessage(new CursorEngine(), workspace);

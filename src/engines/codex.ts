@@ -1,10 +1,9 @@
-import { spawn } from 'node:child_process';
 import { lstat, mkdir, readdir, symlink, unlink } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { assessCodexProviderCompatibility } from '../codex-provider-compat.js';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { codexProviderEnv } from './provider-env.js';
-import { isOnPath, stripAnsi } from './shared.js';
+import { isOnPath, spawnCommand, stripAnsi } from './shared.js';
 
 export function resolveCodexMode(opts: Pick<InvokeOpts, 'codex'>): 'safe' | 'unrestricted' {
   return opts.codex?.mode ?? 'unrestricted';
@@ -225,7 +224,7 @@ export class CodexEngine implements AgentEngine {
       env.OPENAI_API_KEY = opts.apiKey;
     }
 
-    const child = spawn(bin, args, {
+    const child = spawnCommand(bin, args, {
       cwd: opts.workspace,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

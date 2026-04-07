@@ -1,11 +1,10 @@
-import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { cursorProviderEnv } from './provider-env.js';
-import { isOnPath, stripAnsi } from './shared.js';
+import { isOnPath, prependPathEntries, spawnCommand, stripAnsi } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
 
@@ -176,12 +175,12 @@ export class CursorEngine implements AgentEngine {
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
-      PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
+      PATH: prependPathEntries(process.env.PATH, [join(homedir(), '.local', 'bin')]),
     };
     if (opts.provider) Object.assign(env, cursorProviderEnv(opts.provider));
     if (opts.apiKey) env.CURSOR_API_KEY = opts.apiKey;
 
-    const child = spawn(agentBin, args, {
+    const child = spawnCommand(agentBin, args, {
       cwd: opts.workspace,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -287,9 +286,9 @@ export class CursorEngine implements AgentEngine {
   async listModels(_opts: ListModelsOpts): Promise<string[]> {
     const bin = findAgentBin();
     return new Promise<string[]>((resolve) => {
-      const child = spawn(bin, ['--list-models'], { timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawnCommand(bin, ['--list-models'], { timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'] });
       const chunks: Buffer[] = [];
-      child.stdout.on('data', (c: Buffer) => chunks.push(c));
+      child.stdout!.on('data', (c: Buffer) => chunks.push(c));
       child.on('close', () => {
         const raw = stripAnsi(Buffer.concat(chunks).toString('utf-8'));
         const models = raw

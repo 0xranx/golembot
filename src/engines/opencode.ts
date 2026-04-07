@@ -1,9 +1,8 @@
-import { spawn } from 'node:child_process';
 import { lstat, mkdir, readdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { openCodeProviderEnv } from './provider-env.js';
-import { isOnPath } from './shared.js';
+import { isOnPath, spawnCommand } from './shared.js';
 
 // ── Provider env resolution ──────────────────────────────
 
@@ -217,7 +216,7 @@ export class OpenCodeEngine implements AgentEngine {
     if (opts.provider) Object.assign(env, openCodeProviderEnv(opts.provider, opts.model));
     Object.assign(env, resolveOpenCodeEnv(opts.model, opts.apiKey));
 
-    const child = spawn(bin, args, {
+    const child = spawnCommand(bin, args, {
       cwd: opts.workspace,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -348,9 +347,9 @@ export class OpenCodeEngine implements AgentEngine {
     }
     // Fallback: opencode CLI
     return new Promise<string[]>((resolve) => {
-      const child = spawn('opencode', ['models'], { timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawnCommand('opencode', ['models'], { timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'] });
       const chunks: Buffer[] = [];
-      child.stdout.on('data', (c: Buffer) => chunks.push(c));
+      child.stdout!.on('data', (c: Buffer) => chunks.push(c));
       child.on('close', () => {
         const models = Buffer.concat(chunks).toString('utf-8').trim().split('\n').filter(Boolean);
         resolve(models);

@@ -1,11 +1,10 @@
-import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, symlink, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { claudeProviderEnv } from './provider-env.js';
-import { isOnPath } from './shared.js';
+import { isOnPath, prependPathEntries, spawnCommand } from './shared.js';
 
 // ── stream-json event parsing ───────────────────────────
 
@@ -194,7 +193,7 @@ export class ClaudeCodeEngine implements AgentEngine {
 
     const env: Record<string, string> = {
       ...(process.env as Record<string, string>),
-      PATH: `${join(homedir(), '.local', 'bin')}:${process.env.PATH || ''}`,
+      PATH: prependPathEntries(process.env.PATH, [join(homedir(), '.local', 'bin')]),
     };
     if (opts.provider) Object.assign(env, claudeProviderEnv(opts.provider));
     // When provider is set but provider.model is not, the resolved model (from
@@ -212,7 +211,7 @@ export class ClaudeCodeEngine implements AgentEngine {
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
 
-    const child = spawn(claudeBin, args, {
+    const child = spawnCommand(claudeBin, args, {
       cwd: opts.workspace,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
