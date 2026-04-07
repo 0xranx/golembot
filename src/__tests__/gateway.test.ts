@@ -551,7 +551,7 @@ describe('Slack thread conversation keys', () => {
       );
 
       expect(resetKeys).toEqual(['slack:C001:thread:1742920000.123456']);
-      expect(replies).toEqual(['Session reset.']);
+      expect(replies).toEqual(['Session and history reset.']);
     } finally {
       await rm(dir, { recursive: true, force: true });
       clearGroupChatState('slack:C001:thread:1742920000.123456');

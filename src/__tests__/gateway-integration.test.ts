@@ -1460,14 +1460,14 @@ describe('handleMessage — full gateway pipeline', () => {
       expect(adapter.replies[0].text).toContain('/status');
     });
 
-    it('/reset clears session', async () => {
+    it('/reset clears session and history', async () => {
       const assistant = makeMockAssistant('should not be called');
       const adapter = makeMockAdapter();
       const msg = makeDmMsg({ text: '/reset' });
       await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
       expect(assistant.callCount).toBe(0);
       expect(adapter.replies.length).toBe(1);
-      expect(adapter.replies[0].text).toContain('Session reset');
+      expect(adapter.replies[0].text).toContain('Session and history reset');
     });
 
     it('/stop cancels the current DM task without calling agent chat', async () => {

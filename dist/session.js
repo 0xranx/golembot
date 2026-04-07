@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 const GOLEM_DIR = '.golem';
 const SESSION_FILE = 'sessions.json';
@@ -67,6 +67,14 @@ export async function clearSession(dir, key) {
     const store = await readStore(dir);
     delete store[key || DEFAULT_KEY];
     await writeStore(dir, store);
+}
+export async function clearHistory(dir, sessionKey) {
+    const path = historyPath(dir, sessionKey || DEFAULT_KEY);
+    await rm(path, { force: true });
+}
+export async function resetConversation(dir, key) {
+    await clearSession(dir, key);
+    await clearHistory(dir, key);
 }
 export async function pruneExpiredSessions(dir, maxAgeDays) {
     const store = await readStore(dir);

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appendHistory,
+  clearHistory,
   clearSession,
   countSessions,
   getHistoryPath,
@@ -11,6 +12,7 @@ import {
   loadSession,
   pruneExpiredSessions,
   readHistory,
+  resetConversation,
   saveSession,
 } from '../session.js';
 
@@ -207,6 +209,32 @@ describe('session', () => {
       await appendHistory(dir, { ts: 'ts', sessionKey: 'slack:C123/U456', role: 'user', content: 'hi' });
       const raw = await readFile(join(dir, '.golem', 'history', 'slack:C123-U456.jsonl'), 'utf-8');
       expect(raw).toContain('hi');
+    });
+  });
+
+  describe('history clearing', () => {
+    it('clearHistory removes only the requested session history file', async () => {
+      await appendHistory(dir, { ts: 'ts', sessionKey: 'default', role: 'user', content: 'keep?' });
+      await appendHistory(dir, { ts: 'ts', sessionKey: 'other', role: 'user', content: 'keep me' });
+
+      await clearHistory(dir, 'default');
+
+      expect(await readHistory(dir, 'default')).toEqual([]);
+      expect(await readHistory(dir, 'other')).toHaveLength(1);
+    });
+
+    it('resetConversation clears both session and history for one key', async () => {
+      await saveSession(dir, 'sess-a', 'user:a');
+      await saveSession(dir, 'sess-b', 'user:b');
+      await appendHistory(dir, { ts: 'ts', sessionKey: 'user:a', role: 'user', content: 'old-a' });
+      await appendHistory(dir, { ts: 'ts', sessionKey: 'user:b', role: 'user', content: 'old-b' });
+
+      await resetConversation(dir, 'user:a');
+
+      expect(await loadSession(dir, 'user:a')).toBeUndefined();
+      expect(await readHistory(dir, 'user:a')).toEqual([]);
+      expect(await loadSession(dir, 'user:b')).toBe('sess-b');
+      expect(await readHistory(dir, 'user:b')).toHaveLength(1);
     });
   });
 

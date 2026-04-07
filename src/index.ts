@@ -11,6 +11,7 @@ import {
   getHistoryPath,
   loadSession,
   pruneExpiredSessions,
+  resetConversation,
   saveSession,
 } from './session.js';
 import { daysUntilExpiry, ensureTokenMeta } from './token-meta.js';
@@ -297,6 +298,10 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     if (!sessionId) {
       const hPath = getHistoryPath(dir, sessionKey);
       if (existsSync(hPath)) {
+        yield {
+          type: 'warning' as const,
+          message: `Restoring prior conversation history for this session. Use \`/reset\` to start fresh.`,
+        };
         finalMessage =
           `[System: This is a new session but you have prior conversation history with this user. ` +
           `Read ${hPath} to restore context before responding.]\n\n` +
@@ -543,7 +548,7 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     },
 
     async resetSession(sessionKey?: string): Promise<void> {
-      await clearSession(dir, sessionKey || DEFAULT_SESSION_KEY);
+      await resetConversation(dir, sessionKey || DEFAULT_SESSION_KEY);
     },
 
     setEngine(engine: string, clearModel?: boolean): void {

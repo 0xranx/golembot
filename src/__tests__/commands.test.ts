@@ -174,11 +174,12 @@ describe('executeCommand', () => {
   });
 
   // ── /reset ──
-  it('/reset clears session', async () => {
+  it('/reset clears session and history', async () => {
     const ctx = makeCtx();
     const result = await executeCommand({ name: '/reset', args: [] }, ctx);
-    expect(result!.text).toContain('Session reset');
+    expect(result!.text).toContain('Session and history reset');
     expect(ctx.resetSession).toHaveBeenCalledWith('test-session');
+    expect(result!.data).toMatchObject({ ok: true, reset: true });
   });
 
   it('/stop cancels the current task', async () => {

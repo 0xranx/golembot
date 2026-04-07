@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { assessCodexProviderCompatibility, codexProviderWarningFingerprint } from './codex-provider-compat.js';
 import { createEngine, discoverEngines } from './engine.js';
 import { compressImages } from './image-compress.js';
-import { appendHistory, clearSession, getHistoryPath, loadSession, pruneExpiredSessions, saveSession, } from './session.js';
+import { appendHistory, clearSession, getHistoryPath, loadSession, pruneExpiredSessions, resetConversation, saveSession, } from './session.js';
 import { daysUntilExpiry, ensureTokenMeta } from './token-meta.js';
 import { ensureReady, initWorkspace, loadConfig, patchConfig, scanSkills, writeConfig, } from './workspace.js';
 export { buildSessionKey, stripMention } from './channel.js';
@@ -171,6 +171,10 @@ export function createAssistant(opts) {
         if (!sessionId) {
             const hPath = getHistoryPath(dir, sessionKey);
             if (existsSync(hPath)) {
+                yield {
+                    type: 'warning',
+                    message: `Restoring prior conversation history for this session. Use \`/reset\` to start fresh.`,
+                };
                 finalMessage =
                     `[System: This is a new session but you have prior conversation history with this user. ` +
                         `Read ${hPath} to restore context before responding.]\n\n` +
@@ -395,7 +399,7 @@ export function createAssistant(opts) {
             return true;
         },
         async resetSession(sessionKey) {
-            await clearSession(dir, sessionKey || DEFAULT_SESSION_KEY);
+            await resetConversation(dir, sessionKey || DEFAULT_SESSION_KEY);
         },
         setEngine(engine, clearModel) {
             engineOverride = engine;

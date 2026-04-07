@@ -48,7 +48,7 @@ vi.mock('../engine.js', async (importOriginal) => {
 import { readFile as fsReadFile } from 'node:fs/promises';
 import { createEngine } from '../engine.js';
 import { createAssistant } from '../index.js';
-import { loadSession } from '../session.js';
+import { appendHistory, loadSession, readHistory, saveSession } from '../session.js';
 
 const mockedCreateEngine = vi.mocked(createEngine);
 
@@ -100,6 +100,26 @@ describe('createAssistant', () => {
       const events: StreamEvent[] = [];
       for await (const evt of assistant.chat('task')) events.push(evt);
       expect(events[1]).toEqual({ type: 'error', message: 'Agent process crashed unexpectedly' });
+    });
+
+    it('warns before restoring prior history for a fresh session', async () => {
+      const assistant = createAssistant({ dir });
+      const events: StreamEvent[] = [];
+
+      await appendHistory(dir, { ts: '2026-04-07T00:00:00Z', sessionKey: 'default', role: 'user', content: 'old' });
+
+      for await (const evt of assistant.chat('Hello')) events.push(evt);
+
+      expect(events[0]).toEqual({
+        type: 'warning',
+        message: 'Restoring prior conversation history for this session. Use `/reset` to start fresh.',
+      });
+      expect(events[1]).toEqual({
+        type: 'text',
+        content:
+          `Reply: [System: This is a new session but you have prior conversation history with this user. ` +
+          `Read ${join(dir, '.golem', 'history', 'default.jsonl')} to restore context before responding.]\n\nHello`,
+      });
     });
   });
 
@@ -261,8 +281,6 @@ describe('createAssistant', () => {
 
       const assistant = createAssistant({ dir });
 
-      // Round 1 with specific key
-      const { saveSession } = await import('../session.js');
       await saveSession(dir, 'sess-round-1', 'user:alice');
 
       for await (const _ of assistant.chat('hello', { sessionKey: 'user:alice' })) {
@@ -271,17 +289,20 @@ describe('createAssistant', () => {
       expect(await loadSession(dir, 'user:alice')).toBe('sess-round-2');
     });
 
-    it('resetSession with key only clears that key', async () => {
+    it('resetSession with key clears that key session and history only', async () => {
       const assistant = createAssistant({ dir });
-      const { saveSession } = await import('../session.js');
 
       await saveSession(dir, 'sess-a', 'user:a');
       await saveSession(dir, 'sess-b', 'user:b');
+      await appendHistory(dir, { ts: '2026-04-07T00:00:00Z', sessionKey: 'user:a', role: 'user', content: 'old-a' });
+      await appendHistory(dir, { ts: '2026-04-07T00:00:01Z', sessionKey: 'user:b', role: 'user', content: 'old-b' });
 
       await assistant.resetSession('user:a');
 
       expect(await loadSession(dir, 'user:a')).toBeUndefined();
       expect(await loadSession(dir, 'user:b')).toBe('sess-b');
+      expect(await readHistory(dir, 'user:a')).toEqual([]);
+      expect(await readHistory(dir, 'user:b')).toHaveLength(1);
     });
 
     it('no sessionKey defaults to "default"', async () => {
@@ -894,7 +915,9 @@ describe('provider fallback circuit breaker', () => {
     await drainChat(assistant); // failure 1
     const events = await drainChat(assistant); // failure 2 → threshold reached
 
-    const warning = events.find((e) => e.type === 'warning');
+    const warning = events.find(
+      (e) => e.type === 'warning' && /fallback/i.test((e as { message?: string }).message ?? ''),
+    );
     expect(warning).toBeDefined();
     expect((warning as { type: 'warning'; message: string }).message).toMatch(/fallback/i);
 

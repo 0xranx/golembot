@@ -27,7 +27,7 @@ const COMMANDS = {
     '/engine': 'Show or switch engine — /engine [name]',
     '/model': 'Show, switch, or list models — /model [list|name]',
     '/skill': 'List installed skills',
-    '/reset': 'Clear the current session',
+    '/reset': 'Clear the current session and history',
     '/stop': 'Stop the current running task',
     '/cron': 'Manage scheduled tasks — /cron [list|run|enable|disable|del|history] [id]',
 };
@@ -163,8 +163,8 @@ async function cmdSkill(ctx) {
 async function cmdReset(ctx) {
     await ctx.resetSession(ctx.sessionKey);
     return {
-        text: 'Session reset.',
-        data: { ok: true },
+        text: 'Session and history reset.',
+        data: { ok: true, reset: true },
     };
 }
 async function cmdStop(ctx) {
