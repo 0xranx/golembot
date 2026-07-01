@@ -377,6 +377,11 @@ export class FeishuAdapter implements ChannelAdapter {
     this.wsClient = new lark.WSClient({
       ...baseConfig,
       loggerLevel: lark.LoggerLevel.info,
+      pingTimeout: this.config.pingTimeout ?? 30,
+      onReady: () => console.log('[feishu] WS ready'),
+      onReconnecting: () => console.log('[feishu] WS reconnecting...'),
+      onReconnected: () => console.log('[feishu] WS reconnected'),
+      onError: (err: unknown) => console.error('[feishu] WS error:', (err as Error)?.message),
     });
 
     await this.wsClient.start({ eventDispatcher });
@@ -635,8 +640,11 @@ export class FeishuAdapter implements ChannelAdapter {
   }
 
   async stop(): Promise<void> {
-    // WSClient doesn't expose a clean close method in current SDK version;
-    // setting to null allows GC to collect.
+    if (this.wsClient) {
+      try {
+        this.wsClient.close();
+      } catch {}
+    }
     this.wsClient = null;
     this.client = null;
   }
