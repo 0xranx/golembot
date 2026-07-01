@@ -14,6 +14,8 @@ export interface FeishuChannelConfig {
   appSecret: string;
   /** Open platform domain. Use `lark` for Lark global tenants. Default: `feishu`. */
   domain?: string;
+  /** WebSocket pong timeout in seconds. If no pong received within this time, the connection is considered dead and reconnect is triggered. Default: 30. */
+  pingTimeout?: number;
 }
 
 export interface DingtalkChannelConfig {
