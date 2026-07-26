@@ -1,4 +1,4 @@
-import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -1785,7 +1785,7 @@ describe('injectCodexSkills', () => {
 });
 
 // ═══════════════════════════════════════════════════════
-// ensureOpenCodeConfig — MCP passthrough
+// ensureOpenCodeConfig — MCP translation to OpenCode schema (issue #42)
 // ═══════════════════════════════════════════════════════
 
 describe('ensureOpenCodeConfig mcp', () => {
@@ -1799,7 +1799,7 @@ describe('ensureOpenCodeConfig mcp', () => {
     await rm(workspace, { recursive: true, force: true });
   });
 
-  it('merges mcpConfig into opencode.json', async () => {
+  it('translates mcpConfig into OpenCode local-server schema', async () => {
     await ensureOpenCodeConfig(workspace, undefined, {
       memory: { command: 'npx', args: ['-y', 'mcp-memory'], env: { DIR: '/tmp' } },
     });
@@ -1807,28 +1807,72 @@ describe('ensureOpenCodeConfig mcp', () => {
     const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
     const config = JSON.parse(raw);
     expect(config.mcp).toEqual({
-      memory: { command: 'npx', args: ['-y', 'mcp-memory'], env: { DIR: '/tmp' } },
+      memory: {
+        type: 'local',
+        command: ['npx', '-y', 'mcp-memory'],
+        enabled: true,
+        environment: { DIR: '/tmp' },
+      },
     });
   });
 
-  it('preserves existing mcp entries in opencode.json', async () => {
-    await writeFile(
-      join(workspace, 'opencode.json'),
-      JSON.stringify({ mcp: { existing: { command: 'node', args: ['old.js'] } } }),
-      'utf-8',
-    );
+  it('omits environment when env is not set', async () => {
+    await ensureOpenCodeConfig(workspace, undefined, {
+      simple: { command: 'my-server' },
+    });
+
+    const config = JSON.parse(await readFile(join(workspace, 'opencode.json'), 'utf-8'));
+    expect(config.mcp.simple).toEqual({ type: 'local', command: ['my-server'], enabled: true });
+    expect(config.mcp.simple.environment).toBeUndefined();
+  });
+
+  it('preserves user-authored valid mcp entries untouched', async () => {
+    const userEntry = {
+      type: 'local',
+      command: ['npx', '-y', 'mcp-oracle-db'],
+      enabled: true,
+      environment: { ORACLE_URL: 'oracle://localhost' },
+    };
+    await writeFile(join(workspace, 'opencode.json'), JSON.stringify({ mcp: { 'oracle-db': userEntry } }), 'utf-8');
 
     await ensureOpenCodeConfig(workspace, undefined, {
       newServer: { command: 'npx', args: ['new-server'] },
     });
 
-    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
-    const config = JSON.parse(raw);
-    expect(config.mcp.existing).toEqual({ command: 'node', args: ['old.js'] });
-    expect(config.mcp.newServer).toEqual({ command: 'npx', args: ['new-server'] });
+    const config = JSON.parse(await readFile(join(workspace, 'opencode.json'), 'utf-8'));
+    expect(config.mcp['oracle-db']).toEqual(userEntry);
+    expect(config.mcp.newServer).toEqual({ type: 'local', command: ['npx', 'new-server'], enabled: true });
   });
 
-  it('does not override existing mcp entry with same name', async () => {
+  it('migrates legacy broken entries written by golembot ≤ 0.48.x', async () => {
+    // Shape written verbatim from golem.yaml by the old sync code (issue #42)
+    await writeFile(
+      join(workspace, 'opencode.json'),
+      JSON.stringify({
+        mcp: {
+          memory: {
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-memory'],
+            env: { MEMORY_FILE_PATH: '/tmp/mem.jsonl' },
+          },
+        },
+      }),
+      'utf-8',
+    );
+
+    // Migration runs even without new mcpConfig being passed
+    await ensureOpenCodeConfig(workspace);
+
+    const config = JSON.parse(await readFile(join(workspace, 'opencode.json'), 'utf-8'));
+    expect(config.mcp.memory).toEqual({
+      type: 'local',
+      command: ['npx', '-y', '@modelcontextprotocol/server-memory'],
+      enabled: true,
+      environment: { MEMORY_FILE_PATH: '/tmp/mem.jsonl' },
+    });
+  });
+
+  it('does not override existing mcp entry with same name (after migration)', async () => {
     await writeFile(
       join(workspace, 'opencode.json'),
       JSON.stringify({ mcp: { memory: { command: 'custom-cmd' } } }),
@@ -1839,9 +1883,9 @@ describe('ensureOpenCodeConfig mcp', () => {
       memory: { command: 'npx', args: ['mcp-memory'] },
     });
 
-    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
-    const config = JSON.parse(raw);
-    expect(config.mcp.memory).toEqual({ command: 'custom-cmd' });
+    const config = JSON.parse(await readFile(join(workspace, 'opencode.json'), 'utf-8'));
+    // legacy entry migrated in place, not replaced by the golem.yaml value
+    expect(config.mcp.memory).toEqual({ type: 'local', command: ['custom-cmd'], enabled: true });
   });
 
   it('skips mcp when mcpConfig is undefined', async () => {
@@ -1858,5 +1902,20 @@ describe('ensureOpenCodeConfig mcp', () => {
     const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
     const config = JSON.parse(raw);
     expect(config.mcp).toBeUndefined();
+  });
+
+  it('does not rewrite opencode.json when nothing changed', async () => {
+    await ensureOpenCodeConfig(workspace, undefined, {
+      memory: { command: 'npx', args: ['-y', 'mcp-memory'] },
+    });
+    const stat1 = await stat(join(workspace, 'opencode.json'));
+
+    await new Promise((r) => setTimeout(r, 20));
+    await ensureOpenCodeConfig(workspace, undefined, {
+      memory: { command: 'npx', args: ['-y', 'mcp-memory'] },
+    });
+    const stat2 = await stat(join(workspace, 'opencode.json'));
+
+    expect(stat2.mtimeMs).toBe(stat1.mtimeMs);
   });
 });

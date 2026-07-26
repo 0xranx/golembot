@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 class FakeChild extends EventEmitter {
   stdout = new EventEmitter();
   stderr = new EventEmitter();
+  stdin = { on: vi.fn(), write: vi.fn(() => true), end: vi.fn() };
   kill = vi.fn(() => true);
 }
 

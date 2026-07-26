@@ -114,12 +114,39 @@ export async function injectOpenCodeSkills(workspace, skillPaths) {
         }
     }
 }
+/**
+ * Convert golembot's generic MCP server config (golem.yaml shape, Claude-style
+ * `{ command, args, env }`) into OpenCode's local-server schema, which requires
+ * `type`, a single command array, and `environment` instead of `env` (issue #42).
+ */
+function toOpenCodeMcpEntry(cfg) {
+    const entry = {
+        type: 'local',
+        command: [cfg.command, ...(cfg.args ?? [])],
+        enabled: true,
+    };
+    if (cfg.env && Object.keys(cfg.env).length > 0)
+        entry.environment = cfg.env;
+    return entry;
+}
+/**
+ * Detect MCP entries written by golembot ≤ 0.48.x in the invalid Claude-style
+ * shape (string `command`, no `type`). OpenCode refuses to start while such an
+ * entry exists, so they must be migrated in place (issue #42).
+ */
+function isLegacyBrokenMcpEntry(entry) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+        return false;
+    const e = entry;
+    return typeof e.command === 'string' && !('type' in e);
+}
 export async function ensureOpenCodeConfig(workspace, model, mcpConfig) {
     const configPath = join(workspace, 'opencode.json');
     let existing = {};
+    let originalRaw = '';
     try {
-        const raw = await readFile(configPath, 'utf-8');
-        existing = JSON.parse(raw);
+        originalRaw = await readFile(configPath, 'utf-8');
+        existing = JSON.parse(originalRaw);
     }
     catch {
         // no existing config
@@ -156,16 +183,31 @@ export async function ensureOpenCodeConfig(workspace, model, mcpConfig) {
             existing.provider = providerMap;
         }
     }
+    // Migrate entries previously written in the invalid Claude-style shape;
+    // user-authored valid entries (with `type`) are left untouched.
+    if (existing.mcp && typeof existing.mcp === 'object') {
+        const mcpMap = existing.mcp;
+        for (const [name, entry] of Object.entries(mcpMap)) {
+            if (isLegacyBrokenMcpEntry(entry)) {
+                mcpMap[name] = toOpenCodeMcpEntry(entry);
+            }
+        }
+    }
     if (mcpConfig && Object.keys(mcpConfig).length > 0) {
         const mcpMap = (existing.mcp ?? {});
         for (const [name, cfg] of Object.entries(mcpConfig)) {
             if (!mcpMap[name]) {
-                mcpMap[name] = { command: cfg.command, args: cfg.args, env: cfg.env };
+                mcpMap[name] = toOpenCodeMcpEntry(cfg);
             }
         }
         existing.mcp = mcpMap;
     }
-    await writeFile(configPath, `${JSON.stringify(existing, null, 2)}\n`, 'utf-8');
+    // Only write when content actually changed, so a running OpenCode process
+    // is not disturbed by needless config rewrites on every invocation.
+    const next = `${JSON.stringify(existing, null, 2)}\n`;
+    if (next !== originalRaw) {
+        await writeFile(configPath, next, 'utf-8');
+    }
 }
 // ── Engine ───────────────────────────────────────────────
 function findOpenCodeBin() {
@@ -182,7 +224,10 @@ export class OpenCodeEngine {
         await injectOpenCodeSkills(opts.workspace, opts.skillPaths);
         await ensureOpenCodeConfig(opts.workspace, opts.model, opts.mcpConfig);
         const bin = findOpenCodeBin();
-        const args = ['run', prompt, '--format', 'json'];
+        // The prompt is piped via stdin rather than passed as an argv element:
+        // multi-line prompts containing [System:] markers corrupt PowerShell -File
+        // argument parsing on Windows, silently dropping --format json (issue #43).
+        const args = ['run', '--format', 'json'];
         if (opts.sessionId)
             args.push('--session', opts.sessionId);
         if (opts.model)
@@ -194,8 +239,15 @@ export class OpenCodeEngine {
         const child = spawnCommand(bin, args, {
             cwd: opts.workspace,
             env,
-            stdio: ['ignore', 'pipe', 'pipe'],
+            stdio: ['pipe', 'pipe', 'pipe'],
         });
+        if (child.stdin) {
+            // Swallow EPIPE if the process dies before consuming the prompt;
+            // the close/error handlers below surface the real failure.
+            child.stdin.on('error', () => { });
+            child.stdin.write(prompt);
+            child.stdin.end();
+        }
         const queue = [];
         let resolver = null;
         let buffer = '';
