@@ -1,3 +1,10 @@
+## [0.48.3](https://github.com/0xranx/golembot/compare/v0.48.2...v0.48.3) (2026-07-26)
+
+
+### Bug Fixes
+
+* **opencode:** valid MCP config schema and stdin prompt delivery ([5c4c60a](https://github.com/0xranx/golembot/commit/5c4c60a8f7480fb4e48050bd1aacf56174997bb8)), closes [#42](https://github.com/0xranx/golembot/issues/42) [#43](https://github.com/0xranx/golembot/issues/43)
+
 ## [0.48.2](https://github.com/0xranx/golembot/compare/v0.48.1...v0.48.2) (2026-07-07)
 
 
