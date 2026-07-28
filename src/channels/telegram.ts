@@ -23,9 +23,11 @@ export class TelegramAdapter implements ChannelAdapter {
   private botUsername: string | undefined;
   private seenMsgIds = new Set<string>();
   private static readonly MAX_SEEN = 500;
+  private allowedUserIds: Set<string> | null;
 
   constructor(config: TelegramChannelConfig) {
     this.config = config;
+    this.allowedUserIds = config.allowedUserIds?.length ? new Set(config.allowedUserIds.map(String)) : null;
   }
 
   async start(onMessage: (msg: ChannelMessage) => void): Promise<void> {
@@ -45,6 +47,10 @@ export class TelegramAdapter implements ChannelAdapter {
 
     this.bot.on('message', async (ctx: any) => {
       const message = ctx.message;
+      const senderId = String(message.from?.id ?? '');
+      if (this.allowedUserIds && !this.allowedUserIds.has(senderId)) {
+        return;
+      }
 
       // Handle photo messages
       const images: ImageAttachment[] = [];
@@ -107,7 +113,7 @@ export class TelegramAdapter implements ChannelAdapter {
 
       onMessage({
         channelType: 'telegram',
-        senderId: String(message.from?.id ?? message.chat.id),
+        senderId: senderId || String(message.chat.id),
         senderName: message.from?.first_name,
         chatId: String(message.chat.id),
         chatType,

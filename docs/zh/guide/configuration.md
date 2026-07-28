@@ -17,7 +17,7 @@ engine: claude-code
 
 ```yaml
 name: my-assistant
-engine: claude-code          # cursor | claude-code | opencode | codex
+engine: claude-code          # cursor | claude-code | opencode | codex | grok
 model: claude-sonnet         # 可选，首选模型
 
 # 可选：跳过 Agent 权限确认
@@ -132,7 +132,7 @@ gateway:
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `name` | `string` | 助手名称 |
-| `engine` | `string` | 引擎类型：`cursor`、`claude-code`、`opencode` 或 `codex` |
+| `engine` | `string` | 引擎类型：`cursor`、`claude-code`、`opencode`、`codex` 或 `grok` |
 
 ### 可选
 

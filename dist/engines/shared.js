@@ -63,6 +63,7 @@ const ENGINE_BINARIES = {
     cursor: 'agent',
     opencode: 'opencode',
     codex: 'codex',
+    grok: 'grok',
 };
 /** Discover which CLI engines are installed on the system. */
 export async function discoverEngines() {

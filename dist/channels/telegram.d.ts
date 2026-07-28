@@ -8,6 +8,7 @@ export declare class TelegramAdapter implements ChannelAdapter {
     private botUsername;
     private seenMsgIds;
     private static readonly MAX_SEEN;
+    private allowedUserIds;
     constructor(config: TelegramChannelConfig);
     start(onMessage: (msg: ChannelMessage) => void): Promise<void>;
     reply(msg: ChannelMessage, text: string, _options?: ReplyOptions): Promise<void>;

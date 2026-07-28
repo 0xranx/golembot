@@ -10,7 +10,7 @@ import { daysUntilExpiry, ensureTokenMeta } from './token-meta.js';
 import { DEFAULT_TIMEOUT_SECONDS, ensureReady, initWorkspace, loadConfig, patchConfig, scanSkills, writeConfig, } from './workspace.js';
 export { buildSessionKey, stripMention } from './channel.js';
 export { executeCommand, parseCommand } from './commands.js';
-export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, openCodeProviderEnv } from './engine.js';
+export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, grokProviderEnv, openCodeProviderEnv, } from './engine.js';
 export { findInstance, findStoppedInstance, isProcessAlive, listInstances, listStoppedInstances, registerInstance, renderFleetDashboard, startFleetServer, startInstance, stopInstance, unregisterInstance, } from './fleet.js';
 export { startGateway } from './gateway.js';
 export { buildTriagePrompt, startHistoryFetcher, WatermarkStore } from './history-fetcher.js';

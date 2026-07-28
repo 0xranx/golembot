@@ -18,7 +18,7 @@ When modifying code under `src/`, the following constraints must not be violated
 ### Interface Change Rules
 
 - Any signature change to the `Assistant` interface (`index.ts`) must be verified across `server.ts`, `gateway.ts`, and `cli.ts`.
-- Any change to the `AgentEngine` interface (`engine.ts`) must remain compatible with all engines (Cursor, Claude Code, OpenCode, Codex).
+- Any change to the `AgentEngine` interface (`engine.ts`) must remain compatible with all engines (Cursor, Claude Code, OpenCode, Codex, Grok).
 - `StreamEvent` type changes must verify compatibility with `server.ts` SSE output, `cli.ts` event handling, and `gateway.ts` IM message assembly.
 
 ### File Responsibility Boundaries
@@ -100,3 +100,11 @@ pnpm run test         # Unit tests (vitest)
 - Resume: `exec resume --json --full-auto --skip-git-repo-check [--model X] <thread_id> <prompt>`
 - Auth: `CODEX_API_KEY` env var (also sets `OPENAI_API_KEY` for compatibility)
 - `--skip-git-repo-check` is required (GolemBot uses temp dirs)
+
+### Grok Build
+
+- Binary: `grok` (typical install: `~/.grok/bin/grok`)
+- Flags: `-p <prompt> --output-format streaming-json --cwd <workspace> --always-approve [-m X]`
+- Resume: `--resume <sessionId>`
+- Auth: `XAI_API_KEY` env var or `grok login` (`~/.grok/auth.json`)
+- Skill injection: `.grok/skills/` + project `AGENTS.md`

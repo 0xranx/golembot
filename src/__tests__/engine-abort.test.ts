@@ -129,6 +129,31 @@ describe('engine abort handling', () => {
     }
   });
 
+  it('Grok emits stopped-by-user on user abort', async () => {
+    vi.resetModules();
+    const workspace = await makeWorkspace('golem-engine-grok-');
+    try {
+      vi.doMock('node:child_process', () => ({ spawn: vi.fn(() => new FakeChild()) }));
+      vi.doMock('node:fs', async (importOriginal) => {
+        const original = await importOriginal<typeof import('node:fs')>();
+        return { ...original, existsSync: () => true };
+      });
+      vi.doMock('../engines/shared.js', async (importOriginal) => {
+        const original = await importOriginal<typeof import('../engines/shared.js')>();
+        return {
+          ...original,
+          resolveCliBinary: () => 'grok',
+          spawnCommand: vi.fn(() => new FakeChild()),
+        };
+      });
+      const { GrokEngine } = await import('../engines/grok.js');
+      const message = await collectAbortMessage(new GrokEngine(), workspace);
+      expect(message).toContain('stopped by user');
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
   it('Claude Code surfaces a zero-output exit instead of silently finishing', async () => {
     vi.resetModules();
     const workspace = await makeWorkspace('golem-engine-claude-empty-');

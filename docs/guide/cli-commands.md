@@ -12,7 +12,7 @@ golembot init [-e <engine>] [-n <name>] [-r <role>]
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-e, --engine <engine>` | Engine type (`cursor`, `claude-code`, `opencode`, `codex`) | `cursor` |
+| `-e, --engine <engine>` | Engine type (`cursor`, `claude-code`, `opencode`, `codex`, `grok`) | `cursor` |
 | `-n, --name <name>` | Assistant name | Interactive prompt |
 | `-r, --role <role>` | Persona role (e.g. `"product analyst"`, `"customer support"`) | — |
 

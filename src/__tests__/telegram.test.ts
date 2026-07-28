@@ -152,4 +152,41 @@ describe('TelegramAdapter outbound reliability', () => {
     });
     expect(api.deleteMessage).toHaveBeenCalledWith(42, 105);
   });
+
+  it('ignores inbound telegram messages from users outside the allowlist', async () => {
+    const onMessage = vi.fn();
+    let handler: ((ctx: any) => Promise<void>) | undefined;
+    const grammyBot = {
+      api: {
+        getMe: vi.fn().mockResolvedValue({ username: 'testbot' }),
+      },
+      on: vi.fn((event: string, cb: (ctx: any) => Promise<void>) => {
+        if (event === 'message') handler = cb;
+      }),
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.doMock('grammy', () => ({
+      Bot: vi.fn(() => grammyBot),
+    }));
+
+    const adapter = new TelegramAdapter({
+      botToken: 'test-token',
+      allowedUserIds: ['123456'],
+    });
+    await adapter.start(onMessage);
+
+    expect(handler).toBeDefined();
+    await handler?.({
+      message: {
+        from: { id: 999999, first_name: 'Mallory' },
+        chat: { id: 42, type: 'private' },
+        text: 'hello',
+        message_id: 7,
+      },
+    });
+
+    expect(onMessage).not.toHaveBeenCalled();
+  });
 });

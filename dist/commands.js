@@ -5,7 +5,7 @@
  * the CommandResult in the appropriate format (terminal, SSE, IM reply, etc.).
  */
 // ── Known engines (for validation) ──────────────────────
-const KNOWN_ENGINES = ['cursor', 'claude-code', 'opencode', 'codex'];
+const KNOWN_ENGINES = ['cursor', 'claude-code', 'opencode', 'codex', 'grok'];
 // ── Parse ────────────────────────────────────────────────
 /**
  * Parse a user message into a command. Returns null if the message is not a

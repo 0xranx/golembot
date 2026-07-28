@@ -143,7 +143,7 @@ program
 program
   .command('init')
   .description('Initialize a new GolemBot assistant in the current directory')
-  .option('-e, --engine <engine>', 'engine type (cursor | claude-code | opencode | codex)', 'cursor')
+  .option('-e, --engine <engine>', 'engine type (cursor | claude-code | opencode | codex | grok)', 'cursor')
   .option('-n, --name <name>', 'assistant name')
   .option('-r, --role <role>', 'persona role (e.g. "product analyst", "customer support")')
   .action(async (opts) => {
@@ -164,6 +164,7 @@ program
             { name: 'Claude Code', value: 'claude-code' },
             { name: 'OpenCode', value: 'opencode' },
             { name: 'Codex', value: 'codex' },
+            { name: 'Grok Build', value: 'grok' },
           ],
           default: engine,
         },

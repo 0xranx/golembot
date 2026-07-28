@@ -1,18 +1,18 @@
 # Engine Overview
 
-GolemBot supports four Coding Agent engines. All four expose the same `StreamEvent` interface — switching engines requires only a one-line config change.
+GolemBot supports five Coding Agent engines. All of them expose the same `StreamEvent` interface — switching engines requires only a one-line config change.
 
 ## Comparison
 
-| | Cursor | Claude Code | OpenCode | Codex |
-|---|---|---|---|---|
-| Binary | `agent` | `claude` | `opencode` | `codex` |
-| Output format | stream-json | stream-json | NDJSON | NDJSON |
-| Skill injection | `.cursor/skills/` | `.claude/skills/` + `CLAUDE.md` | `.opencode/skills/` + `opencode.json` | `AGENTS.md` |
-| Session resume | `--resume <id>` | `--resume <id>` | `--session <id>` | `resume <thread_id>` |
-| API key env | `CURSOR_API_KEY` | `ANTHROPIC_API_KEY` | Depends on provider | `CODEX_API_KEY` |
-| Permission bypass | `--force --trust --sandbox disabled` | `--dangerously-skip-permissions` | `opencode.json` permission config | default `unrestricted`; `safe` uses `--full-auto` |
-| Cost tracking | — | `costUsd`, `numTurns` | `costUsd` (accumulated) | — |
+| | Cursor | Claude Code | OpenCode | Codex | Grok Build |
+|---|---|---|---|---|---|
+| Binary | `agent` | `claude` | `opencode` | `codex` | `grok` |
+| Output format | stream-json | stream-json | NDJSON | NDJSON | streaming-json |
+| Skill injection | `.cursor/skills/` | `.claude/skills/` + `CLAUDE.md` | `.opencode/skills/` + `opencode.json` | `AGENTS.md` | `.grok/skills/` + `AGENTS.md` |
+| Session resume | `--resume <id>` | `--resume <id>` | `--session <id>` | `resume <thread_id>` | `--resume <id>` |
+| API key env | `CURSOR_API_KEY` | `ANTHROPIC_API_KEY` | Depends on provider | `CODEX_API_KEY` | `XAI_API_KEY` |
+| Permission bypass | `--force --trust --sandbox disabled` | `--dangerously-skip-permissions` | `opencode.json` permission config | default `unrestricted`; `safe` uses `--full-auto` | `--always-approve` |
+| Cost tracking | — | `costUsd`, `numTurns` | `costUsd` (accumulated) | — | — |
 
 ## Unified StreamEvent
 
@@ -43,7 +43,7 @@ All engines follow the same pattern:
 The engine is selected by the `engine` field in `golem.yaml`:
 
 ```yaml
-engine: claude-code   # cursor | claude-code | opencode | codex
+engine: claude-code   # cursor | claude-code | opencode | codex | grok
 ```
 
 Or overridden at runtime:
@@ -69,6 +69,7 @@ Start with **Claude Code** — it has the best overall experience, provides cost
 - **Claude Code** — first-party Anthropic CLI, provides cost and turn tracking
 - **OpenCode** — open-source, supports multiple LLM providers (Anthropic, OpenAI, OpenRouter, etc.)
 - **Codex** — OpenAI's CLI agent (`@openai/codex`), uses `CODEX_API_KEY`, defaults to `codex.mode: unrestricted`
+- **Grok Build** — xAI `grok` CLI, uses `XAI_API_KEY` or `grok login`
 
 ## What's Next
 
@@ -76,4 +77,5 @@ Start with **Claude Code** — it has the best overall experience, provides cost
 - [Claude Code](/engines/claude-code) — setup, auth, cost tracking
 - [OpenCode](/engines/opencode) — setup, multi-provider configuration
 - [Codex](/engines/codex) — setup, API key modes
+- [Grok Build](/engines/grok) — setup, auth, headless streaming
 - [Configuration](/guide/configuration) — full `golem.yaml` reference

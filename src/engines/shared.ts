@@ -85,6 +85,7 @@ const ENGINE_BINARIES: Record<string, string> = {
   cursor: 'agent',
   opencode: 'opencode',
   codex: 'codex',
+  grok: 'grok',
 };
 
 /** Discover which CLI engines are installed on the system. */

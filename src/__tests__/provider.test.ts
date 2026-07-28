@@ -6,6 +6,7 @@ import {
   claudeProviderEnv,
   codexProviderEnv,
   cursorProviderEnv,
+  grokProviderEnv,
   openCodeProviderEnv,
 } from '../engines/provider-env.js';
 import { discoverEngines } from '../engines/shared.js';
@@ -74,6 +75,20 @@ describe('provider-env', () => {
 
     it('returns empty object when no fields set', () => {
       expect(cursorProviderEnv({})).toEqual({});
+    });
+  });
+
+  describe('grokProviderEnv', () => {
+    it('maps apiKey and baseUrl', () => {
+      const env = grokProviderEnv({ apiKey: 'xai-test', baseUrl: 'https://api.x.ai' });
+      expect(env).toEqual({
+        XAI_API_KEY: 'xai-test',
+        XAI_API_BASE_URL: 'https://api.x.ai',
+      });
+    });
+
+    it('returns empty object when no fields set', () => {
+      expect(grokProviderEnv({})).toEqual({});
     });
   });
 

@@ -32,6 +32,8 @@ export interface SlackChannelConfig {
 }
 export interface TelegramChannelConfig {
     botToken: string;
+    /** Optional allowlist of Telegram sender IDs. When set, messages from other users are ignored. */
+    allowedUserIds?: string[];
 }
 export interface DiscordChannelConfig {
     botToken: string;

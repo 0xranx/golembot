@@ -50,6 +50,16 @@ export function cursorProviderEnv(provider) {
         env.CURSOR_API_BASE_URL = provider.baseUrl;
     return env;
 }
+/** Map provider config to Grok Build env vars */
+export function grokProviderEnv(provider) {
+    const env = {};
+    if (provider.apiKey)
+        env.XAI_API_KEY = provider.apiKey;
+    // Grok primarily uses XAI_API_KEY; base URL override is not a stable public env yet.
+    if (provider.baseUrl)
+        env.XAI_API_BASE_URL = provider.baseUrl;
+    return env;
+}
 /** Provider-prefix → env-var mapping for OpenCode */
 const OPENCODE_PROVIDER_ENV = {
     anthropic: 'ANTHROPIC_API_KEY',

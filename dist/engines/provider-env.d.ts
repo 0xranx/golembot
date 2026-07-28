@@ -23,6 +23,8 @@ export declare function claudeProviderEnv(provider: ProviderConfig): ProviderEnv
 export declare function codexProviderEnv(provider: ProviderConfig): ProviderEnv;
 /** Map provider config to Cursor env vars */
 export declare function cursorProviderEnv(provider: ProviderConfig): ProviderEnv;
+/** Map provider config to Grok Build env vars */
+export declare function grokProviderEnv(provider: ProviderConfig): ProviderEnv;
 /** Map provider config to OpenCode env vars */
 export declare function openCodeProviderEnv(provider: ProviderConfig, model?: string): ProviderEnv;
 //# sourceMappingURL=provider-env.d.ts.map

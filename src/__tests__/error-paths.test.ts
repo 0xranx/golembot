@@ -174,6 +174,11 @@ describe('error paths and edge cases', () => {
       const engine = createEngine('opencode');
       expect(engine).toBeDefined();
     });
+
+    it('creates grok engine', () => {
+      const engine = createEngine('grok');
+      expect(engine).toBeDefined();
+    });
   });
 
   // ── stripAnsi edge cases ──────────────────────

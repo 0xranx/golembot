@@ -9,8 +9,10 @@ export class TelegramAdapter {
     botUsername;
     seenMsgIds = new Set();
     static MAX_SEEN = 500;
+    allowedUserIds;
     constructor(config) {
         this.config = config;
+        this.allowedUserIds = config.allowedUserIds?.length ? new Set(config.allowedUserIds.map(String)) : null;
     }
     async start(onMessage) {
         let grammyModule;
@@ -27,6 +29,10 @@ export class TelegramAdapter {
         this.botUsername = me.username;
         this.bot.on('message', async (ctx) => {
             const message = ctx.message;
+            const senderId = String(message.from?.id ?? '');
+            if (this.allowedUserIds && !this.allowedUserIds.has(senderId)) {
+                return;
+            }
             // Handle photo messages
             const images = [];
             if (message?.photo && message.photo.length > 0) {
@@ -87,7 +93,7 @@ export class TelegramAdapter {
             }
             onMessage({
                 channelType: 'telegram',
-                senderId: String(message.from?.id ?? message.chat.id),
+                senderId: senderId || String(message.chat.id),
                 senderName: message.from?.first_name,
                 chatId: String(message.chat.id),
                 chatType,

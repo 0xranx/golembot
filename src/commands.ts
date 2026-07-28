@@ -56,7 +56,7 @@ interface ParsedCommand {
 
 // ── Known engines (for validation) ──────────────────────
 
-const KNOWN_ENGINES = ['cursor', 'claude-code', 'opencode', 'codex'];
+const KNOWN_ENGINES = ['cursor', 'claude-code', 'opencode', 'codex', 'grok'];
 
 // ── Parse ────────────────────────────────────────────────
 

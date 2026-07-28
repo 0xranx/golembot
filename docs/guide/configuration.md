@@ -17,7 +17,7 @@ Everything else below is optional — add fields as you need them.
 
 ```yaml
 name: my-assistant
-engine: claude-code          # cursor | claude-code | opencode | codex
+engine: claude-code          # cursor | claude-code | opencode | codex | grok
 model: claude-sonnet         # optional, preferred model
 
 # Optional: bypass agent permission prompts
@@ -131,7 +131,7 @@ gateway:
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | `string` | Assistant name |
-| `engine` | `string` | Engine type: `cursor`, `claude-code`, `opencode`, or `codex` |
+| `engine` | `string` | Engine type: `cursor`, `claude-code`, `opencode`, `codex`, or `grok` |
 
 ### Optional
 

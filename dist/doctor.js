@@ -46,6 +46,7 @@ export async function runDoctor(dir) {
         'claude-code': 'claude',
         opencode: 'opencode',
         codex: 'codex',
+        grok: 'grok',
     };
     if (engine && engineBins[engine]) {
         const bin = engineBins[engine];
@@ -76,13 +77,29 @@ export async function runDoctor(dir) {
             authDetail = 'none — run `codex login` or set CODEX_API_KEY';
         }
     }
+    else if (engine === 'grok') {
+        if (process.env.XAI_API_KEY) {
+            authOk = true;
+            authDetail = 'XAI_API_KEY';
+        }
+        else {
+            const oauthFile = join(homedir(), '.grok', 'auth.json');
+            if (existsSync(oauthFile)) {
+                authOk = true;
+                authDetail = 'Grok OAuth (~/.grok/auth.json)';
+            }
+            else {
+                authDetail = 'none — run `grok login` or set XAI_API_KEY';
+            }
+        }
+    }
     else {
-        const keyVars = ['ANTHROPIC_API_KEY', 'CURSOR_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY'];
+        const keyVars = ['ANTHROPIC_API_KEY', 'CURSOR_API_KEY', 'OPENROUTER_API_KEY', 'OPENAI_API_KEY', 'XAI_API_KEY'];
         const foundVars = keyVars.filter((k) => !!process.env[k]);
         authOk = foundVars.length > 0;
         authDetail = authOk
             ? foundVars.join(', ')
-            : 'none set (set ANTHROPIC_API_KEY, CURSOR_API_KEY, or OPENROUTER_API_KEY)';
+            : 'none set (set ANTHROPIC_API_KEY, CURSOR_API_KEY, OPENROUTER_API_KEY, or XAI_API_KEY)';
     }
     results.push({ name: 'API key / auth', ok: authOk, detail: authDetail });
     // 5. Skills

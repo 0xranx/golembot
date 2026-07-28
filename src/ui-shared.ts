@@ -22,6 +22,7 @@ export const ENGINE_COLORS: Record<string, string> = {
   'claude-code': '#f97316',
   opencode: '#22c55e',
   codex: '#3b82f6',
+  grok: '#eab308',
 };
 
 export const BASE_CSS = `

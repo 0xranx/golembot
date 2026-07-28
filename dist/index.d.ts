@@ -6,7 +6,7 @@ export { buildSessionKey, stripMention } from './channel.js';
 export { type CommandContext, type CommandResult, executeCommand, parseCommand } from './commands.js';
 export type { ChannelStatus, DashboardContext, GatewayMetrics, RecentMessage } from './dashboard.js';
 export type { CompletionEvent, DiscoveredEngine, StreamEvent } from './engine.js';
-export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, openCodeProviderEnv } from './engine.js';
+export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, grokProviderEnv, openCodeProviderEnv, } from './engine.js';
 export type { FleetEntry, FleetInstance, FleetServerOpts } from './fleet.js';
 export { findInstance, findStoppedInstance, isProcessAlive, listInstances, listStoppedInstances, registerInstance, renderFleetDashboard, startFleetServer, startInstance, stopInstance, unregisterInstance, } from './fleet.js';
 export { startGateway } from './gateway.js';

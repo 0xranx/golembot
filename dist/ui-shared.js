@@ -16,6 +16,7 @@ export const ENGINE_COLORS = {
     'claude-code': '#f97316',
     opencode: '#22c55e',
     codex: '#3b82f6',
+    grok: '#eab308',
 };
 export const BASE_CSS = `
 *{margin:0;padding:0;box-sizing:border-box}

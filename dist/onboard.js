@@ -28,6 +28,12 @@ const ENGINE_AUTH = {
         loginCmd: 'opencode auth login',
         loginDetail: 'OpenCode auth (~/.local/share/opencode/auth.json)',
     },
+    grok: {
+        envVar: 'XAI_API_KEY',
+        envVarHint: 'xai-...',
+        loginCmd: 'grok login',
+        loginDetail: 'Grok OAuth (~/.grok/auth.json)',
+    },
 };
 function detectEngineAuth(engine) {
     if (engine === 'codex') {
@@ -60,6 +66,14 @@ function detectEngineAuth(engine) {
             return { ok: true, detail: 'OpenCode auth (~/.local/share/opencode/auth.json)' };
         return { ok: false, detail: '' };
     }
+    if (engine === 'grok') {
+        if (process.env.XAI_API_KEY)
+            return { ok: true, detail: 'XAI_API_KEY' };
+        const oauthFile = join(homedir(), '.grok', 'auth.json');
+        if (existsSync(oauthFile))
+            return { ok: true, detail: 'Grok OAuth (~/.grok/auth.json)' };
+        return { ok: false, detail: '' };
+    }
     return { ok: false, detail: '' };
 }
 const TEMPLATES = [
@@ -81,6 +95,9 @@ export function generateEnvExample(engine, channels) {
     }
     else if (engine === 'codex') {
         lines.push('# CODEX_API_KEY=sk-...');
+    }
+    else if (engine === 'grok') {
+        lines.push('# XAI_API_KEY=xai-...');
     }
     else {
         lines.push('# CURSOR_API_KEY=crsr_...');
@@ -192,6 +209,7 @@ export async function runOnboard(opts = {}) {
                 { name: 'Claude Code', value: 'claude-code' },
                 { name: 'OpenCode', value: 'opencode' },
                 { name: 'Codex', value: 'codex' },
+                { name: 'Grok Build', value: 'grok' },
             ],
         },
     ]);
@@ -431,6 +449,8 @@ export async function runOnboard(opts = {}) {
     const gitignoreDefaults = ['.golem/', '.env', '.env.local', 'node_modules/'];
     if (engine === 'opencode')
         gitignoreDefaults.push('.opencode/');
+    if (engine === 'grok')
+        gitignoreDefaults.push('.grok/');
     try {
         await stat(gitignorePath);
     }

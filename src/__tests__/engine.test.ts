@@ -5,23 +5,28 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { StreamEvent } from '../engine.js';
 import {
   buildCodexExecArgs,
+  buildGrokArgs,
   ClaudeCodeEngine,
   CodexEngine,
   CursorEngine,
   createEngine,
   ensureOpenCodeConfig,
+  GrokEngine,
   injectClaudeSkills,
   injectCodexSkills,
+  injectGrokSkills,
   injectOpenCodeSkills,
   injectSkills,
   OpenCodeEngine,
   parseClaudeStreamLine,
   parseCodexStreamLine,
+  parseGrokStreamLine,
   parseOpenCodeStreamLine,
   parseStreamLine,
   resolveCodexMode,
   resolveOpenCodeEnv,
   stripAnsi,
+  writeGrokMcpConfig,
 } from '../engine.js';
 
 // ═══════════════════════════════════════════════════════
@@ -809,6 +814,10 @@ describe('createEngine', () => {
 
   it('codex → CodexEngine', () => {
     expect(createEngine('codex')).toBeInstanceOf(CodexEngine);
+  });
+
+  it('grok → GrokEngine', () => {
+    expect(createEngine('grok')).toBeInstanceOf(GrokEngine);
   });
 
   it('unknown engine → throws', () => {
@@ -1917,5 +1926,221 @@ describe('ensureOpenCodeConfig mcp', () => {
     const stat2 = await stat(join(workspace, 'opencode.json'));
 
     expect(stat2.mtimeMs).toBe(stat1.mtimeMs);
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// Grok Build streaming-json samples
+// ═══════════════════════════════════════════════════════
+
+const GROK_SAMPLES = {
+  textChunk: JSON.stringify({ type: 'text', data: 'Hello from Grok' }),
+  textChunkContent: JSON.stringify({ type: 'text', content: 'alt field' }),
+  thought: JSON.stringify({ type: 'thought', data: 'reasoning...' }),
+  end: JSON.stringify({
+    type: 'end',
+    stopReason: 'EndTurn',
+    sessionId: 'sess-grok-123',
+    requestId: 'req-1',
+  }),
+  error: JSON.stringify({ type: 'error', message: 'auth failed' }),
+  errorEmpty: JSON.stringify({ type: 'error' }),
+  maxTurns: JSON.stringify({ type: 'max_turns_reached' }),
+  toolCall: JSON.stringify({ type: 'tool_call', name: 'read_file', input: { path: 'a.ts' } }),
+  toolResult: JSON.stringify({ type: 'tool_result', content: 'file body' }),
+  jsonFormat: JSON.stringify({
+    text: 'full reply',
+    stopReason: 'EndTurn',
+    sessionId: 'sess-json-1',
+    requestId: 'req-2',
+  }),
+};
+
+// ═══════════════════════════════════════════════════════
+// parseGrokStreamLine
+// ═══════════════════════════════════════════════════════
+
+describe('parseGrokStreamLine', () => {
+  it('parses text chunks', () => {
+    const events = parseGrokStreamLine(GROK_SAMPLES.textChunk, {});
+    expect(events).toEqual([{ type: 'text', content: 'Hello from Grok' }]);
+  });
+
+  it('accepts content field as text fallback', () => {
+    const events = parseGrokStreamLine(GROK_SAMPLES.textChunkContent, {});
+    expect(events).toEqual([{ type: 'text', content: 'alt field' }]);
+  });
+
+  it('skips thought events', () => {
+    expect(parseGrokStreamLine(GROK_SAMPLES.thought, {})).toEqual([]);
+  });
+
+  it('parses end as done with sessionId', () => {
+    const state: { sessionId?: string } = {};
+    const events = parseGrokStreamLine(GROK_SAMPLES.end, state);
+    expect(events).toEqual([{ type: 'done', sessionId: 'sess-grok-123' }]);
+    expect(state.sessionId).toBe('sess-grok-123');
+  });
+
+  it('parses error events', () => {
+    expect(parseGrokStreamLine(GROK_SAMPLES.error, {})).toEqual([{ type: 'error', message: 'auth failed' }]);
+  });
+
+  it('uses default error message when missing', () => {
+    expect(parseGrokStreamLine(GROK_SAMPLES.errorEmpty, {})).toEqual([{ type: 'error', message: 'Grok error' }]);
+  });
+
+  it('maps max_turns_reached to warning', () => {
+    expect(parseGrokStreamLine(GROK_SAMPLES.maxTurns, {})).toEqual([
+      { type: 'warning', message: 'Grok reached max turns limit' },
+    ]);
+  });
+
+  it('parses optional tool_call / tool_result', () => {
+    expect(parseGrokStreamLine(GROK_SAMPLES.toolCall, {})).toEqual([
+      { type: 'tool_call', name: 'read_file', args: JSON.stringify({ path: 'a.ts' }) },
+    ]);
+    expect(parseGrokStreamLine(GROK_SAMPLES.toolResult, {})).toEqual([{ type: 'tool_result', content: 'file body' }]);
+  });
+
+  it('parses non-streaming json format object', () => {
+    const state: { sessionId?: string } = {};
+    const events = parseGrokStreamLine(GROK_SAMPLES.jsonFormat, state);
+    expect(events).toEqual([
+      { type: 'text', content: 'full reply' },
+      { type: 'done', sessionId: 'sess-json-1', fullText: 'full reply' },
+    ]);
+    expect(state.sessionId).toBe('sess-json-1');
+  });
+
+  it('ignores non-json and empty lines', () => {
+    expect(parseGrokStreamLine('', {})).toEqual([]);
+    expect(parseGrokStreamLine('starting...', {})).toEqual([]);
+    expect(parseGrokStreamLine('{"broken', {})).toEqual([]);
+  });
+
+  it('end-to-end stream maps to text + done', () => {
+    const state: { sessionId?: string } = {};
+    const lines = [
+      GROK_SAMPLES.textChunk,
+      JSON.stringify({ type: 'text', data: '!' }),
+      GROK_SAMPLES.thought,
+      GROK_SAMPLES.end,
+    ];
+    const all = lines.flatMap((l) => parseGrokStreamLine(l, state));
+    expect(all.filter((e) => e.type === 'text')).toHaveLength(2);
+    expect(all.find((e) => e.type === 'done')).toEqual({ type: 'done', sessionId: 'sess-grok-123' });
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// buildGrokArgs
+// ═══════════════════════════════════════════════════════
+
+describe('buildGrokArgs', () => {
+  it('builds headless streaming-json args with always-approve by default', () => {
+    const args = buildGrokArgs('hello', { workspace: '/tmp/ws' });
+    expect(args).toEqual(['-p', 'hello', '--output-format', 'streaming-json', '--cwd', '/tmp/ws', '--always-approve']);
+  });
+
+  it('adds resume and model flags', () => {
+    const args = buildGrokArgs('continue', {
+      workspace: '/tmp/ws',
+      sessionId: 'sess-1',
+      model: 'grok-4.5',
+    });
+    expect(args).toContain('--resume');
+    expect(args).toContain('sess-1');
+    expect(args).toContain('-m');
+    expect(args).toContain('grok-4.5');
+  });
+
+  it('omits always-approve when skipPermissions is false', () => {
+    const args = buildGrokArgs('careful', { workspace: '/tmp/ws', skipPermissions: false });
+    expect(args).not.toContain('--always-approve');
+  });
+
+  it('appends image path hints into the prompt', () => {
+    const args = buildGrokArgs('describe', {
+      workspace: '/tmp/ws',
+      imagePaths: ['/tmp/a.png', '/tmp/b.png'],
+    });
+    const prompt = args[1];
+    expect(prompt).toContain('/tmp/a.png');
+    expect(prompt).toContain('/tmp/b.png');
+    expect(prompt).toContain('describe');
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// injectGrokSkills + writeGrokMcpConfig
+// ═══════════════════════════════════════════════════════
+
+describe('injectGrokSkills', () => {
+  let workspace: string;
+  let skillSrc: string;
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), 'golem-test-grok-inject-'));
+    skillSrc = await mkdtemp(join(tmpdir(), 'golem-test-grok-skillsrc-'));
+  });
+
+  afterEach(async () => {
+    await rm(workspace, { recursive: true, force: true });
+    await rm(skillSrc, { recursive: true, force: true });
+  });
+
+  it('creates .grok/skills/ with symlinks', async () => {
+    const skill1 = join(skillSrc, 'general');
+    const skill2 = join(skillSrc, 'im-adapter');
+    await mkdir(skill1, { recursive: true });
+    await mkdir(skill2, { recursive: true });
+
+    await injectGrokSkills(workspace, [skill1, skill2]);
+
+    const grokSkills = join(workspace, '.grok', 'skills');
+    const entries = await readdir(grokSkills);
+    expect(entries.sort()).toEqual(['general', 'im-adapter']);
+
+    const target1 = await readlink(join(grokSkills, 'general'));
+    expect(target1).toBe(skill1);
+  });
+
+  it('cleans old symlinks before re-injecting', async () => {
+    const skillA = join(skillSrc, 'alpha');
+    const skillB = join(skillSrc, 'beta');
+    await mkdir(skillA, { recursive: true });
+    await mkdir(skillB, { recursive: true });
+
+    await injectGrokSkills(workspace, [skillA]);
+    expect(await readdir(join(workspace, '.grok', 'skills'))).toEqual(['alpha']);
+
+    await injectGrokSkills(workspace, [skillB]);
+    expect(await readdir(join(workspace, '.grok', 'skills'))).toEqual(['beta']);
+  });
+});
+
+describe('writeGrokMcpConfig', () => {
+  let workspace: string;
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), 'golem-test-grok-mcp-'));
+  });
+
+  afterEach(async () => {
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it('writes mcp servers to .grok/config.toml', async () => {
+    await writeGrokMcpConfig(workspace, {
+      memory: { command: 'npx', args: ['-y', 'mcp-memory'], env: { DIR: '/tmp' } },
+    });
+
+    const raw = await readFile(join(workspace, '.grok', 'config.toml'), 'utf-8');
+    expect(raw).toContain('[mcp_servers.memory]');
+    expect(raw).toContain('command = "npx"');
+    expect(raw).toContain('"-y"');
+    expect(raw).toContain('mcp-memory');
+    expect(raw).toContain('DIR = "/tmp"');
   });
 });

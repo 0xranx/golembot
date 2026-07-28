@@ -90,7 +90,8 @@ export { ClaudeCodeEngine, injectClaudeSkills, parseClaudeStreamLine } from './e
 export { buildCodexExecArgs, CodexEngine, injectCodexSkills, parseCodexStreamLine, resolveCodexMode, } from './engines/codex.js';
 export { CursorEngine, injectSkills, parseStreamLine } from './engines/cursor.js';
 export { ensureOpenCodeConfig, injectOpenCodeSkills, OpenCodeEngine, parseOpenCodeStreamLine, resolveOpenCodeEnv, } from './engines/opencode.js';
-export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, openCodeProviderEnv } from './engines/provider-env.js';
+export { buildGrokArgs, findGrokBin, GrokEngine, injectGrokSkills, parseGrokStreamLine, writeGrokMcpConfig, } from './engines/grok.js';
+export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, grokProviderEnv, openCodeProviderEnv, } from './engines/provider-env.js';
 export { type DiscoveredEngine, discoverEngines, isOnPath, stripAnsi } from './engines/shared.js';
 export declare function createEngine(type: string): AgentEngine;
 //# sourceMappingURL=engine.d.ts.map

@@ -244,7 +244,7 @@ function renderConfigPanel(data) {
     // Engine & Runtime
     const engineSection = `<details open class="config-group">
     <summary>Engine & Runtime</summary>
-    <div class="config-row"><span class="config-key">Engine</span>${editable(configVal(data.engine), 'engine', data.engine, 'select', ['cursor', 'claude-code', 'opencode', 'codex'])}</div>
+    <div class="config-row"><span class="config-key">Engine</span>${editable(configVal(data.engine), 'engine', data.engine, 'select', ['cursor', 'claude-code', 'opencode', 'codex', 'grok'])}</div>
     <div class="config-row"><span class="config-key">Model</span>${editable(configVal(data.model, 'default'), 'model', data.model)}</div>
     <div class="config-row"><span class="config-key">Skip Permissions</span>${editable(configBadge(cfg.skipPermissions), 'skipPermissions', cfg.skipPermissions ?? false, 'boolean')}</div>
     <div class="config-row"><span class="config-key">Timeout</span>${editable(configVal(cfg.timeout, String(DEFAULT_TIMEOUT_SECONDS), 's'), 'timeout', cfg.timeout ?? DEFAULT_TIMEOUT_SECONDS, 'number')}</div>

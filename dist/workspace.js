@@ -461,6 +461,9 @@ export async function initWorkspace(dir, config, builtinSkillsDir) {
         gitignoreLines.push('.opencode/');
     if (config.engine === 'codex')
         gitignoreLines.push('.codex/');
+    // Project-scoped Grok config/skills are regenerated; keep local-only noise out of git.
+    if (config.engine === 'grok')
+        gitignoreLines.push('.grok/');
     const gitignorePath = join(dir, '.gitignore');
     try {
         await stat(gitignorePath);
