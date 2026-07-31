@@ -18,10 +18,11 @@ export const providerPresets = [
     {
         name: 'minimax',
         displayName: 'MiniMax',
-        baseUrl: 'https://api.minimax.chat/v1',
-        defaultModel: 'minimax-text-01',
+        baseUrl: 'https://api.minimax.io/v1',
+        defaultModel: 'MiniMax-M3',
+        availableModels: ['MiniMax-M3', 'MiniMax-M2.7'],
         apiKeyEnvVar: 'MINIMAX_API_KEY',
-        description: 'MiniMax API (OpenAI-compatible)',
+        description: 'MiniMax API (OpenAI-compatible). Global endpoint api.minimax.io; China endpoint api.minimaxi.com.',
     },
     {
         name: 'deepseek',
