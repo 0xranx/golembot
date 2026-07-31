@@ -1,9 +1,10 @@
+import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { openCodeProviderEnv } from './provider-env.js';
-import { isOnPath, spawnCommand } from './shared.js';
+import { isOnPath, resolveOnPath, spawnCommand } from './shared.js';
 
 // ── Provider env resolution ──────────────────────────────
 
@@ -227,8 +228,18 @@ export async function ensureOpenCodeConfig(
 
   // Only write when content actually changed, so a running OpenCode process
   // is not disturbed by needless config rewrites on every invocation.
+  // Compare normalized JSON to avoid rewriting when only whitespace/formatting differs.
   const next = `${JSON.stringify(existing, null, 2)}\n`;
-  if (next !== originalRaw) {
+  let shouldWrite = true;
+  if (originalRaw) {
+    try {
+      const normalizedOriginal = `${JSON.stringify(JSON.parse(originalRaw), null, 2)}\n`;
+      shouldWrite = next !== normalizedOriginal;
+    } catch {
+      // originalRaw is malformed — overwrite with corrected version
+    }
+  }
+  if (shouldWrite) {
     await writeFile(configPath, next, 'utf-8');
   }
 }
@@ -242,6 +253,15 @@ function findOpenCodeBin(): string {
         `Install it with: npm install -g opencode-ai\n` +
         `See: https://opencode.ai/docs`,
     );
+  }
+  // On Windows, npm creates wrapper scripts (.ps1/.cmd) that route through
+  // PowerShell or cmd.exe. Both shells apply the system ANSI code page to
+  // the stdin pipe, corrupting multi-byte UTF-8 characters (CJK, emoji).
+  // Resolve the actual binary to bypass shell encoding entirely.
+  if (process.platform === 'win32') {
+    const prefix = resolveOnPath('opencode') || 'opencode';
+    const exe = join(dirname(prefix), 'node_modules', 'opencode-ai', 'bin', 'opencode.exe');
+    if (existsSync(exe)) return exe;
   }
   return 'opencode';
 }
