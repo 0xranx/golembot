@@ -4,11 +4,12 @@ set -euo pipefail
 # 在每个终端/分支上运行，确保个人配置文件处于正确状态：
 #   - dev 分支：配置正常追踪（已提交，权威源），推 origin 跨终端同步
 #   - main 分支：保持上游版本，纯净
-#   - feature/*、pr/* 分支：从 dev 落地个人配置到工作区（git 可见 M 标记，commit/push 被 hook 拦截）
+#   - feature/*、pr/* 分支：从 dev 物化 golem.yaml + scripts/，重置 notes.md
+#     AGENTS.md 和 .gitignore 不物化，由 git 自行管理，可自由 commit/PR
 #
 # 用法：scripts/bootstrap.sh [install-hooks]
 
-CONFIG_FILES="AGENTS.md golem.yaml .gitignore"
+CONFIG_FILES="AGENTS.md golem.yaml .gitignore"  # For dev/main: restore tracked versions
 BRANCH="$(git branch --show-current)"
 
 log() { printf '[bootstrap] %s\n' "$*"; }
@@ -17,13 +18,13 @@ install_hooks() {
     HOOK_DIR=".git/hooks"
     mkdir -p "$HOOK_DIR"
 
-    # post-checkout: auto-materialize personal config + scripts on feature/pr branches
+    # post-checkout: auto-materialize golem.yaml + scripts + reset notes.md on feature/pr branches
     cat > "$HOOK_DIR/post-checkout" <<'HOOK'
 #!/bin/bash
 BRANCH=$(git branch --show-current)
 case "$BRANCH" in
   feature/*|pr/*)
-    # Config files (become M status, visible to user)
+    # Personal config (golem.yaml only — AGENTS.md and .gitignore are git-managed)
     git show dev:golem.yaml > golem.yaml 2>/dev/null || true
     # Reset notes.md to upstream version (prevent opencode from polluting it)
     git show HEAD:notes.md > notes.md 2>/dev/null || true
@@ -116,7 +117,7 @@ case "$BRANCH" in
         git show dev:scripts/"$s" > scripts/"$s" 2>/dev/null || true
     done
     chmod +x scripts/*.sh 2>/dev/null || true
-    log "feature/pr: 个人配置 + scripts 已从 dev 落地（golem.yaml/notes.md/scripts，AGENTS.md和.gitignore 由 git 自行管理）"
+    log "feature/pr: 物化 golem.yaml + scripts/ + 重置 notes.md（AGENTS.md 和 .gitignore 由 git 自行管理）"
     ;;
   *)
     log "未知分支 '$BRANCH'，跳过（请在 main / dev / feature/* / pr/* 分支上运行）"

@@ -74,11 +74,15 @@ git checkout -f main && git checkout -b feature/file-transfer
 #    → notes.md → 上游版
 #    → AGENTS.md / .gitignore → git 自行管理（feature 分支上任然可自由编辑和提交）
 
-# 2. 写代码（opencode 有完整上下文——AGENTS.md 在工作区）
+# 💡 如需完整 opencode 上下文（7-skill AGENTS.md），从 dev 复制并提交：
+git checkout dev -- AGENTS.md
+git add AGENTS.md && git commit -m "chore: use full AGENTS.md for dev"
 
-# 3. 提交功能代码
+# 2. 写代码（feature 分支的 AGENTS.md 是上游版本，如需完整上下文请先提交 dev 版）
+
+# 3. 提交功能代码（AGENTS.md 和 .gitignore 可自由提交）
 git add src/xxx.ts && git commit -m "feat: …"
-#    → 若手滑 git add AGENTS.md → pre‑commit 拦截
+#    → 若手滑 git add golem.yaml/scripts/ → pre‑commit 拦截
 #    → 拦截通过后跑 npx lint‑staged
 
 # 4. 推送并提 PR
@@ -92,7 +96,7 @@ git merge feature/file-transfer
 git push origin dev
 ```
 
-> **切分支要点**：dev ↔ feature 时配置文件不同会产生冲突 → 必须用 `git checkout -f`。
+> **切分支要点**：dev ↔ feature 时 golem.yaml 配置不同会产生冲突 → 必须用 `git checkout -f`。
 
 ---
 
@@ -102,10 +106,10 @@ git push origin dev
 # 机器 A（开发端）
 git push origin feature/file-transfer
 
-# 机器 B（另一端，必须先完成“新机器 setup”）
+# 机器 B（另一端，必须先完成"新机器 setup"）
 git fetch origin
 git checkout -b feature/file-transfer origin/feature/file-transfer
-#    → post‑checkout 自动物化，直接继续开发
+#    → post‑checkout 自动物化 golem.yaml + scripts/，AGENTS.md 由 git 管理，直接继续开发
 ```
 
 ---
@@ -114,7 +118,7 @@ git checkout -b feature/file-transfer origin/feature/file-transfer
 
 ### 4a. PR 还开着（功能未合入上游）
 ```bash
-git checkout -f feature/file-transfer     # post‑checkout 自动物化
+git checkout -f feature/file-transfer     # post‑checkout 自动物化 golem.yaml + scripts/
 git add src/xxx.ts && git commit -m "fix: …"
 git push origin feature/file-transfer     # GitHub PR 自动更新
 git checkout -f dev && git merge feature/file-transfer && git push origin dev
@@ -152,7 +156,7 @@ git push origin dev
 bash scripts/sync-upstream.sh
 # 1. fetch upstream
 # 2. main → ff‑only 快进
-# 3. dev → merge main（dirty 检查已自动排除配置文件）
+# 3. dev → merge main（dirty 检查已自动排除 golem.yaml）
 # 4. 回到原分支
 ```
 
