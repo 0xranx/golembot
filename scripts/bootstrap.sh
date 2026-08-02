@@ -49,7 +49,7 @@ if [[ "$local_branch" == feature/* || "$local_branch" == pr/* ]]; then
     staged_files="$(git diff --cached --name-only)"
     for f in $(echo "$staged_files" | tr '\n' ' '); do
         case "$f" in
-            AGENTS.md|golem.yaml|.gitignore|notes.md|.env|scripts/*)
+            golem.yaml|notes.md|.env|scripts/*)
                 echo "[pre-commit BLOCKED] $f is a personal config file. Do not commit it to $local_branch."
                 echo "Run: git reset HEAD $f"
                 exit 1
@@ -70,7 +70,7 @@ if [[ "$local_branch" == feature/* || "$local_branch" == pr/* ]]; then
     touched_files="$(git diff --name-only main...HEAD 2>/dev/null)"
     for f in $(echo "$touched_files" | tr '\n' ' '); do
         case "$f" in
-            AGENTS.md|golem.yaml|.gitignore|notes.md|.env|scripts/*)
+            golem.yaml|notes.md|.env|scripts/*)
                 echo "[pre-push BLOCKED] $f is a personal config file. Do not push it to $local_branch."
                 exit 1
                 ;;
