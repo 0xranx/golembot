@@ -57,7 +57,7 @@ if [[ "$local_branch" == feature/* || "$local_branch" == pr/* ]]; then
         esac
     done
 fi
-exit 0
+npx lint-staged
 HOOK
     chmod +x "$HOOK_DIR/pre-commit"
     log "已安装 pre-commit hook"
@@ -114,7 +114,13 @@ case "$BRANCH" in
     git show dev:AGENTS.md > AGENTS.md
     git show dev:golem.yaml > golem.yaml
     git show dev:.gitignore > .gitignore
-    log "feature/pr: 个人配置已从 dev 落地到工作区（git status 可见 M，commit/push 被 hook 拦截）"
+    mkdir -p scripts
+    for s in bootstrap.sh sync-upstream.sh bootstrap.bat sync-upstream.bat WINDOWS.md WORKFLOW.md; do
+        git show dev:scripts/"$s" > scripts/"$s" 2>/dev/null || true
+    done
+    chmod +x scripts/*.sh 2>/dev/null || true
+    git checkout -- notes.md 2>/dev/null || true
+    log "feature/pr: 个人配置 + scripts 已从 dev 落地到工作区（git status 可见 M，commit/push 被 hook 拦截）"
     ;;
   *)
     log "未知分支 '$BRANCH'，跳过（请在 main / dev / feature/* / pr/* 分支上运行）"
