@@ -28,7 +28,7 @@ case "$BRANCH" in
     git show dev:golem.yaml > golem.yaml 2>/dev/null || true
     git show dev:.gitignore > .gitignore 2>/dev/null || true
     # Reset notes.md to upstream version (prevent opencode from polluting it)
-    git checkout -- notes.md 2>/dev/null || true
+    git show HEAD:notes.md > notes.md 2>/dev/null || true
     # Scripts (gitignored via .gitignore, invisible to git)
     mkdir -p scripts
     for s in bootstrap.sh sync-upstream.sh bootstrap.bat sync-upstream.bat WINDOWS.md WORKFLOW.md; do
@@ -119,7 +119,7 @@ case "$BRANCH" in
         git show dev:scripts/"$s" > scripts/"$s" 2>/dev/null || true
     done
     chmod +x scripts/*.sh 2>/dev/null || true
-    git checkout -- notes.md 2>/dev/null || true
+    git show HEAD:notes.md > notes.md 2>/dev/null || true
     log "feature/pr: 个人配置 + scripts 已从 dev 落地到工作区（git status 可见 M，commit/push 被 hook 拦截）"
     ;;
   *)
