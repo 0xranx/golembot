@@ -9,6 +9,14 @@ export class WecomAdapter implements ChannelAdapter {
   private wsClient: any = null;
   private seenMsgIds = new Set<string>();
   private static readonly MAX_SEEN = 500;
+  /** chatId → (display name → userid), accumulated from incoming group frames. */
+  private groupMemberCache = new Map<string, Map<string, string>>();
+  private static readonly MEMBER_CACHE_TTL = 10 * 60 * 1000;
+  private groupMemberCacheTime = new Map<string, number>();
+  private activeStreamId: string | null = null;
+  private activeStreamFrame: any = null;
+  private activeStreamTimer: ReturnType<typeof setTimeout> | null = null;
+  private accumulatedText = '';
 
   constructor(config: WecomChannelConfig) {
     this.config = config;
@@ -72,27 +80,112 @@ export class WecomAdapter implements ChannelAdapter {
     const chatType = body.chattype || body.chatType || body.chat_type;
     const isGroup = chatType === 'group';
     const chatId = body.chatid || body.chatId || body.conversation_id || (!isGroup ? senderId : '');
+    const senderName: string | undefined = body.userName || body.from_name;
+
+    if (isGroup && chatId && senderId && senderName) {
+      let members = this.groupMemberCache.get(chatId);
+      if (!members) {
+        members = new Map();
+        this.groupMemberCache.set(chatId, members);
+      }
+      members.set(senderName, senderId);
+      this.groupMemberCacheTime.set(chatId, Date.now());
+    }
 
     const channelMsg: ChannelMessage = {
       channelType: 'wecom',
       senderId,
-      senderName: body.userName || body.from_name,
+      senderName,
       chatId,
       chatType: isGroup ? 'group' : 'dm',
       text,
       messageId: msgId,
-      mentioned: body.mentioned,
+      mentioned: isGroup ? true : undefined,
       raw: frame,
     };
 
     onMessage(channelMsg);
   }
 
-  async reply(msg: ChannelMessage, text: string, _options?: ReplyOptions): Promise<void> {
+  async getGroupMembers(chatId: string): Promise<Map<string, string>> {
+    // WeCom Smart Bot does not expose a member list API; return the cache
+    // accumulated from incoming group frames in handleFrame.
+    const cached = this.groupMemberCache.get(chatId);
+    if (!cached) return new Map();
+    const ts = this.groupMemberCacheTime.get(chatId) ?? 0;
+    if (Date.now() - ts >= WecomAdapter.MEMBER_CACHE_TTL) {
+      this.groupMemberCache.delete(chatId);
+      this.groupMemberCacheTime.delete(chatId);
+      return new Map();
+    }
+    return cached;
+  }
+
+  private finalizeStream(): void {
+    if (!this.activeStreamId || !this.activeStreamFrame || !this.wsClient) return;
+    if (this.activeStreamTimer) {
+      clearTimeout(this.activeStreamTimer);
+      this.activeStreamTimer = null;
+    }
+    if (this.accumulatedText) {
+      this.wsClient
+        .replyStream(this.activeStreamFrame, this.activeStreamId, this.accumulatedText, true)
+        .catch(() => {});
+    }
+    this.activeStreamId = null;
+    this.activeStreamFrame = null;
+    this.accumulatedText = '';
+  }
+
+  async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.wsClient) return;
     const frame = msg.raw;
-    const streamId = `reply-${Date.now()}`;
-    await this.wsClient.replyStream(frame, streamId, text, true);
+
+    if (this.activeStreamId && this.activeStreamFrame !== frame) {
+      this.finalizeStream();
+    }
+
+    if (!this.activeStreamId) {
+      this.activeStreamId = `reply-${Date.now()}`;
+      this.activeStreamFrame = frame;
+      this.accumulatedText = '';
+    }
+
+    if (this.activeStreamTimer) {
+      clearTimeout(this.activeStreamTimer);
+      this.activeStreamTimer = null;
+    }
+
+    let processedText = text;
+    const mentions = options?.mentions;
+    if (mentions && mentions.length > 0) {
+      for (const m of mentions) {
+        processedText = processedText.replace(
+          new RegExp(`@${m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g'),
+          `<@${m.platformId}>`,
+        );
+      }
+    }
+
+    this.accumulatedText += processedText;
+    this.activeStreamTimer = setTimeout(() => this.finalizeStream(), 2000);
+  }
+
+  async clearStatus(_msg: ChannelMessage, _statusId: string): Promise<void> {
+    this.finalizeStream();
+  }
+
+  async typing(msg: ChannelMessage): Promise<void> {
+    if (!this.wsClient) return;
+    try {
+      await this.wsClient.sendTyping?.(msg.chatId);
+    } catch {}
+    if (!this.activeStreamId) {
+      this.activeStreamId = `reply-${Date.now()}`;
+      this.activeStreamFrame = msg.raw;
+      this.accumulatedText = '';
+      this.wsClient.replyStream(msg.raw, this.activeStreamId, '', false).catch(() => {});
+    }
   }
 
   async send(chatId: string, text: string): Promise<void> {

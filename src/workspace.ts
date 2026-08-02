@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import yaml from 'js-yaml';
 import type { ScheduledTaskDef, TaskTarget } from './scheduler.js';
@@ -550,6 +550,16 @@ export async function generateAgentsMd(
   systemPrompt?: string,
   persona?: PersonaConfig,
 ): Promise<void> {
+  // If the user already has a hand-crafted AGENTS.md, leave it untouched.
+  // We only auto-generate when no file exists yet.
+  const agentsPath = join(dir, 'AGENTS.md');
+  try {
+    await lstat(agentsPath);
+    return;
+  } catch {
+    // file does not exist — proceed to create it
+  }
+
   let skillList: string;
   if (skills.length === 0) {
     skillList = '- (no skills installed)';

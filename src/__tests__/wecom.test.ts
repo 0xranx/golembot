@@ -201,7 +201,15 @@ describe('WecomAdapter', () => {
   });
 
   describe('reply', () => {
-    it('calls wsClient.replyStream with the frame', async () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('calls wsClient.replyStream after debounce timer expires', async () => {
       const msg: ChannelMessage = {
         channelType: 'wecom',
         senderId: 'u1',
@@ -212,12 +220,197 @@ describe('WecomAdapter', () => {
       };
 
       await adapter.reply(msg, 'Reply text');
+      vi.advanceTimersByTime(2000);
 
       expect(mockReplyStream).toHaveBeenCalledOnce();
       const [frame, _streamId, text, isFinal] = mockReplyStream.mock.calls[0];
       expect(frame).toEqual({ frameData: 'original' });
       expect(text).toBe('Reply text');
       expect(isFinal).toBe(true);
+    });
+
+    it('replaces @Name with <@userid> in accumulated stream text', async () => {
+      const msg: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'u1',
+        chatId: 'g1',
+        chatType: 'group',
+        text: 'hi',
+        raw: { frameData: 'original' },
+      };
+
+      await adapter.reply(msg, 'Thanks @Alice and @Bob!', {
+        mentions: [
+          { name: 'Alice', platformId: 'userid-alice' },
+          { name: 'Bob', platformId: 'userid-bob' },
+        ],
+      });
+      vi.advanceTimersByTime(2000);
+
+      expect(mockReplyStream).toHaveBeenCalledOnce();
+      const [, , text] = mockReplyStream.mock.calls[0];
+      expect(text).toBe('Thanks <@userid-alice> and <@userid-bob>!');
+    });
+
+    it('escapes regex special characters in mention names', async () => {
+      const msg: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'u1',
+        chatId: 'g1',
+        chatType: 'group',
+        text: 'hi',
+        raw: {},
+      };
+
+      await adapter.reply(msg, 'Hello @Dr.A+Smith', {
+        mentions: [{ name: 'Dr.A+Smith', platformId: 'userid-dr' }],
+      });
+      vi.advanceTimersByTime(2000);
+
+      const [, , text] = mockReplyStream.mock.calls[0];
+      expect(text).toBe('Hello <@userid-dr>');
+    });
+
+    it('accumulates multiple reply calls within debounce window before finalizing', async () => {
+      const msg: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'u1',
+        chatId: 'c1',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'original' },
+      };
+
+      await adapter.reply(msg, 'Part 1 ');
+      vi.advanceTimersByTime(1000);
+      await adapter.reply(msg, 'Part 2');
+      vi.advanceTimersByTime(2000);
+
+      // Only one finalizeStream call after debounce resets
+      expect(mockReplyStream).toHaveBeenCalledOnce();
+      const [, , text, isFinal] = mockReplyStream.mock.calls[0];
+      expect(text).toBe('Part 1 Part 2');
+      expect(isFinal).toBe(true);
+    });
+
+    it('ignores empty mentions array and debounces normally', async () => {
+      const msg: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'u1',
+        chatId: 'c1',
+        chatType: 'dm',
+        text: 'hi',
+        raw: {},
+      };
+
+      await adapter.reply(msg, 'Plain reply', { mentions: [] });
+      vi.advanceTimersByTime(2000);
+
+      expect(mockReplyStream).toHaveBeenCalledOnce();
+      const [, , text, isFinal] = mockReplyStream.mock.calls[0];
+      expect(text).toBe('Plain reply');
+      expect(isFinal).toBe(true);
+    });
+  });
+
+  describe('getGroupMembers', () => {
+    it('returns empty map for unknown chat', async () => {
+      const members = await adapter.getGroupMembers('no-such-chat');
+      expect(members.size).toBe(0);
+    });
+
+    it('accumulates name→userid mapping from group frames', async () => {
+      const textHandler = handlers.get('message.text')!;
+      textHandler({
+        msgId: 'gm-1',
+        userId: 'userid-alice',
+        userName: 'Alice',
+        chatId: 'group-1',
+        chatType: 'group',
+        content: { text: 'hello' },
+      });
+      textHandler({
+        body: {
+          msgid: 'gm-2',
+          from: { userid: 'userid-bob' },
+          from_name: 'Bob',
+          chattype: 'group',
+          chatid: 'group-1',
+          text: { content: 'hi all' },
+        },
+      });
+
+      const members = await adapter.getGroupMembers('group-1');
+      expect(members.get('Alice')).toBe('userid-alice');
+      expect(members.get('Bob')).toBe('userid-bob');
+      expect(members.size).toBe(2);
+    });
+
+    it('does not cache senders from DM frames', async () => {
+      const textHandler = handlers.get('message.text')!;
+      textHandler({
+        msgId: 'dm-1',
+        userId: 'userid-carol',
+        userName: 'Carol',
+        chatId: 'dm-chat',
+        chatType: 'dm',
+        content: { text: 'hi' },
+      });
+
+      const members = await adapter.getGroupMembers('dm-chat');
+      expect(members.size).toBe(0);
+    });
+
+    it('expires member cache after TTL', async () => {
+      vi.useFakeTimers();
+      try {
+        const textHandler = handlers.get('message.text')!;
+        textHandler({
+          msgId: 'gm-ttl',
+          userId: 'userid-dave',
+          userName: 'Dave',
+          chatId: 'group-ttl',
+          chatType: 'group',
+          content: { text: 'hello' },
+        });
+
+        expect((await adapter.getGroupMembers('group-ttl')).get('Dave')).toBe('userid-dave');
+
+        vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+        expect((await adapter.getGroupMembers('group-ttl')).size).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('typing', () => {
+    const msg: ChannelMessage = {
+      channelType: 'wecom',
+      senderId: 'u1',
+      chatId: 'chat-1',
+      chatType: 'dm',
+      text: 'hi',
+      raw: {},
+    };
+
+    it('calls wsClient.sendTyping when supported', async () => {
+      const mockSendTyping = vi.fn().mockResolvedValue(undefined);
+      (adapter as any).wsClient.sendTyping = mockSendTyping;
+
+      await adapter.typing(msg);
+
+      expect(mockSendTyping).toHaveBeenCalledWith('chat-1');
+    });
+
+    it('no-ops when SDK does not support typing', async () => {
+      await expect(adapter.typing(msg)).resolves.toBeUndefined();
+    });
+
+    it('swallows errors from sendTyping', async () => {
+      (adapter as any).wsClient.sendTyping = vi.fn().mockRejectedValue(new Error('not supported'));
+
+      await expect(adapter.typing(msg)).resolves.toBeUndefined();
     });
   });
 

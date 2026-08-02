@@ -586,9 +586,12 @@ export async function handleMessage(
 
   const finalizeStatusUpdate = async (finalText = '✅ Done'): Promise<void> => {
     cancelThinkingStatus();
-    if (!statusMessageId) return;
+    // Skip only when neither a status message exists nor the adapter has clearStatus.
+    // Adapters that support streaming (e.g. WeCom) need clearStatus called even without
+    // a prior sendStatus, to finalize the open stream.
+    if (!statusMessageId && !adapter.clearStatus) return;
     debugEventLog(debugEventsEnabled, `[event-debug] gateway status-final textChars=${finalText.length}`);
-    if (adapter.updateStatus) {
+    if (statusMessageId && adapter.updateStatus) {
       await adapter.updateStatus(msg, statusMessageId, finalText);
       statusMessageText = finalText;
       statusFinalized = true;
@@ -597,7 +600,7 @@ export async function handleMessage(
     if (adapter.clearStatus) {
       const currentStatusId = statusMessageId;
       statusMessageId = undefined;
-      await adapter.clearStatus(msg, currentStatusId);
+      await adapter.clearStatus(msg, currentStatusId ?? '');
     }
   };
 
@@ -1293,6 +1296,15 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
           if (gc.groupPolicy !== 'mention-only') {
             console.warn(
               `   ⚠️  DingTalk groupPolicy "${gc.groupPolicy}" will behave like "mention-only" — ` +
+                `the platform only delivers @mention messages to bots.`,
+            );
+          }
+        }
+        if (type === 'wecom') {
+          const gc = resolveGroupChatConfig(config);
+          if (gc.groupPolicy !== 'mention-only') {
+            console.warn(
+              `   ⚠️  WeCom groupPolicy "${gc.groupPolicy}" will behave like "mention-only" — ` +
                 `the platform only delivers @mention messages to bots.`,
             );
           }
