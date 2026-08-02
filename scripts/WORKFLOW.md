@@ -86,28 +86,72 @@ Note: uncommitted worktree changes (M AGENTS.md etc.) are machine-local. Commit 
 
 ## 4. Bug fixing workflow
 
-### Bug in a feature that is NOT yet merged to upstream (PR open)
+### 4a. Bug found in a feature that is NOT yet merged to upstream (PR open)
 ```bash
+# 切到功能分支，落地个人配置
 git checkout feature/file-transfer
 git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
-# fix code
-git add src/xxx.ts && git commit -m "fix: ..."
-git push origin feature/file-transfer   # PR updates automatically
-# if merged to dev already, also merge the fix into dev
-git checkout dev && git merge feature/file-transfer && git push origin dev
-```
 
-### Bug in a feature already merged to dev (in use)
-```bash
+# 修代码 + 提交
+git add src/xxx.ts
+git commit -m "fix: ..."
+git push origin feature/file-transfer    # GitHub PR 自动更新
+
+# 若此分支已并入 dev，同步修复到 dev
 git checkout dev
-# fix code
-git add src/xxx.ts && git commit -m "fix: ..."
+git merge feature/file-transfer
 git push origin dev
 ```
 
-### Bug needs to go to upstream too
-- If PR still open: fix on the feature branch (above), PR picks it up.
-- If feature already merged upstream: create a new `feature/fix-xxx` branch from `main`, cherry-pick the fix commit, push, PR.
+### 4b. Bug found while running on dev（功能已并入 dev，日常使用中）
+```bash
+# 直接在 dev 上修
+git checkout dev
+git add src/xxx.ts
+git commit -m "fix: ..."
+git push origin dev
+```
+
+### 4c. Bug 需要回馈到上游原项目
+**情况 1 — PR 还开着**：在 4a 的功能分支上修，PR 自动带上。
+
+**情况 2 — 功能已被上游合并，但发现新 bug**：
+```bash
+# 从 main 开新的 fix 分支
+git checkout main
+git checkout -b feature/fix-file-transfer
+git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
+
+# 从 dev 上 cherry-pick 修复的 commit（或直接修）
+git cherry-pick <fix-commit-hash-from-dev>
+
+# 推 + 提新 PR
+git push origin feature/fix-file-transfer
+# GitHub: PR feature/fix-file-transfer → upstream
+```
+
+**情况 3 — 功能已并入 dev 但 PR 被拒（未进上游），需要修复后重提 PR**：
+```bash
+# 回到原始 feature 分支
+git checkout feature/file-transfer
+git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
+
+# 修代码 + 提交
+git add src/xxx.ts && git commit -m "fix: ..."
+git push origin feature/file-transfer
+
+# 确认修复后，重新提 PR（或 force push 更新已有 PR）
+# 同步到 dev
+git checkout dev && git merge feature/file-transfer && git push origin dev
+```
+
+### 4d. Bug 只在自己的 fork 里出现（上游没有这个问题）
+```bash
+# 直接在 dev 上修 + 推 origin，不往上提 PR
+git checkout dev
+git add src/xxx.ts && git commit -m "fix: local issue ..."
+git push origin dev
+```
 
 ## 5. Sync upstream (weekly/monthly)
 ```bash
