@@ -1,8 +1,13 @@
-# Assistant Context
+﻿# Assistant Context
 
 ## Installed Skills
-- general: General-purpose personal AI assistant — everyday conversation, information management, file operations, persistent memory
-- im-adapter: IM channel response guidelines — adapted for instant messaging platforms like Lark, DingTalk, WeCom, etc.
+- escalation: Escalate unresolvable or sensitive requests to a human agent by recording an escalation entry. Use when the user asks to speak to a human, the bot cannot answer confidently, the request involves financial, legal, or security concerns, a safety issue is detected, or the user is frustrated after repeated failures.
+- general: Handle everyday conversation, answer questions, manage files, take notes, run scripts, and maintain persistent memory across sessions. Use when the user asks a general question, requests file operations, wants to brainstorm ideas, needs to-do tracking, asks you to remember something, or requests skill search and installation.
+- im-adapter: Format responses for instant messaging platforms such as Lark, DingTalk, WeCom, Slack, and Telegram. Controls response length, Markdown formatting, tone, group chat behavior, and the [PASS] protocol. Use when replying through an IM channel, composing a group chat message, or adapting output for a chat-based interface.
+- kb-guide: Search, read, create, and update knowledge base entries via MCP-connected KB tools. Use when the user asks to look up documentation, find existing articles, check if docs exist on a topic, create a new KB entry, update an existing document, or when domain questions should be answered from the knowledge base first.
+- message-push: Send proactive messages to IM groups or individual users via the gateway Send API. Use when the user says to send, post, notify, forward, or tell someone a message on Feishu, Slack, Telegram, Discord, DingTalk, or WeCom.
+- multi-bot: Coordinates responses between multiple GolemBot instances in a shared fleet. Use when the bot operates in a group chat with other bots, needs to decide whether to respond or pass, or must call a peer bot's API to fetch cross-domain data.
+- task-manager: Creates and manages scheduled tasks, cron jobs, recurring reminders, and timers via the Task HTTP API. Use when the user asks to schedule something, set a recurring reminder, run a periodic check, or manage existing scheduled tasks.
 
 ## Directory Structure
 - skills/ — Skills directory (each subdirectory is a skill, containing SKILL.md and optional scripts)

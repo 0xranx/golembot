@@ -1,2 +1,8 @@
 name: cloudsync-support-bot
 engine: opencode
+gateway:
+  port: 3001
+channels:
+  wecom:
+    botId: ${WECOM_BOT_ID}
+    secret: ${WECOM_SECRET}
