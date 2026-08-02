@@ -24,9 +24,7 @@ BRANCH=$(git branch --show-current)
 case "$BRANCH" in
   feature/*|pr/*)
     # Config files (become M status, visible to user)
-    git show dev:AGENTS.md > AGENTS.md 2>/dev/null || true
     git show dev:golem.yaml > golem.yaml 2>/dev/null || true
-    git show dev:.gitignore > .gitignore 2>/dev/null || true
     # Reset notes.md to upstream version (prevent opencode from polluting it)
     git show HEAD:notes.md > notes.md 2>/dev/null || true
     # Scripts (gitignored via .gitignore, invisible to git)
@@ -111,16 +109,14 @@ case "$BRANCH" in
     log "main: 配置已恢复为上游版本（纯净）"
     ;;
   feature/*|pr/*)
-    git show dev:AGENTS.md > AGENTS.md
     git show dev:golem.yaml > golem.yaml
-    git show dev:.gitignore > .gitignore
+    git show HEAD:notes.md > notes.md 2>/dev/null || true
     mkdir -p scripts
     for s in bootstrap.sh sync-upstream.sh bootstrap.bat sync-upstream.bat WINDOWS.md WORKFLOW.md; do
         git show dev:scripts/"$s" > scripts/"$s" 2>/dev/null || true
     done
     chmod +x scripts/*.sh 2>/dev/null || true
-    git show HEAD:notes.md > notes.md 2>/dev/null || true
-    log "feature/pr: 个人配置 + scripts 已从 dev 落地到工作区（git status 可见 M，commit/push 被 hook 拦截）"
+    log "feature/pr: 个人配置 + scripts 已从 dev 落地（golem.yaml/notes.md/scripts，AGENTS.md和.gitignore 由 git 自行管理）"
     ;;
   *)
     log "未知分支 '$BRANCH'，跳过（请在 main / dev / feature/* / pr/* 分支上运行）"

@@ -67,11 +67,12 @@ pnpm build && node dist/cli.js gateway --verbose
 
 ### 开新功能（核心流程）
 ```bash
-# 1. 从纯净 main 开分支 → post‑checkout hook 自动物化一切
+# 1. 从纯净 main 开分支 → post‑checkout 自动物化 golem.yaml + scripts/ + 重置 notes
 git checkout -f main && git checkout -b feature/file-transfer
-#    → AGENTS.md / golem.yaml / .gitignore → M（正常，hook 保护）
-#    → scripts/ → 已就位（.gitignore 隐藏，git status 看不到）
-#    → notes.md → 自动重置为上游版
+#    → golem.yaml → M（不提交）
+#    → scripts/ → 已就位（.gitignore 隐藏）
+#    → notes.md → 上游版
+#    → AGENTS.md / .gitignore → git 自行管理（feature 分支上任然可自由编辑和提交）
 
 # 2. 写代码（opencode 有完整上下文——AGENTS.md 在工作区）
 
@@ -163,10 +164,10 @@ bash scripts/sync-upstream.sh
 
 | 文件 | dev | feature/pr | 进 PR？ | 保护 |
 |---|---|---|---|---|
-| `AGENTS.md`（7‑skill） | tracked | M（hook 物化） | ✅ 可以 | 无拦截 |
-| `.gitignore`（含 scripts/） | tracked | M（hook 物化） | ✅ 可以 | 无拦截 |
+| `AGENTS.md`（7‑skill） | tracked | **git 自行管理**（不物化） | ✅ 可以 | 无拦截 |
+| `.gitignore` | tracked | **git 自行管理**（不物化） | ✅ 可以 | 无拦截 |
 | `golem.yaml`（wecom 配置） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
-| `scripts/`（6 个文件） | tracked | untracked + ignored | ❌ | .gitignore + pre‑commit |
+| `scripts/`（6 个文件） | tracked | untracked + ignored（hook 物化） | ❌ | .gitignore + pre‑commit + pre‑push |
 | `notes.md` | 上游版 | hook 重置为上游版 | ❌ | pre‑commit + pre‑push |
 | `.env` | gitignored | gitignored | ❌ | pre‑commit + pre‑push |
 
@@ -176,7 +177,7 @@ bash scripts/sync-upstream.sh
 
 | Hook | 触发时机 | 作用 |
 |---|---|---|
-| **post‑checkout** | 切到 feature/pr 后 | 从 dev 物化 AGENTS.md / golem.yaml / .gitignore / scripts/ + 重置 notes.md |
+| **post‑checkout** | 切到 feature/pr 后 | 物化 golem.yaml + scripts/ + 重置 notes.md<br>AGENTS.md 和 .gitignore **不物化**，由 git 自行管理 |
 | **pre‑commit** | commit 时 | 拦截 golem.yaml / notes.md / .env / scripts/ → 放行后跑 `npx lint‑staged`<br>AGENTS.md 和 .gitignore **不拦截**（可正常 commit、PR 到上游） |
 | **pre‑push** | push 时 | 拦截 golem.yaml / notes.md / .env / scripts/（用 `main…HEAD` 检查，含首次推送） |
 
@@ -193,7 +194,7 @@ bash scripts/bootstrap.sh install-hooks
 
 1. **`main` 永不 commit**——只 `sync‑upstream.sh` 快进
 2. **`dev` 不向上游提 PR**——只 `feature/*` 提 PR
-3. **git status 里的 M 标记要区分**：golem.yaml 的 M 是个人配置（不提交）；AGENTS.md 和 .gitignore 的 M 是正常文件（可以提交、可以 PR）
+3. **M 标记**：golem.yaml 的 M 是个人配置（不提交）；AGENTS.md 和 .gitignore 不会被 hook 物化，由 git 自行管理，可以自由提交和 PR
 
 ---
 
