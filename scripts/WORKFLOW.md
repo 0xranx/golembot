@@ -1,164 +1,202 @@
-# Fork Dev Workflow (private, NOT for PRs)
+# GolemBot Fork 开发工作流
 
-> This file lives in `scripts/` which is tracked only on `dev`, gitignored elsewhere.
-> Personal notes go here (not `notes.md` — that file is tracked by upstream and would leak into PRs).
+> Personal notes: `scripts/WORKFLOW.md` or `memory/`
+> — do NOT write to `notes.md` (upstream-tracked, would leak to PRs).
 
-## Branch model
-- `main` — pristine mirror of upstream. Only `git merge --ff-only upstream/main`, never commit locally.
-- `dev` — private long-lived branch: personal config (AGENTS.md, golem.yaml, .gitignore) + merged features + `scripts/`. Push to origin for cross-machine sync.
-- `feature/*`, `pr/*` — clean feature/PR branches branched from `main`, feature code only.
+## 分支模型
 
-## 1. New machine setup (first time)
+```
+upstream (0xranx/golembot)
+   │  bash scripts/sync-upstream.sh
+   ▼
+main ── 纯净镜像（永不 commit，仅 ff‑only 同步）
+   │  git checkout -f main && git checkout -b feature/xxx
+   ├── pr/wecom-group-chat           → upstream PR ✓
+   ├── feature/file-transfer（未来）  → upstream PR
+   └── dev ── 你的家（90% 时间在这里）
+         ├── AGENTS.md（7‑skill）/ golem.yaml（wecom）/ .gitignore（含 scripts/）
+         ├── scripts/（bootstrap.sh / sync‑upstream.sh / WORKFLOW.md / WINDOWS.md / .bat）
+         ├── 合并的功能代码
+         └── git push origin dev → 跨终端同步
+```
+
+| 分支 | 角色 | 使用频率 |
+|---|---|---|
+| `dev` | 日常开发、跑 bot、合并功能 | 90% |
+| `main` | 上游镜像、开新分支的起点 | 3% |
+| `feature/*` / `pr/*` | 开发功能 → 提 PR | 7% |
+
+---
+
+## 一、新机器 setup（一次性）
+
 ```bash
-# 1. Clone your fork
+# 1. 克隆你的 fork（默认 checkout main，无 scripts/hooks/.env）
 git clone git@github.com:WuMingrui98/golembot.git
 cd golembot
 
-# 2. Checkout dev (has personal config + scripts)
+# 2. 切到 dev（个人配置 + scripts 都在这里）
 git checkout dev && git pull origin dev
 
-# 3. Install hooks (post-checkout + pre-commit + pre-push)
+# 3. 安装 hooks（必须在 dev 上跑——只有 dev 有 bootstrap.sh）
 bash scripts/bootstrap.sh install-hooks
 
-# 4. Ensure correct config state on current branch
+# 4. 确保当前分支配置正确
 bash scripts/bootstrap.sh
 
-# 5. Create .env with credentials
-cp .env.example .env   # then fill in WECOM_BOT_ID / WECOM_SECRET
+# 5. 创建 .env（每台机器独立，填 WECOM 凭证）
+cp .env.example .env
+# 编辑 .env，写入：WECOM_BOT_ID=xxx  WECOM_SECRET=xxx
 
-# 6. Verify
-git status   # should be clean on dev
-pnpm build && node dist/cli.js gateway --verbose   # start bot
+# 6. 验证
+git status                              # dev 应干净
+pnpm build && node dist/cli.js gateway --verbose
 ```
-Windows: use Git Bash; run `.bat` wrappers instead (see `WINDOWS.md`).
 
-## 2. Daily development
+> Windows：用 Git Bash，跑 `scripts/bootstrap.bat`（详见 `scripts/WINDOWS.md`）。
 
-### Everyday (on dev)
+---
+
+## 二、日常开发
+
+### 每天（在 dev 上）
 ```bash
 git checkout dev
-pnpm build && node dist/cli.js gateway --verbose   # run bot
+pnpm build && node dist/cli.js gateway --verbose
 ```
 
-### New feature (core flow)
+### 开新功能（核心流程）
 ```bash
-# 1. Branch from pristine main → post-checkout auto-materializes config + scripts
+# 1. 从纯净 main 开分支 → post‑checkout hook 自动物化一切
 git checkout -f main && git checkout -b feature/file-transfer
-#    → AGENTS.md / golem.yaml / .gitignore → M（自动，hook 负责）
-#    → scripts/ → 已就位（自动，.gitignore 隐藏）
+#    → AGENTS.md / golem.yaml / .gitignore → M（正常，hook 保护）
+#    → scripts/ → 已就位（.gitignore 隐藏，git status 看不到）
+#    → notes.md → 自动重置为上游版
 
-# 2. Develop code (write src/), opencode has full context
+# 2. 写代码（opencode 有完整上下文——AGENTS.md 在工作区）
 
-# 3. Commit ONLY feature code
-git add src/xxx.ts && git commit -m "feat: ..."
-#    → pre-commit hook blocks if config files staged by mistake
+# 3. 提交功能代码
+git add src/xxx.ts && git commit -m "feat: …"
+#    → 若手滑 git add AGENTS.md → pre‑commit 拦截
+#    → 拦截通过后跑 npx lint‑staged
 
-# 4. Push and open PR
+# 4. 推送并提 PR
 git push origin feature/file-transfer
-#    → pre-push hook blocks if config files got into commits
-#    → GitHub: PR from feature/file-transfer → upstream
+#    → 若配置混进 commit 历史 → pre‑push 拦截（main…HEAD）
+#    → GitHub: feature/file-transfer → upstream 发起 PR
 
-# 5. Merge into dev when done
+# 5. 完成，并入 dev
 git checkout -f dev
 git merge feature/file-transfer
 git push origin dev
 ```
 
-## 3. Sync feature progress between machines
+> **切分支要点**：dev ↔ feature 时配置文件不同会产生冲突 → 必须用 `git checkout -f`。
+
+---
+
+## 三、跨终端同步功能进度
+
 ```bash
-# Machine A (where you developed):
+# 机器 A（开发端）
 git push origin feature/file-transfer
 
-# Machine B (other terminal — must have completed Step 1 setup first)
+# 机器 B（另一端，必须先完成“新机器 setup”）
 git fetch origin
 git checkout -b feature/file-transfer origin/feature/file-transfer
-#    → post-checkout auto-materializes config + scripts
-# continue working; push back: git push origin feature/file-transfer
+#    → post‑checkout 自动物化，直接继续开发
 ```
 
-## 4. Bug fixing workflow
+---
 
-### 4a. Bug found in a feature that is NOT yet merged to upstream (PR open)
+## 四、Bug 修复
+
+### 4a. PR 还开着（功能未合入上游）
 ```bash
-# 切到功能分支（post-checkout 自动物化配置+脚本）
-git checkout -f feature/file-transfer
-
-# 修代码 + 提交
-git add src/xxx.ts && git commit -m "fix: ..."
-git push origin feature/file-transfer    # GitHub PR 自动更新
-
-# 若已并入 dev，同步修复
+git checkout -f feature/file-transfer     # post‑checkout 自动物化
+git add src/xxx.ts && git commit -m "fix: …"
+git push origin feature/file-transfer     # GitHub PR 自动更新
 git checkout -f dev && git merge feature/file-transfer && git push origin dev
 ```
 
-### 4b. Bug found while running on dev（功能已并入 dev，日常使用中）
+### 4b. 功能已并入 dev（日常在用）
 ```bash
-# 直接在 dev 上修
 git checkout dev
-git add src/xxx.ts
-git commit -m "fix: ..."
+git add src/xxx.ts && git commit -m "fix: …"
 git push origin dev
 ```
 
-### 4c. Bug 需要回馈到上游原项目
-**情况 1 — PR 还开着**：在 4a 的功能分支上修，PR 自动带上。
+### 4c. 需要回馈上游
+- **PR 还开着** → 同 4a，在 feature 分支上修
+- **已合并、但出新 bug** →
+  ```bash
+  git checkout -f main && git checkout -b feature/fix-file-transfer
+  git cherry-pick <修复合并在dev的commit>
+  git push origin feature/fix-file-transfer    # 新 PR
+  ```
+- **PR 被拒、重提交** → `checkout -f feature/xxx` → 修 → push → 更新/重提 PR
 
-**情况 2 — 功能已被上游合并，但发现新 bug**：
+### 4d. 只在自己 fork 的问题（不上报上游）
 ```bash
-git checkout -f main && git checkout -b feature/fix-file-transfer
-# post-checkout 自动物化一切
-git cherry-pick <fix-commit-hash-from-dev>
-git push origin feature/fix-file-transfer
-# GitHub: PR → upstream
-```
-
-**情况 3 — 功能已并入 dev 但 PR 被拒（未进上游），需要修复后重提 PR**：
-```bash
-git checkout -f feature/file-transfer
-git add src/xxx.ts && git commit -m "fix: ..."
-git push origin feature/file-transfer
-git checkout -f dev && git merge feature/file-transfer && git push origin dev
-```
-
-### 4d. Bug 只在自己的 fork 里出现（上游没有这个问题）
-```bash
-# 直接在 dev 上修 + 推 origin，不往上提 PR
 git checkout dev
-git add src/xxx.ts && git commit -m "fix: local issue ..."
+git add src/xxx.ts && git commit -m "fix: …"
 git push origin dev
 ```
 
-## 5. Sync upstream (weekly/monthly)
+---
+
+## 五、同步上游（每周/每月）
+
 ```bash
-# 在 dev 或 feature 分支上直接跑（scripts 已被 post-checkout 物化）
 bash scripts/sync-upstream.sh
-#   1. fetch upstream
-#   2. main → ff-only to latest upstream
-#   3. dev → merge main (upstream features come in)
-#   4. back to your original branch
+# 1. fetch upstream
+# 2. main → ff‑only 快进
+# 3. dev → merge main（dirty 检查已自动排除配置文件）
+# 4. 回到原分支
 ```
-Rules: only `main`→`dev` sync. `feature/*` never syncs upstream directly; if needed: `git checkout feature/x && git rebase main`.
 
-## Personal config (AGENTS.md, golem.yaml, .gitignore)
-- Upstream-tracked files; local versions are personal (M status on feature/pr branches).
-- On `dev`: tracked normally (authoritative source, pushed to origin).
-- On `main`: upstream versions.
-- On `feature/*`/`pr/*`: materialized automatically by post-checkout hook; commit/push blocked by hooks.
+规则：永远只 `main` → `dev` 同步，`feature/*` 不直接同步上游。feature 分支如需更新：`git checkout feature/x && git rebase main`。
 
-## Automatic hooks (installed via `bash scripts/bootstrap.sh install-hooks` on dev)
-- **post-checkout**: auto-materializes personal config + scripts on `feature/*`/`pr/*` branches after checkout.
-- **pre-commit**: on `feature/*`/`pr/*`, blocks staging AGENTS.md/golem.yaml/.gitignore/notes.md/.env/scripts/*.
-- **pre-push**: on `feature/*`/`pr/*`, blocks pushing those files (uses `main...HEAD`, works on first push).
-- Hooks live in `.git/hooks/` (local, machine-specific, reinstall per machine).
-- After `git pull origin dev`, if `scripts/bootstrap.sh` was updated, re-run `bash scripts/bootstrap.sh install-hooks` to apply hook changes.
+---
 
-## Switching branches (IMPORTANT)
-- `git checkout -f main && git checkout -b feature/x` — always use `-f` on the **first** leg (dev→main or feature→dev) because personal config files differ between branches.
-- `post-checkout` hook auto-materializes everything on `feature/*`/`pr/*` after arrival.
+## 六、个人文件清单
 
-## Do NOT commit to PR branches
-- `scripts/`, `memory/`, `.opencode/`, `.omo/`, `.env`, personal `notes.md` content.
-- `notes.md` is upstream-tracked — keep upstream content on feature/pr branches.
+| 文件 | dev | feature/pr | 进 PR？ | 保护 |
+|---|---|---|---|---|
+| `AGENTS.md`（7‑skill） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
+| `golem.yaml`（wecom 配置） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
+| `.gitignore`（含 scripts/） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
+| `scripts/`（6 个文件） | tracked | untracked + ignored | ❌ | .gitignore + pre‑commit |
+| `notes.md` | 上游版 | hook 重置为上游版 | ❌ | pre‑commit |
+| `.env` | gitignored | gitignored | ❌ | pre‑commit |
 
-## Windows
-- See `scripts/WINDOWS.md` for setup and run options.
+---
+
+## 七、三层 Hook 保护
+
+| Hook | 触发时机 | 作用 |
+|---|---|---|
+| **post‑checkout** | 切到 feature/pr 后 | 从 dev 物化 3 配置 + 6 脚本 + 重置 notes.md |
+| **pre‑commit** | commit 时 | 拦截 AGENTS.md / golem.yaml / .gitignore / scripts/ / .env / notes.md → 放行后跑 `npx lint‑staged` |
+| **pre‑push** | push 时 | 用 `main…HEAD` 检查 commit 历史是否有个人文件 → 拒绝 push（含首次推送新分支） |
+
+Hook 文件在 `.git/hooks/`（本地文件，不进 git）。`install‑hooks` 只能在 dev 分支上跑（只有 dev 有 `scripts/bootstrap.sh`）。
+
+**pull dev 后重装**：若 `scripts/bootstrap.sh` 有更新，重跑一次：
+```bash
+bash scripts/bootstrap.sh install-hooks
+```
+
+---
+
+## 八、三条铁律
+
+1. **`main` 永不 commit**——只 `sync‑upstream.sh` 快进
+2. **`dev` 不向上游提 PR**——只 `feature/*` 提 PR
+3. **git status 里的 3 个 M 是正常的**——AGENTS.md / golem.yaml / .gitignore 是个人配置，不要 `git add` 它们
+
+---
+
+## 九、Windows
+
+参见 `scripts/WINDOWS.md`。要点：装 Git for Windows（自带 Git Bash），跑 `.bat` 包装器或 `bash scripts/xxx.sh`。
