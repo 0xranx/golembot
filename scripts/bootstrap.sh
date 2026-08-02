@@ -17,18 +17,39 @@ install_hooks() {
     HOOK_DIR=".git/hooks"
     mkdir -p "$HOOK_DIR"
 
-    # pre-commit: block personal config from being committed on feature/pr branches
+    # post-checkout: auto-materialize personal config + scripts on feature/pr branches
+    cat > "$HOOK_DIR/post-checkout" <<'HOOK'
+#!/bin/bash
+BRANCH=$(git branch --show-current)
+case "$BRANCH" in
+  feature/*|pr/*)
+    # Config files (become M status, visible to user)
+    git show dev:AGENTS.md > AGENTS.md 2>/dev/null || true
+    git show dev:golem.yaml > golem.yaml 2>/dev/null || true
+    git show dev:.gitignore > .gitignore 2>/dev/null || true
+    # Scripts (gitignored via .gitignore, invisible to git)
+    mkdir -p scripts
+    for s in bootstrap.sh sync-upstream.sh bootstrap.bat sync-upstream.bat WINDOWS.md WORKFLOW.md; do
+        git show dev:scripts/"$s" > scripts/"$s" 2>/dev/null || true
+    done
+    chmod +x scripts/*.sh 2>/dev/null || true
+    ;;
+esac
+HOOK
+    chmod +x "$HOOK_DIR/post-checkout"
+    log "已安装 post-checkout hook"
+
+    # pre-commit: block personal config + scripts from being committed on feature/pr branches
     cat > "$HOOK_DIR/pre-commit" <<'HOOK'
 #!/bin/bash
 local_branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$local_branch" == feature/* || "$local_branch" == pr/* ]]; then
-    # Check staged files (what is about to be committed)
     staged_files="$(git diff --cached --name-only)"
     for f in $(echo "$staged_files" | tr '\n' ' '); do
         case "$f" in
-            AGENTS.md|golem.yaml|.gitignore|notes.md|.env)
+            AGENTS.md|golem.yaml|.gitignore|notes.md|.env|scripts/*)
                 echo "[pre-commit BLOCKED] $f is a personal config file. Do not commit it to $local_branch."
-                echo "Run: git reset HEAD $f && git checkout -- $f"
+                echo "Run: git reset HEAD $f"
                 exit 1
                 ;;
         esac
@@ -37,20 +58,18 @@ fi
 exit 0
 HOOK
     chmod +x "$HOOK_DIR/pre-commit"
-    log "已安装 pre-commit hook: $HOOK_DIR/pre-commit"
+    log "已安装 pre-commit hook"
 
-    # pre-push: block personal config from being pushed to feature/pr branches
+    # pre-push: block personal config + scripts from being pushed to feature/pr branches
     cat > "$HOOK_DIR/pre-push" <<'HOOK'
 #!/bin/bash
 local_branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$local_branch" == feature/* || "$local_branch" == pr/* ]]; then
-    # Files changed in commits since main (works for first push, rebase, and updates)
     touched_files="$(git diff --name-only main...HEAD 2>/dev/null)"
     for f in $(echo "$touched_files" | tr '\n' ' '); do
         case "$f" in
-            AGENTS.md|golem.yaml|.gitignore|notes.md|.env)
+            AGENTS.md|golem.yaml|.gitignore|notes.md|.env|scripts/*)
                 echo "[pre-push BLOCKED] $f is a personal config file. Do not push it to $local_branch."
-                echo "Remove it from history: git reset HEAD~1 -- $f (or rebase to drop the commit)"
                 exit 1
                 ;;
         esac
@@ -59,9 +78,9 @@ fi
 exit 0
 HOOK
     chmod +x "$HOOK_DIR/pre-push"
-    log "已安装 pre-push hook: $HOOK_DIR/pre-push"
+    log "已安装 pre-push hook"
 
-    log "hooks 安装完成。pre-commit + pre-push 双重拦截 feature/pr 分支上的个人配置。"
+    log "hooks 安装完成：post-checkout 自动物化 + pre-commit/pre-push 双拦截"
 }
 
 # Subcommand: install-hooks
