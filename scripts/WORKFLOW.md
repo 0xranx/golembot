@@ -42,28 +42,24 @@ pnpm build && node dist/cli.js gateway --verbose   # run bot
 
 ### New feature (core flow)
 ```bash
-# 1. Branch from pristine main
-git checkout main
-git checkout -b feature/file-transfer
+# 1. Branch from pristine main → post-checkout auto-materializes config + scripts
+git checkout -f main && git checkout -b feature/file-transfer
+#    → AGENTS.md / golem.yaml / .gitignore → M（自动，hook 负责）
+#    → scripts/ → 已就位（自动，.gitignore 隐藏）
 
-# 2. Materialize personal config into worktree (from dev)
-git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
-#    → AGENTS.md / golem.yaml / .gitignore become personal (M status, normal)
+# 2. Develop code (write src/), opencode has full context
 
-# 3. Develop code (write src/), opencode has full context (worktree AGENTS.md)
+# 3. Commit ONLY feature code
+git add src/xxx.ts && git commit -m "feat: ..."
+#    → pre-commit hook blocks if config files staged by mistake
 
-# 4. Commit ONLY feature code
-git add src/xxx.ts
-git commit -m "feat: ..."
-#    → pre-commit hook blocks if AGENTS.md/golem.yaml/.gitignore staged by mistake
-
-# 5. Push and open PR
+# 4. Push and open PR
 git push origin feature/file-transfer
 #    → pre-push hook blocks if config files got into commits
 #    → GitHub: PR from feature/file-transfer → upstream
 
-# 6. Merge into dev when done
-git checkout dev
+# 5. Merge into dev when done
+git checkout -f dev
 git merge feature/file-transfer
 git push origin dev
 ```
@@ -76,31 +72,22 @@ git push origin feature/file-transfer
 # Machine B (other terminal):
 git fetch origin
 git checkout -b feature/file-transfer origin/feature/file-transfer
-#   or if branch exists: git checkout feature/file-transfer && git pull origin feature/file-transfer
-
-# Then materialize personal config on B (scripts not in branch):
-git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
-# continue working; when done, push back: git push origin feature/file-transfer
-```
-Note: uncommitted worktree changes (M AGENTS.md etc.) are machine-local. Commit feature code before switching machines; config auto-restores via bootstrap.
+#    → post-checkout auto-materializes config + scripts
+# continue working; push back: git push origin feature/file-transfer
 
 ## 4. Bug fixing workflow
 
 ### 4a. Bug found in a feature that is NOT yet merged to upstream (PR open)
 ```bash
-# 切到功能分支，落地个人配置
-git checkout feature/file-transfer
-git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
+# 切到功能分支（post-checkout 自动物化配置+脚本）
+git checkout -f feature/file-transfer
 
 # 修代码 + 提交
-git add src/xxx.ts
-git commit -m "fix: ..."
+git add src/xxx.ts && git commit -m "fix: ..."
 git push origin feature/file-transfer    # GitHub PR 自动更新
 
-# 若此分支已并入 dev，同步修复到 dev
-git checkout dev
-git merge feature/file-transfer
-git push origin dev
+# 若已并入 dev，同步修复
+git checkout -f dev && git merge feature/file-transfer && git push origin dev
 ```
 
 ### 4b. Bug found while running on dev（功能已并入 dev，日常使用中）
@@ -117,32 +104,19 @@ git push origin dev
 
 **情况 2 — 功能已被上游合并，但发现新 bug**：
 ```bash
-# 从 main 开新的 fix 分支
-git checkout main
-git checkout -b feature/fix-file-transfer
-git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
-
-# 从 dev 上 cherry-pick 修复的 commit（或直接修）
+git checkout -f main && git checkout -b feature/fix-file-transfer
+# post-checkout 自动物化一切
 git cherry-pick <fix-commit-hash-from-dev>
-
-# 推 + 提新 PR
 git push origin feature/fix-file-transfer
-# GitHub: PR feature/fix-file-transfer → upstream
+# GitHub: PR → upstream
 ```
 
 **情况 3 — 功能已并入 dev 但 PR 被拒（未进上游），需要修复后重提 PR**：
 ```bash
-# 回到原始 feature 分支
-git checkout feature/file-transfer
-git show dev:scripts/bootstrap.sh > /tmp/bootstrap.sh && bash /tmp/bootstrap.sh
-
-# 修代码 + 提交
+git checkout -f feature/file-transfer
 git add src/xxx.ts && git commit -m "fix: ..."
 git push origin feature/file-transfer
-
-# 确认修复后，重新提 PR（或 force push 更新已有 PR）
-# 同步到 dev
-git checkout dev && git merge feature/file-transfer && git push origin dev
+git checkout -f dev && git merge feature/file-transfer && git push origin dev
 ```
 
 ### 4d. Bug 只在自己的 fork 里出现（上游没有这个问题）
@@ -155,8 +129,8 @@ git push origin dev
 
 ## 5. Sync upstream (weekly/monthly)
 ```bash
-# Run from anywhere (script handles branches). Aborts if worktree dirty.
-git show dev:scripts/sync-upstream.sh > /tmp/su.sh && bash /tmp/su.sh
+# 在 dev 或 feature 分支上直接跑（scripts 已被 post-checkout 物化）
+bash scripts/sync-upstream.sh
 #   1. fetch upstream
 #   2. main → ff-only to latest upstream
 #   3. dev → merge main (upstream features come in)
@@ -170,10 +144,15 @@ Rules: only `main`→`dev` sync. `feature/*` never syncs upstream directly; if n
 - On `main`: upstream versions.
 - On `feature/*`/`pr/*`: materialized from dev via bootstrap.sh; commit/push blocked by hooks.
 
-## Automatic hooks (installed on dev via `bash scripts/bootstrap.sh install-hooks`)
-- **pre-commit**: on `feature/*`/`pr/*`, blocks staging AGENTS.md/golem.yaml/.gitignore/notes.md/.env.
-- **pre-push**: on `feature/*`/`pr/*`, blocks pushing those files.
+## Automatic hooks (installed via `bash scripts/bootstrap.sh install-hooks` on dev)
+- **post-checkout**: auto-materializes personal config + scripts on `feature/*`/`pr/*` branches after checkout.
+- **pre-commit**: on `feature/*`/`pr/*`, blocks staging AGENTS.md/golem.yaml/.gitignore/notes.md/.env/scripts/*.
+- **pre-push**: on `feature/*`/`pr/*`, blocks pushing those files (uses `main...HEAD`, works on first push).
 - Hooks live in `.git/hooks/` (local, machine-specific, reinstall per machine).
+
+## Switching branches (IMPORTANT)
+- `git checkout -f main && git checkout -b feature/x` — always use `-f` on the **first** leg (dev→main or feature→dev) because personal config files differ between branches.
+- `post-checkout` hook auto-materializes everything on `feature/*`/`pr/*` after arrival.
 
 ## Do NOT commit to PR branches
 - `scripts/`, `memory/`, `.opencode/`, `.omo/`, `.env`, personal `notes.md` content.
