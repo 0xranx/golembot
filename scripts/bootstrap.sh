@@ -44,12 +44,13 @@ HOOK
 #!/bin/bash
 local_branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$local_branch" == feature/* || "$local_branch" == pr/* ]]; then
-    touched_files="$(git diff --name-only @{push} 2>/dev/null || git diff --name-only origin/"$local_branch"...HEAD 2>/dev/null || echo "")"
+    # Files changed in commits since main (works for first push, rebase, and updates)
+    touched_files="$(git diff --name-only main...HEAD 2>/dev/null)"
     for f in $(echo "$touched_files" | tr '\n' ' '); do
         case "$f" in
             AGENTS.md|golem.yaml|.gitignore|notes.md|.env)
                 echo "[pre-push BLOCKED] $f is a personal config file. Do not push it to $local_branch."
-                echo "Run: git reset HEAD $f && git checkout -- $f && git commit --amend --no-edit"
+                echo "Remove it from history: git reset HEAD~1 -- $f (or rebase to drop the commit)"
                 exit 1
                 ;;
         esac
