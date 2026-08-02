@@ -67,27 +67,25 @@ pnpm build && node dist/cli.js gateway --verbose
 
 ### 开新功能（核心流程）
 ```bash
-# 1. 从纯净 main 开分支 → post‑checkout 自动物化 golem.yaml + scripts/ + 重置 notes
+# 1. 从纯净 main 开分支 → post‑checkout 自动物化 scripts/
 git checkout -f main && git checkout -b feature/file-transfer
-#    → golem.yaml → M（不提交）
 #    → scripts/ → 已就位（.gitignore 隐藏）
-#    → notes.md → 上游版
-#    → AGENTS.md / .gitignore → git 自行管理（feature 分支上任然可自由编辑和提交）
+#    → AGENTS.md / .gitignore / golem.yaml → git 自行管理（可自由编辑和提交）
 
 # 💡 如需完整 opencode 上下文（7-skill AGENTS.md），从 dev 复制并提交：
 git checkout dev -- AGENTS.md
 git add AGENTS.md && git commit -m "chore: use full AGENTS.md for dev"
 
-# 2. 写代码（feature 分支的 AGENTS.md 是上游版本，如需完整上下文请先提交 dev 版）
+# 2. 写代码
 
-# 3. 提交功能代码（AGENTS.md 和 .gitignore 可自由提交）
+# 3. 提交功能代码（AGENTS.md/.gitignore/golem.yaml 均可自由提交）
 git add src/xxx.ts && git commit -m "feat: …"
-#    → 若手滑 git add golem.yaml/scripts/ → pre‑commit 拦截
+#    → 若手滑 git add .env/notes.md/scripts/ → pre‑commit 拦截
 #    → 拦截通过后跑 npx lint‑staged
 
 # 4. 推送并提 PR
 git push origin feature/file-transfer
-#    → 若配置混进 commit 历史 → pre‑push 拦截（main…HEAD）
+#    → 若 .env/notes.md/scripts/ 混进 commit 历史 → pre‑push 拦截
 #    → GitHub: feature/file-transfer → upstream 发起 PR
 
 # 5. 完成，并入 dev
@@ -96,7 +94,7 @@ git merge feature/file-transfer
 git push origin dev
 ```
 
-> **切分支要点**：dev ↔ feature 时 golem.yaml 配置不同会产生冲突 → 必须用 `git checkout -f`。
+> **切分支要点**：dev ↔ feature 时 AGENTS.md/.gitignore/golem.yaml 内容不同会产生冲突 → 必须用 `git checkout -f`。
 
 ---
 
@@ -164,26 +162,28 @@ bash scripts/sync-upstream.sh
 
 ---
 
-## 六、个人文件清单
+## 六、文件处理清单
 
 | 文件 | dev | feature/pr | 进 PR？ | 保护 |
 |---|---|---|---|---|
-| `AGENTS.md`（7‑skill） | tracked | **git 自行管理**（不物化） | ✅ 可以 | 无拦截 |
-| `.gitignore` | tracked | **git 自行管理**（不物化） | ✅ 可以 | 无拦截 |
-| `golem.yaml`（wecom 配置） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
+| `AGENTS.md`（7‑skill） | tracked | git 自行管理 | ✅ 可以 | 无拦截 |
+| `.gitignore` | tracked | git 自行管理 | ✅ 可以 | 无拦截 |
+| `golem.yaml`（含 wecom 配置，只用占位符） | tracked | git 自行管理 | ✅ 可以 | 无拦截 |
 | `scripts/`（6 个文件） | tracked | untracked + ignored（hook 物化） | ❌ | .gitignore + pre‑commit + pre‑push |
-| `notes.md` | 上游版 | hook 重置为上游版 | ❌ | pre‑commit + pre‑push |
+| `notes.md` | 上游版 | 上游版 | ❌ | pre‑commit + pre‑push |
 | `.env` | gitignored | gitignored | ❌ | pre‑commit + pre‑push |
+
+> golem.yaml 可进 PR 的前提：只用 `${WECOM_BOT_ID}` 等占位符，**绝不写真实密钥**。
 
 ---
 
-## 七、三层 Hook 保护
+## 七、Hook 保护
 
 | Hook | 触发时机 | 作用 |
 |---|---|---|
-| **post‑checkout** | 切到 feature/pr 后 | 物化 golem.yaml + scripts/ + 重置 notes.md<br>AGENTS.md 和 .gitignore **不物化**，由 git 自行管理 |
-| **pre‑commit** | commit 时 | 拦截 golem.yaml / notes.md / .env / scripts/ → 放行后跑 `npx lint‑staged`<br>AGENTS.md 和 .gitignore **不拦截**（可正常 commit、PR 到上游） |
-| **pre‑push** | push 时 | 拦截 golem.yaml / notes.md / .env / scripts/（用 `main…HEAD` 检查，含首次推送） |
+| **post‑checkout** | 切到 feature/pr 后 | 物化 scripts/（gitignored，不可见） |
+| **pre‑commit** | commit 时 | 拦截 .env / notes.md / scripts/ → 放行后跑 `npx lint‑staged`<br>AGENTS.md / .gitignore / golem.yaml **不拦截**（可正常 commit、PR 到上游） |
+| **pre‑push** | push 时 | 拦截 .env / notes.md / scripts/（用 `main…HEAD` 检查，含首次推送） |
 
 Hook 文件在 `.git/hooks/`（本地文件，不进 git）。`install‑hooks` 只能在 dev 分支上跑（只有 dev 有 `scripts/bootstrap.sh`）。
 
@@ -198,7 +198,7 @@ bash scripts/bootstrap.sh install-hooks
 
 1. **`main` 永不 commit**——只 `sync‑upstream.sh` 快进
 2. **`dev` 不向上游提 PR**——只 `feature/*` 提 PR
-3. **M 标记**：golem.yaml 的 M 是个人配置（不提交）；AGENTS.md 和 .gitignore 不会被 hook 物化，由 git 自行管理，可以自由提交和 PR
+3. **进 PR 判断**：AGENTS.md / .gitignore / golem.yaml（占位符版）可以提交和 PR；.env / notes.md / scripts/ 不可提交
 
 ---
 

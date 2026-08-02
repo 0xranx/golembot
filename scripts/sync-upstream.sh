@@ -11,9 +11,8 @@ ORIG="$(git branch --show-current)"
 
 log() { printf '[sync] %s\n' "$*"; }
 
-# Abort if working tree is dirty (excluding golem.yaml which is always M on feature/pr branches)
-CONFIG_FILES=":!golem.yaml"
-if ! git diff --quiet HEAD -- $CONFIG_FILES || ! git diff --cached --quiet -- $CONFIG_FILES; then
+# Abort if working tree is dirty (uncommitted changes would be lost by checkout -f)
+if ! git diff --quiet HEAD || ! git diff --cached --quiet; then
   log "!! 工作区或暂存区有未提交改动（个人配置除外），请先 commit 或 stash 后再运行 sync"
   exit 1
 fi
