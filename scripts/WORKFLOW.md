@@ -11,13 +11,13 @@
 ## 1. New machine setup (first time)
 ```bash
 # 1. Clone your fork
-git clone git@github.com:WuMingruiWu/golembot.git   # <-- your fork URL
+git clone git@github.com:WuMingrui98/golembot.git
 cd golembot
 
 # 2. Checkout dev (has personal config + scripts)
 git checkout dev && git pull origin dev
 
-# 3. Install hooks (pre-commit + pre-push)
+# 3. Install hooks (post-checkout + pre-commit + pre-push)
 bash scripts/bootstrap.sh install-hooks
 
 # 4. Ensure correct config state on current branch
@@ -74,6 +74,7 @@ git fetch origin
 git checkout -b feature/file-transfer origin/feature/file-transfer
 #    → post-checkout auto-materializes config + scripts
 # continue working; push back: git push origin feature/file-transfer
+```
 
 ## 4. Bug fixing workflow
 
@@ -142,13 +143,14 @@ Rules: only `main`→`dev` sync. `feature/*` never syncs upstream directly; if n
 - Upstream-tracked files; local versions are personal (M status on feature/pr branches).
 - On `dev`: tracked normally (authoritative source, pushed to origin).
 - On `main`: upstream versions.
-- On `feature/*`/`pr/*`: materialized from dev via bootstrap.sh; commit/push blocked by hooks.
+- On `feature/*`/`pr/*`: materialized automatically by post-checkout hook; commit/push blocked by hooks.
 
 ## Automatic hooks (installed via `bash scripts/bootstrap.sh install-hooks` on dev)
 - **post-checkout**: auto-materializes personal config + scripts on `feature/*`/`pr/*` branches after checkout.
 - **pre-commit**: on `feature/*`/`pr/*`, blocks staging AGENTS.md/golem.yaml/.gitignore/notes.md/.env/scripts/*.
 - **pre-push**: on `feature/*`/`pr/*`, blocks pushing those files (uses `main...HEAD`, works on first push).
 - Hooks live in `.git/hooks/` (local, machine-specific, reinstall per machine).
+- After `git pull origin dev`, if `scripts/bootstrap.sh` was updated, re-run `bash scripts/bootstrap.sh install-hooks` to apply hook changes.
 
 ## Switching branches (IMPORTANT)
 - `git checkout -f main && git checkout -b feature/x` — always use `-f` on the **first** leg (dev→main or feature→dev) because personal config files differ between branches.

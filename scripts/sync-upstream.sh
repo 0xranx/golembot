@@ -11,9 +11,10 @@ ORIG="$(git branch --show-current)"
 
 log() { printf '[sync] %s\n' "$*"; }
 
-# Abort if working tree is dirty
-if ! git diff --quiet HEAD || ! git diff --cached --quiet; then
-  log "!! 工作区或暂存区有未提交改动，请先 commit 或 stash 后再运行 sync"
+# Abort if working tree is dirty (excluding personal config files which are always M on feature/pr branches)
+CONFIG_FILES=":!AGENTS.md :!golem.yaml :!.gitignore"
+if ! git diff --quiet HEAD -- $CONFIG_FILES || ! git diff --cached --quiet -- $CONFIG_FILES; then
+  log "!! 工作区或暂存区有未提交改动（个人配置除外），请先 commit 或 stash 后再运行 sync"
   exit 1
 fi
 

@@ -55,3 +55,4 @@ A: Git Bash 默认 UTF-8，若 CMD 里乱码，先执行 `chcp 65001` 再运行�
 | `bootstrap.sh` / `bootstrap.bat` | 分支状态初始化 |
 | `sync-upstream.sh` / `sync-upstream.bat` | 同步上游 |
 | `WORKFLOW.md` | 完整工作流文档 |
+| `WINDOWS.md` | 本文件 |

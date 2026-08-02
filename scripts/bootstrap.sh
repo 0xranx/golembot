@@ -27,6 +27,8 @@ case "$BRANCH" in
     git show dev:AGENTS.md > AGENTS.md 2>/dev/null || true
     git show dev:golem.yaml > golem.yaml 2>/dev/null || true
     git show dev:.gitignore > .gitignore 2>/dev/null || true
+    # Reset notes.md to upstream version (prevent opencode from polluting it)
+    git checkout -- notes.md 2>/dev/null || true
     # Scripts (gitignored via .gitignore, invisible to git)
     mkdir -p scripts
     for s in bootstrap.sh sync-upstream.sh bootstrap.bat sync-upstream.bat WINDOWS.md WORKFLOW.md; do
