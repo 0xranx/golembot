@@ -10,9 +10,3 @@ docs/drafts/
 golem.yaml
 skills/
 memory/
-.opencode/
-opencode.json
-.omo/
-.DS_Store
-# Private dev workflow scripts (not part of the library, not for PRs)
-scripts/
