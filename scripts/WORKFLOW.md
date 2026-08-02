@@ -163,12 +163,12 @@ bash scripts/sync-upstream.sh
 
 | 文件 | dev | feature/pr | 进 PR？ | 保护 |
 |---|---|---|---|---|
-| `AGENTS.md`（7‑skill） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
+| `AGENTS.md`（7‑skill） | tracked | M（hook 物化） | ✅ 可以 | 无拦截 |
+| `.gitignore`（含 scripts/） | tracked | M（hook 物化） | ✅ 可以 | 无拦截 |
 | `golem.yaml`（wecom 配置） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
-| `.gitignore`（含 scripts/） | tracked | M（hook 物化） | ❌ | pre‑commit + pre‑push |
 | `scripts/`（6 个文件） | tracked | untracked + ignored | ❌ | .gitignore + pre‑commit |
-| `notes.md` | 上游版 | hook 重置为上游版 | ❌ | pre‑commit |
-| `.env` | gitignored | gitignored | ❌ | pre‑commit |
+| `notes.md` | 上游版 | hook 重置为上游版 | ❌ | pre‑commit + pre‑push |
+| `.env` | gitignored | gitignored | ❌ | pre‑commit + pre‑push |
 
 ---
 
@@ -176,9 +176,9 @@ bash scripts/sync-upstream.sh
 
 | Hook | 触发时机 | 作用 |
 |---|---|---|
-| **post‑checkout** | 切到 feature/pr 后 | 从 dev 物化 3 配置 + 6 脚本 + 重置 notes.md |
-| **pre‑commit** | commit 时 | 拦截 AGENTS.md / golem.yaml / .gitignore / scripts/ / .env / notes.md → 放行后跑 `npx lint‑staged` |
-| **pre‑push** | push 时 | 用 `main…HEAD` 检查 commit 历史是否有个人文件 → 拒绝 push（含首次推送新分支） |
+| **post‑checkout** | 切到 feature/pr 后 | 从 dev 物化 AGENTS.md / golem.yaml / .gitignore / scripts/ + 重置 notes.md |
+| **pre‑commit** | commit 时 | 拦截 golem.yaml / notes.md / .env / scripts/ → 放行后跑 `npx lint‑staged`<br>AGENTS.md 和 .gitignore **不拦截**（可正常 commit、PR 到上游） |
+| **pre‑push** | push 时 | 拦截 golem.yaml / notes.md / .env / scripts/（用 `main…HEAD` 检查，含首次推送） |
 
 Hook 文件在 `.git/hooks/`（本地文件，不进 git）。`install‑hooks` 只能在 dev 分支上跑（只有 dev 有 `scripts/bootstrap.sh`）。
 
@@ -193,7 +193,7 @@ bash scripts/bootstrap.sh install-hooks
 
 1. **`main` 永不 commit**——只 `sync‑upstream.sh` 快进
 2. **`dev` 不向上游提 PR**——只 `feature/*` 提 PR
-3. **git status 里的 3 个 M 是正常的**——AGENTS.md / golem.yaml / .gitignore 是个人配置，不要 `git add` 它们
+3. **git status 里的 M 标记要区分**：golem.yaml 的 M 是个人配置（不提交）；AGENTS.md 和 .gitignore 的 M 是正常文件（可以提交、可以 PR）
 
 ---
 
