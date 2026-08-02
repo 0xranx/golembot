@@ -27,6 +27,8 @@ git merge --ff-only upstream/main
 
 log "同步 dev（合入上游）..."
 git checkout -f dev
+# || true: if merge has conflicts, prevent set -e from killing the script
+# so we can reach the conflict check below
 git merge main -m "chore: sync upstream into dev" || true
 
 if git diff --name-only --diff-filter=U | grep -q .; then

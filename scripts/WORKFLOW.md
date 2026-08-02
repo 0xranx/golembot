@@ -69,7 +69,7 @@ git push origin dev
 # Machine A (where you developed):
 git push origin feature/file-transfer
 
-# Machine B (other terminal):
+# Machine B (other terminal — must have completed Step 1 setup first)
 git fetch origin
 git checkout -b feature/file-transfer origin/feature/file-transfer
 #    → post-checkout auto-materializes config + scripts
