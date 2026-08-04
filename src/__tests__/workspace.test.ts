@@ -172,18 +172,18 @@ describe('workspace', () => {
         name: 'test',
         engine: 'claude-code',
         provider: {
-          baseUrl: 'https://api.minimax.chat/v1',
+          baseUrl: 'https://api.minimax.io/v1',
           apiKey: 'sk-test',
-          model: 'minimax-text-01',
-          models: { 'claude-code': 'minimax-text-01' },
+          model: 'MiniMax-M3',
+          models: { 'claude-code': 'MiniMax-M3' },
         },
       });
       const cfg = await loadConfig(dir);
       expect(cfg.provider).toEqual({
-        baseUrl: 'https://api.minimax.chat/v1',
+        baseUrl: 'https://api.minimax.io/v1',
         apiKey: 'sk-test',
-        model: 'minimax-text-01',
-        models: { 'claude-code': 'minimax-text-01' },
+        model: 'MiniMax-M3',
+        models: { 'claude-code': 'MiniMax-M3' },
       });
     });
 

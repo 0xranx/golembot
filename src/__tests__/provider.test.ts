@@ -20,14 +20,14 @@ describe('provider-env', () => {
     it('maps apiKey, baseUrl, and model for custom provider', () => {
       const env = claudeProviderEnv({
         apiKey: 'sk-test',
-        baseUrl: 'https://api.minimaxi.com/anthropic',
-        model: 'MiniMax-M2.5',
+        baseUrl: 'https://api.minimax.io/anthropic',
+        model: 'MiniMax-M3',
       });
       expect(env.ANTHROPIC_API_KEY).toBe('sk-test');
-      expect(env.ANTHROPIC_BASE_URL).toBe('https://api.minimaxi.com/anthropic');
-      expect(env.ANTHROPIC_MODEL).toBe('MiniMax-M2.5');
-      expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBe('MiniMax-M2.5');
-      expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('MiniMax-M2.5');
+      expect(env.ANTHROPIC_BASE_URL).toBe('https://api.minimax.io/anthropic');
+      expect(env.ANTHROPIC_MODEL).toBe('MiniMax-M3');
+      expect(env.ANTHROPIC_SMALL_FAST_MODEL).toBe('MiniMax-M3');
+      expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('MiniMax-M3');
       expect(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe('1');
     });
 
@@ -145,22 +145,22 @@ describe('provider in golem.yaml', () => {
         'name: bot',
         'engine: claude-code',
         'provider:',
-        '  baseUrl: "https://api.minimax.chat/v1"',
+        '  baseUrl: "https://api.minimax.io/v1"',
         '  apiKey: "sk-test-key"',
-        '  model: "minimax-text-01"',
+        '  model: "MiniMax-M3"',
         '  models:',
-        '    claude-code: "minimax-text-01"',
-        '    codex: "minimax-text-01"',
+        '    claude-code: "MiniMax-M3"',
+        '    codex: "MiniMax-M3"',
       ].join('\n'),
     );
     const cfg = await loadConfig(dir);
     expect(cfg.provider).toEqual({
-      baseUrl: 'https://api.minimax.chat/v1',
+      baseUrl: 'https://api.minimax.io/v1',
       apiKey: 'sk-test-key',
-      model: 'minimax-text-01',
+      model: 'MiniMax-M3',
       models: {
-        'claude-code': 'minimax-text-01',
-        codex: 'minimax-text-01',
+        'claude-code': 'MiniMax-M3',
+        codex: 'MiniMax-M3',
       },
     });
   });
@@ -337,8 +337,8 @@ describe('provider-presets', () => {
   it('createProviderFromPreset returns config for known preset', () => {
     const config = createProviderFromPreset('minimax');
     expect(config).toBeDefined();
-    expect(config!.baseUrl).toBe('https://api.minimax.chat/v1');
-    expect(config!.model).toBe('minimax-text-01');
+    expect(config!.baseUrl).toBe('https://api.minimax.io/v1');
+    expect(config!.model).toBe('MiniMax-M3');
     expect(config!.apiKey).toBe('${MINIMAX_API_KEY}');
   });
 
