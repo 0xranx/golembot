@@ -201,114 +201,121 @@ describe('WecomAdapter', () => {
   });
 
   describe('reply', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
+    const msg: ChannelMessage = {
+      channelType: 'wecom',
+      senderId: 'u1',
+      chatId: 'c1',
+      chatType: 'dm',
+      text: 'hi',
+      raw: { frameData: 'original' },
+    };
 
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it('calls wsClient.replyStream after debounce timer expires', async () => {
-      const msg: ChannelMessage = {
-        channelType: 'wecom',
-        senderId: 'u1',
-        chatId: 'c1',
-        chatType: 'dm',
-        text: 'hi',
-        raw: { frameData: 'original' },
-      };
-
+    it('without prior stream: sends text directly, no loading stream', async () => {
+      // no active stream (no typing before) → sends text directly
       await adapter.reply(msg, 'Reply text');
-      vi.advanceTimersByTime(2000);
 
-      expect(mockReplyStream).toHaveBeenCalledOnce();
-      const [frame, _streamId, text, isFinal] = mockReplyStream.mock.calls[0];
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
+      const [frame, _s, text, isFinal] = mockReplyStream.mock.calls[0];
       expect(frame).toEqual({ frameData: 'original' });
       expect(text).toBe('Reply text');
       expect(isFinal).toBe(true);
     });
-
-    it('replaces @Name with <@userid> in accumulated stream text', async () => {
-      const msg: ChannelMessage = {
-        channelType: 'wecom',
-        senderId: 'u1',
-        chatId: 'g1',
-        chatType: 'group',
-        text: 'hi',
-        raw: { frameData: 'original' },
-      };
-
+    it('replaces @Name with <@userid> in sent text', async () => {
       await adapter.reply(msg, 'Thanks @Alice and @Bob!', {
         mentions: [
           { name: 'Alice', platformId: 'userid-alice' },
           { name: 'Bob', platformId: 'userid-bob' },
         ],
       });
-      vi.advanceTimersByTime(2000);
 
-      expect(mockReplyStream).toHaveBeenCalledOnce();
       const [, , text] = mockReplyStream.mock.calls[0];
       expect(text).toBe('Thanks <@userid-alice> and <@userid-bob>!');
     });
 
     it('escapes regex special characters in mention names', async () => {
-      const msg: ChannelMessage = {
-        channelType: 'wecom',
-        senderId: 'u1',
-        chatId: 'g1',
-        chatType: 'group',
-        text: 'hi',
-        raw: {},
-      };
-
       await adapter.reply(msg, 'Hello @Dr.A+Smith', {
         mentions: [{ name: 'Dr.A+Smith', platformId: 'userid-dr' }],
       });
-      vi.advanceTimersByTime(2000);
 
       const [, , text] = mockReplyStream.mock.calls[0];
       expect(text).toBe('Hello <@userid-dr>');
     });
 
-    it('accumulates multiple reply calls within debounce window before finalizing', async () => {
-      const msg: ChannelMessage = {
-        channelType: 'wecom',
-        senderId: 'u1',
-        chatId: 'c1',
-        chatType: 'dm',
-        text: 'hi',
-        raw: { frameData: 'original' },
-      };
+    it('each reply closes old thinking and starts new one', async () => {
+      // Set up an active thinking stream first (simulate typing)
+      await adapter.typing(msg);
+      mockReplyStream.mockClear();
 
-      await adapter.reply(msg, 'Part 1 ');
-      vi.advanceTimersByTime(1000);
+      await adapter.reply(msg, 'Part 1');
+      // call 0: close typing stream with 'Part 1' (finish=true)
+      // call 1: start new thinking stream (finish=false)
+      expect(mockReplyStream).toHaveBeenCalledTimes(2);
+      const [, , text0, isFinal0] = mockReplyStream.mock.calls[0];
+      const [, , text1, isFinal1] = mockReplyStream.mock.calls[1];
+      expect(text0).toBe('Part 1');
+      expect(isFinal0).toBe(true);
+      expect(text1).toBe('');
+      expect(isFinal1).toBe(false);
+
+      mockReplyStream.mockClear();
       await adapter.reply(msg, 'Part 2');
-      vi.advanceTimersByTime(2000);
+      expect(mockReplyStream).toHaveBeenCalledTimes(2);
+      const [, , text2, isFinal2] = mockReplyStream.mock.calls[0];
+      expect(text2).toBe('Part 2');
+      expect(isFinal2).toBe(true);
+    });
 
-      // Only one finalizeStream call after debounce resets
-      expect(mockReplyStream).toHaveBeenCalledOnce();
+    it('ignores empty mentions array', async () => {
+      await adapter.reply(msg, 'Plain reply', { mentions: [] });
+
       const [, , text, isFinal] = mockReplyStream.mock.calls[0];
-      expect(text).toBe('Part 1 Part 2');
+      expect(text).toBe('Plain reply');
       expect(isFinal).toBe(true);
     });
 
-    it('ignores empty mentions array and debounces normally', async () => {
-      const msg: ChannelMessage = {
-        channelType: 'wecom',
-        senderId: 'u1',
-        chatId: 'c1',
-        chatType: 'dm',
-        text: 'hi',
-        raw: {},
-      };
+    it('silently closes old stream when frame differs (cross-session)', async () => {
+      const msgA: ChannelMessage = { ...msg, raw: { frameData: 'sessionA' } };
+      const msgB: ChannelMessage = { ...msg, raw: { frameData: 'sessionB' } };
 
-      await adapter.reply(msg, 'Plain reply', { mentions: [] });
-      vi.advanceTimersByTime(2000);
+      await adapter.typing(msgA); // opens stream on frameA
+      mockReplyStream.mockClear();
 
-      expect(mockReplyStream).toHaveBeenCalledOnce();
+      // reply from different session should close old stream silently, then open new
+      await adapter.reply(msgB, 'Msg from B');
+
+      expect(mockReplyStream).toHaveBeenCalledTimes(2);
+      // call 0: close old stream silently with empty text
+      const [f0, , text0, isFinal0] = mockReplyStream.mock.calls[0];
+      expect(f0).toEqual({ frameData: 'sessionA' });
+      expect(text0).toBe('');
+      expect(isFinal0).toBe(true);
+      // call 1: new stream sends text directly (no prior stream for sessionB)
+      const [f1, , text1, isFinal1] = mockReplyStream.mock.calls[1];
+      expect(f1).toEqual({ frameData: 'sessionB' });
+      expect(text1).toBe('Msg from B');
+      expect(isFinal1).toBe(true);
+    });
+  });
+
+  describe('clearStatus', () => {
+    const msg: ChannelMessage = {
+      channelType: 'wecom',
+      senderId: 'u1',
+      chatId: 'c1',
+      chatType: 'dm',
+      text: 'hi',
+      raw: { frameData: 'original' },
+    };
+
+    it('closes stream with mission complete✅', async () => {
+      await adapter.typing(msg); // opens loading stream
+      mockReplyStream.mockClear();
+
+      await adapter.clearStatus(msg, 'status-1');
+
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
       const [, , text, isFinal] = mockReplyStream.mock.calls[0];
-      expect(text).toBe('Plain reply');
+      expect(text).toBe('mission complete✅');
       expect(isFinal).toBe(true);
     });
   });

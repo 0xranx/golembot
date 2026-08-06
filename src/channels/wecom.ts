@@ -121,40 +121,10 @@ export class WecomAdapter implements ChannelAdapter {
     return cached;
   }
 
-  private finalizeStream(): void {
-    if (!this.activeStreamId || !this.activeStreamFrame || !this.wsClient) return;
-    if (this.activeStreamTimer) {
-      clearTimeout(this.activeStreamTimer);
-      this.activeStreamTimer = null;
-    }
-    if (this.accumulatedText) {
-      this.wsClient
-        .replyStream(this.activeStreamFrame, this.activeStreamId, this.accumulatedText, true)
-        .catch(() => {});
-    }
-    this.activeStreamId = null;
-    this.activeStreamFrame = null;
-    this.accumulatedText = '';
-  }
 
   async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.wsClient) return;
     const frame = msg.raw;
-
-    if (this.activeStreamId && this.activeStreamFrame !== frame) {
-      this.finalizeStream();
-    }
-
-    if (!this.activeStreamId) {
-      this.activeStreamId = `reply-${Date.now()}`;
-      this.activeStreamFrame = frame;
-      this.accumulatedText = '';
-    }
-
-    if (this.activeStreamTimer) {
-      clearTimeout(this.activeStreamTimer);
-      this.activeStreamTimer = null;
-    }
 
     let processedText = text;
     const mentions = options?.mentions;
@@ -167,12 +137,49 @@ export class WecomAdapter implements ChannelAdapter {
       }
     }
 
-    this.accumulatedText += processedText;
-    this.activeStreamTimer = setTimeout(() => this.finalizeStream(), 2000);
+    // 关闭当前流并发送回复文本
+    if (this.activeStreamId && this.activeStreamFrame) {
+      if (this.activeStreamFrame !== frame) {
+        // 跨会话（群聊↔私聊）：先静默关闭旧流，再处理新消息
+        this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, '', true).catch(() => {});
+        this.activeStreamId = null;
+        this.activeStreamFrame = null;
+        // 坠入下方 else 分支创建新流
+      } else {
+        this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, processedText, true).catch(() => {});
+        // 立即开启新空流（企微原生加载UI）
+        this.activeStreamId = `reply-${Date.now()}`;
+        this.activeStreamFrame = frame;
+        this.wsClient.replyStream(frame, this.activeStreamId, '', false).catch(() => {});
+      }
+    }
+    if (!this.activeStreamId) {
+      // 无前序流（slash命令等），直接发送，不开新加载流
+      const streamId = `reply-${Date.now()}`;
+      this.wsClient.replyStream(frame, streamId, processedText, true).catch(() => {});
+    }
+    if (this.activeStreamTimer) {
+      clearTimeout(this.activeStreamTimer);
+      this.activeStreamTimer = null;
+    }
+  }
+
+  async sendStatus(_msg: ChannelMessage, _text: string): Promise<string> {
+    // 不发送可见消息（企微原生加载UI已足够），仅返回状态ID维持gateway生命周期
+    return `silent-${Date.now()}`;
   }
 
   async clearStatus(_msg: ChannelMessage, _statusId: string): Promise<void> {
-    this.finalizeStream();
+    if (this.activeStreamTimer) {
+      clearTimeout(this.activeStreamTimer);
+      this.activeStreamTimer = null;
+    }
+    if (this.activeStreamId && this.activeStreamFrame && this.wsClient) {
+      this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete✅', true).catch(() => {});
+    }
+    this.activeStreamId = null;
+    this.activeStreamFrame = null;
+    this.accumulatedText = '';
   }
 
   async typing(msg: ChannelMessage): Promise<void> {
