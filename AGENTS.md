@@ -16,3 +16,19 @@
 ## Conventions
 - Write persistent information to notes.md
 - Save generated reports/files in the appropriate directory
+
+## Development Rules (2026-08-08, user-mandated — MUST follow, never act on your own)
+
+### Branch & Commit Protocol
+1. **功能未开发完成/未验证前，禁止提交 commit 到 feature 分支**（如 `feature/wecom-optimization`），更禁止 push 到远端。
+2. **新功能开发一律在本地临时 WIP 分支进行**（如 `wecom-send-media-wip`），该分支**绝不推送到远端**。
+3. **提交时机**：功能开发完成 → 在 WIP 分支上验证（测试/构建/真实 QA 通过）→ 合并/提交到 feature 分支 → **必须经用户明确确认后**才 push 到远端。
+4. **push 到远端前必须获得用户明确批准**（"经过我确认再 push 到远端"）。未经确认的 push 视为违规。
+5. **回退原则**：已提交但未验证的改动，用 `git reset --soft` 保留暂存区/工作区内容，不要用 `--hard` 丢弃改动；远端如需回退，先核实远端状态（`git ls-remote`）再操作；force push 必须用户确认。
+
+### 当前进行中的工作
+- `wecom-send-media`（企微发送图片/文件功能）：WIP 分支 `wecom-send-media-wip`（含 temp_file 目录、/tmp 路径支持、意图优化等提交），`feature/wecom-optimization` 保持与远端同步（9e74da7）。功能未完成（真实企微 e2e 待验证，需用户 chatId），**不得合并/推送**。
+
+### 操作偏好（用户指定）
+- **重启 gateway 等待时间**：后续启动任务等待 10 秒即可（不要 sleep 50s）。
+
