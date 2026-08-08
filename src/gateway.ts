@@ -1,5 +1,5 @@
-import { mkdir, readFile as readFileAsync } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { mkdir, readFile as readFileAsync, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildConversationKey,
@@ -126,6 +126,63 @@ const TRAILING_CONTINUE_RE = /(?:^|\n)\s*\[CONTINUE\]\s*$/;
 export function splitTrailingContinue(text: string): { body: string; hasContinue: boolean } {
   if (!TRAILING_CONTINUE_RE.test(text)) return { body: text, hasContinue: false };
   return { body: text.replace(TRAILING_CONTINUE_RE, '').trimEnd(), hasContinue: true };
+}
+
+// ── Media marker protocol parsing ────────────────────────────────────────────
+// Agents output standalone lines [SEND_IMAGE: <path>] or [SEND_FILE: <path>]
+// in their reply text. The gateway extracts these, resolves the file path against
+// the assistant directory, reads the file bytes, and calls adapter.sendMedia.
+
+/** Regex matching [SEND_IMAGE: <path>] or [SEND_FILE: <path>] on a standalone line (case-insensitive kind). */
+export const MEDIA_MARKER_RE = /^\[SEND_(IMAGE|FILE):\s*(\S.*?)\]\s*$/gim;
+
+/**
+ * Extract media markers from agent reply text.
+ * Returns the stripped body and the list of parsed markers.
+ * Pure function — no side effects, safe to call idempotently.
+ */
+export function extractMediaMarkers(text: string): {
+  body: string;
+  markers: Array<{ kind: 'image' | 'file'; path: string }>;
+} {
+  const markers: Array<{ kind: 'image' | 'file'; path: string }> = [];
+  const body = text.replace(MEDIA_MARKER_RE, (_match, kind: string, rawPath: string) => {
+    markers.push({ kind: kind.toLowerCase() as 'image' | 'file', path: rawPath.trim() });
+    return '';
+  });
+  return { body, markers };
+}
+
+/**
+ * Resolve a file path from a media marker against the assistant directory.
+ * Returns the resolved absolute path or `null` if it escapes the base directory.
+ *
+ * - Relative paths are resolved against `baseDir`.
+ * - Absolute paths are resolved and checked to be inside `baseDir`.
+ * - Symlinks are resolved via `realpath` to prevent symlink escapes.
+ *   If the file does not exist, the prefix check alone is sufficient.
+ */
+export async function resolveOutboundPath(baseDir: string, rawPath: string): Promise<string | null> {
+  const resolvedBase = resolve(baseDir);
+  const candidate = resolve(baseDir, rawPath);
+
+  // Quick prefix check before realpath (catches obvious escapes like ../..)
+  if (!candidate.startsWith(resolvedBase + sep) && candidate !== resolvedBase) {
+    return null;
+  }
+
+  // Resolve the base directory through realpath to handle symlinks in the path
+  // (e.g. macOS /var → /private/var).
+  const realBase = await realpath(resolvedBase).catch(() => resolvedBase);
+
+  try {
+    const real = await realpath(candidate);
+    return real.startsWith(realBase + sep) || real === realBase ? real : null;
+  } catch {
+    // File doesn't exist yet — fall back to the non-realpath prefix check
+    // (realBase may differ from resolvedBase on macOS where /var → /private/var).
+    return candidate.startsWith(resolvedBase + sep) || candidate === resolvedBase ? candidate : null;
+  }
 }
 
 /** Monotonic inbound counter per session key — a newer message interrupts pending auto-continue relays. */
@@ -401,7 +458,14 @@ export async function handleMessage(
   >,
   adapter: Pick<
     ChannelAdapter,
-    'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers' | 'sendStatus' | 'updateStatus' | 'clearStatus'
+    | 'reply'
+    | 'maxMessageLength'
+    | 'typing'
+    | 'getGroupMembers'
+    | 'sendStatus'
+    | 'updateStatus'
+    | 'clearStatus'
+    | 'sendMedia'
   >,
   channelType: string,
   verbose: boolean,
@@ -610,14 +674,82 @@ export async function handleMessage(
     }, 1500);
   }
 
+  // Pre-declare so processMedia can reference sendChunk for error notices.
+  let sendChunk: (rawText: string) => Promise<void>;
+
+  // Helper: extract and process outbound media markers from text.
+  // Returns the stripped body. Error notices are sent via sendChunk.
+  const processMedia = async (rawText: string): Promise<string> => {
+    const { body, markers } = extractMediaMarkers(rawText);
+    if (markers.length === 0) return body;
+
+    for (const marker of markers) {
+      try {
+        const resolved = await resolveOutboundPath(dir, marker.path);
+        if (!resolved) {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：路径超出助手目录范围`);
+          continue;
+        }
+
+        const maxSize = marker.kind === 'image' ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
+        let fileStat;
+        try {
+          fileStat = await stat(resolved);
+        } catch {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：文件不存在或无法读取`);
+          continue;
+        }
+
+        if (fileStat.size > maxSize) {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          const maxLabel = marker.kind === 'image' ? '10MB' : '20MB';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：文件大小超过${maxLabel}`);
+          continue;
+        }
+
+        if (!adapter.sendMedia) {
+          log(verbose, `[${channelType}] adapter lacks sendMedia, skipping ${marker.kind} ${marker.path}`);
+          continue;
+        }
+
+        let data: Buffer;
+        try {
+          data = await readFileAsync(resolved);
+        } catch {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：文件读取失败`);
+          continue;
+        }
+
+        await adapter.sendMedia(msg, {
+          kind: marker.kind,
+          data,
+          fileName: basename(resolved),
+        });
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        const label = marker.kind === 'image' ? '图片' : '文件';
+        log(verbose, `[${channelType}] media processing failed for ${marker.path}: ${reason}`);
+        await sendChunk(`⚠️ 无法发送${label} ${marker.path}：${reason}`);
+      }
+    }
+
+    return body;
+  };
+
   // Helper: send a text chunk to the IM channel (handles splitMessage + mentions).
-  const sendChunk = async (rawText: string): Promise<void> => {
+  sendChunk = async (rawText: string): Promise<void> => {
+    // Extract and process media markers before anything else (idempotent).
+    const text = await processMedia(rawText);
+
     // Safety net: never leak the [CONTINUE] auto-continue sentinel to IM
-    const { body: text, hasContinue } = splitTrailingContinue(rawText);
+    const { body, hasContinue } = splitTrailingContinue(text);
     if (hasContinue) {
       log(verbose, `[${channelType}] sendChunk stripped trailing ${CONTINUE_SENTINEL} sentinel`);
     }
-    if (!text.trim()) return;
+    if (!body.trim()) return;
     hasVisibleStatus = true;
     cancelThinkingStatus();
     if (statusMessageId && adapter.updateStatus && statusMessageText !== '✍️ replying...') {
@@ -625,21 +757,21 @@ export async function handleMessage(
       statusMessageText = '✍️ replying...';
     }
     // Final safety net: never send [PASS]/[SKIP] sentinel values to IM
-    const sentinel = text.trim();
+    const sentinel = body.trim();
     if (sentinel === '[PASS]' || sentinel === '[SKIP]') {
       log(verbose, `[${channelType}] sendChunk blocked sentinel: ${sentinel}`);
       return;
     }
-    const chunks = splitMessage(text.trim(), maxLen);
+    const chunks = splitMessage(body.trim(), maxLen);
     debugEventLog(
       debugEventsEnabled,
-      `[event-debug] gateway reply totalChars=${text.trim().length} chunks=${chunks.length} chatType=${msg.chatType}`,
+      `[event-debug] gateway reply totalChars=${body.trim().length} chunks=${chunks.length} chatType=${msg.chatType}`,
     );
     let mentions: MentionTarget[] = [];
     if (msg.chatType === 'group' && adapter.getGroupMembers) {
       try {
         const memberCache = await adapter.getGroupMembers(msg.chatId);
-        mentions = parseMentions(text.trim(), memberCache).mentions;
+        mentions = parseMentions(body.trim(), memberCache).mentions;
       } catch {
         /* best effort */
       }
@@ -1377,7 +1509,14 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
         // Wrap adapter to fallback to send() when reply() throws.
         const wrappedAdapter: Pick<
           ChannelAdapter,
-          'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers' | 'sendStatus' | 'updateStatus' | 'clearStatus'
+          | 'reply'
+          | 'maxMessageLength'
+          | 'typing'
+          | 'getGroupMembers'
+          | 'sendStatus'
+          | 'updateStatus'
+          | 'clearStatus'
+          | 'sendMedia'
         > = {
           maxMessageLength: adapter.maxMessageLength,
           typing: adapter.typing?.bind(adapter),
@@ -1385,6 +1524,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
           sendStatus: adapter.sendStatus?.bind(adapter),
           updateStatus: adapter.updateStatus?.bind(adapter),
           clearStatus: adapter.clearStatus?.bind(adapter),
+          sendMedia: adapter.sendMedia?.bind(adapter),
           reply: async (m, text, opts) => {
             try {
               await adapter.reply(m, text, opts);
