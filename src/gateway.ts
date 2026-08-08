@@ -1,6 +1,6 @@
 import { mkdir, readFile as readFileAsync, realpath, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildConversationKey,
@@ -158,36 +158,73 @@ export function extractMediaMarkers(text: string): {
  * Resolve a file path from a media marker against allowed roots.
  * Returns the resolved absolute path or `null` if it escapes every allowed root.
  *
- * - Relative paths are resolved against `baseDir`.
- * - Absolute paths outside `baseDir` are checked against the OS temp dir.
+ * - Relative paths are resolved against `baseDir` first, then against the OS
+ *   temp dir (`os.tmpdir()`). The first matching file is returned.
+ * - Absolute paths are checked against both allowed roots.
  * - Symlinks are resolved via `realpath` to prevent symlink escapes.
- *   If the file does not exist, the prefix check alone is sufficient.
+ *   If the file does not exist, the prefix check alone is sufficient
+ *   (only for the baseDir candidate; tmpdir requires the file to actually exist).
  */
 export async function resolveOutboundPath(baseDir: string, rawPath: string): Promise<string | null> {
   const resolvedBase = resolve(baseDir);
-  const candidate = resolve(resolvedBase, rawPath);
+  const resolvedTmp = resolve(tmpdir());
 
-  const allowedRoots = [resolvedBase, resolve(tmpdir())];
+  // Try a candidate against one root. Returns:
+  // - resolved realpath if the file exists & is inside the root
+  // - null if prefix fails or realpath succeeds but escapes root
+  // - candidate (fallback) if realpath fails (file does not exist)
+  async function tryOne(candidate: string, root: string): Promise<string | null> {
+    if (!candidate.startsWith(root + sep) && candidate !== root) return null;
 
-  for (const root of allowedRoots) {
-    // Quick prefix check before realpath (catches obvious escapes like ../..)
-    if (!candidate.startsWith(root + sep) && candidate !== root) continue;
-
-    // Resolve the root through realpath to handle symlinks in the path
-    // (e.g. macOS /var → /private/var).
     const realRoot = await realpath(root).catch(() => root);
-
     try {
       const real = await realpath(candidate);
       return real.startsWith(realRoot + sep) || real === realRoot ? real : null;
     } catch {
-      // File doesn't exist yet — fall back to the non-realpath prefix check
-      // (realRoot may differ from root on macOS where /var → /private/var).
-      return candidate.startsWith(root + sep) || candidate === root ? candidate : null;
+      // File doesn't exist yet — return candidate as fallback
+      return candidate;
     }
   }
 
-  return null;
+  // ── Relative paths: try baseDir first, then tmpdir ──
+  if (!isAbsolute(rawPath)) {
+    const baseCandidate = resolve(resolvedBase, rawPath);
+    let fallback: string | null = null;
+
+    // 1. baseDir candidate (existing behaviour — allows fallback)
+    const baseRc = await tryOne(baseCandidate, resolvedBase);
+    if (baseRc === null) {
+      // realpath succeeded but escaped, or prefix failed
+      // (no fallback — the file existed but it was outside the root)
+      // continue to try tmpdir
+    } else if (baseRc === baseCandidate) {
+      // realpath failed — remember for fallback, try tmpdir next
+      fallback = baseCandidate;
+    } else {
+      // realpath succeeded & inside root → return
+      return baseRc;
+    }
+
+    // 2. tmpdir candidate (strict — file must actually exist; no fallback)
+    const tmpCandidate = resolve(resolvedTmp, rawPath);
+    if (tmpCandidate !== baseCandidate) {
+      const tmpRc = await tryOne(tmpCandidate, resolvedTmp);
+      if (tmpRc !== null && tmpRc !== tmpCandidate) {
+        // realpath succeeded & inside tmpdir root
+        return tmpRc;
+      }
+      // If tmpRc is null (escaped) or equals tmpCandidate (file doesn't exist),
+      // don't set fallback — the file wasn't found at this location.
+    }
+
+    return fallback;
+  }
+
+  // ── Absolute paths: same candidate checked against both roots ──
+  const absCandidate = resolve(rawPath);
+  const absRc = await tryOne(absCandidate, resolvedBase);
+  if (absRc !== null) return absRc;
+  return tryOne(absCandidate, resolvedTmp);
 }
 
 /** Monotonic inbound counter per session key — a newer message interrupts pending auto-continue relays. */

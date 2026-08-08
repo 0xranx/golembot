@@ -1,4 +1,4 @@
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -180,6 +180,31 @@ describe('resolveOutboundPath', () => {
   it('accepts a relative temp dir path resolved against baseDir (still inside baseDir)', async () => {
     const result = await resolveOutboundPath(dir, 'still-inside.png');
     expect(result).not.toBeNull();
+  });
+
+  it('resolves a relative filename that exists only in the OS temp dir', async () => {
+    const tmpFile = join(tmpdir(), 'gen-only-in-tmp.png');
+    await writeFile(tmpFile, 'tmp-content');
+    try {
+      const result = await resolveOutboundPath(dir, 'gen-only-in-tmp.png');
+      expect(result).not.toBeNull();
+      // realpath canonicalises /var → /private/var on macOS
+      expect(result).toBe(await realpath(tmpFile));
+    } finally {
+      await rm(tmpFile, { force: true });
+    }
+  });
+
+  it('resolves a relative filename that exists only in the assistant dir', async () => {
+    const baseFile = join(dir, 'gen-only-in-base.png');
+    await writeFile(baseFile, 'base-content');
+    try {
+      const result = await resolveOutboundPath(dir, 'gen-only-in-base.png');
+      expect(result).not.toBeNull();
+      expect(result).toBe(await realpath(baseFile));
+    } finally {
+      await rm(baseFile, { force: true });
+    }
   });
 
   it('still rejects /etc/passwd (outside all allowed roots)', async () => {
