@@ -216,6 +216,42 @@ describe('resolveOutboundPath', () => {
     const result = await resolveOutboundPath(dir, '../../../etc/passwd');
     expect(result).toBeNull();
   });
+
+  it('accepts a file under POSIX /tmp (or /private/tmp on macOS)', async () => {
+    let tmpRoot = '/private/tmp';
+    try {
+      await writeFile(join(tmpRoot, 'golem-posix-tmp-file.png'), 'posix-tmp-data');
+    } catch {
+      tmpRoot = '/tmp';
+      await writeFile(join(tmpRoot, 'golem-posix-tmp-file.png'), 'posix-tmp-data');
+    }
+    const tmpFile = join(tmpRoot, 'golem-posix-tmp-file.png');
+    try {
+      const result = await resolveOutboundPath(dir, tmpFile);
+      expect(result).not.toBeNull();
+      expect(result).toBe(await realpath(tmpFile));
+    } finally {
+      await rm(tmpFile, { force: true });
+    }
+  });
+
+  it('accepts relative path resolved against /tmp root', async () => {
+    const fileName = 'golem-rel-tmp-test.png';
+    const tmpFile = join('/private/tmp', fileName);
+    const created = await writeFile(tmpFile, 'rel-tmp-data').then(
+      () => true,
+      () => false,
+    );
+    try {
+      const result = await resolveOutboundPath(dir, fileName);
+      if (created) {
+        expect(result).not.toBeNull();
+        expect(result).toBe(await realpath(tmpFile));
+      }
+    } finally {
+      if (created) await rm(tmpFile, { force: true });
+    }
+  });
 });
 
 // ── Gateway handleMessage media integration ────────────────────────────────────

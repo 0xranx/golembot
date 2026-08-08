@@ -169,6 +169,9 @@ export async function resolveOutboundPath(baseDir: string, rawPath: string): Pro
   const resolvedBase = resolve(baseDir);
   const resolvedTmp = resolve(tmpdir());
 
+  // Allowed roots: assistant dir, OS tmpdir, and POSIX /tmp (macOS symlinks /tmp→/private/tmp)
+  const allowedRoots = [...new Set([resolvedBase, resolvedTmp, resolve('/tmp'), resolve('/private/tmp')])];
+
   // Try a candidate against one root. Returns:
   // - resolved realpath if the file exists & is inside the root
   // - null if prefix fails or realpath succeeds but escapes root
@@ -186,45 +189,33 @@ export async function resolveOutboundPath(baseDir: string, rawPath: string): Pro
     }
   }
 
-  // ── Relative paths: try baseDir first, then tmpdir ──
+  // ── Relative paths: iterate allowed roots in order; first existing file wins ──
   if (!isAbsolute(rawPath)) {
-    const baseCandidate = resolve(resolvedBase, rawPath);
     let fallback: string | null = null;
+    const seen = new Set<string>();
 
-    // 1. baseDir candidate (existing behaviour — allows fallback)
-    const baseRc = await tryOne(baseCandidate, resolvedBase);
-    if (baseRc === null) {
-      // realpath succeeded but escaped, or prefix failed
-      // (no fallback — the file existed but it was outside the root)
-      // continue to try tmpdir
-    } else if (baseRc === baseCandidate) {
-      // realpath failed — remember for fallback, try tmpdir next
-      fallback = baseCandidate;
-    } else {
-      // realpath succeeded & inside root → return
-      return baseRc;
+    for (const root of allowedRoots) {
+      const candidate = resolve(root, rawPath);
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+
+      const rc = await tryOne(candidate, root);
+      if (rc === null) continue; // prefix failed or realpath escaped
+      if (rc !== candidate) return rc; // realpath succeeded & file exists inside root
+      // File doesn't exist yet: only baseDir gets fallback (other roots are strict
+      // to prevent symlink escapes from being resolved to a different root)
+      if (root === resolvedBase && fallback === null) fallback = candidate;
     }
-
-    // 2. tmpdir candidate (strict — file must actually exist; no fallback)
-    const tmpCandidate = resolve(resolvedTmp, rawPath);
-    if (tmpCandidate !== baseCandidate) {
-      const tmpRc = await tryOne(tmpCandidate, resolvedTmp);
-      if (tmpRc !== null && tmpRc !== tmpCandidate) {
-        // realpath succeeded & inside tmpdir root
-        return tmpRc;
-      }
-      // If tmpRc is null (escaped) or equals tmpCandidate (file doesn't exist),
-      // don't set fallback — the file wasn't found at this location.
-    }
-
     return fallback;
   }
 
-  // ── Absolute paths: same candidate checked against both roots ──
+  // ── Absolute paths: checked against all allowed roots ──
   const absCandidate = resolve(rawPath);
-  const absRc = await tryOne(absCandidate, resolvedBase);
-  if (absRc !== null) return absRc;
-  return tryOne(absCandidate, resolvedTmp);
+  for (const root of allowedRoots) {
+    const rc = await tryOne(absCandidate, root);
+    if (rc !== null) return rc;
+  }
+  return null;
 }
 
 /** Monotonic inbound counter per session key — a newer message interrupts pending auto-continue relays. */
@@ -1292,6 +1283,9 @@ export function startInboxConsumer(
 export async function startGateway(opts: GatewayOpts): Promise<void> {
   const dir = resolve(opts.dir || '.');
   setPeerBase(dir);
+
+  // temp_file/ dir for agent-generated files to send (created if missing)
+  mkdir(join(dir, 'temp_file'), { recursive: true }).catch(() => {});
 
   const config: GolemConfig = await loadConfig(dir);
   const verbose = opts.verbose ?? false;

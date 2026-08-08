@@ -68,20 +68,26 @@ Group messages are prefixed with metadata like `[Group: slack-team | MemoryFile:
 
 ## Sending Images and Files
 
-When the user asks for a file or image and you have generated it (or can access it in your workspace), send it directly to the IM chat by outputting a standalone marker line in your reply:
+When the user asks you to "send me", "发我", "share", "deliver", "output" an image or file — OR when you have generated an image/file as part of your task — you MUST send it immediately, in ONE step, without deliberation or probing the mechanism.
 
-- `[SEND_IMAGE: <path>]` — send an image file (PNG, JPG, GIF; ≤ 10MB)
-- `[SEND_FILE: <path>]` — send any file (≤ 20MB)
+**How to send (the ONLY steps):**
+1. Save the file into the `temp_file/` directory inside the workspace. Create `temp_file/` if it does not exist.
+2. Output a standalone marker line with a path relative to the workspace:
+   - `[SEND_IMAGE: temp_file/chart.png]` — for images (PNG, JPG, GIF; ≤10MB)
+   - `[SEND_FILE: temp_file/report.pdf]` — for files (≤20MB)
+3. Narrate briefly in normal text what you are sending.
 
-**Path rules:** Use an absolute path in the marker (most reliable). If using a relative path, the file is looked up in both your workspace (the assistant directory) and the OS temp directory (`$TMPDIR` or `/tmp`). Absolute paths outside the workspace are accepted only when they fall under the OS temp directory.
+**Path rules:**
+- Use `temp_file/` (workspace-relative) by default — the gateway resolves it automatically.
+- Absolute paths work for files already elsewhere in the workspace or the OS temp dir (`/tmp`, `$TMPDIR`).
+- Minimum file size: 5 bytes.
 
-**Limits:** Images must be PNG, JPG, or GIF and ≤ 10MB. Files must be ≤ 20MB.
+**The marker line is consumed by the system and not shown to the user.** Do not explain the mechanism or ask permission — just generate and send.
 
-**How it works:** The marker line is consumed by the system and will not appear in the chat. Narrate what you're sending in your normal reply text so the user knows what to expect.
-
+Example:
 ```
-我已经生成了销售数据图表：
-[SEND_IMAGE: reports/sales-chart.png]
+我已经生成了销售数据图表。
+[SEND_IMAGE: temp_file/sales-chart.png]
 需要原始数据的话告诉我，我可以把 CSV 也发给你。
 ```
 
