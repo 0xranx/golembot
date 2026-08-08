@@ -133,7 +133,11 @@ export function splitTrailingContinue(text: string): { body: string; hasContinue
 // in their reply text. The gateway extracts these, resolves the file path against
 // the assistant directory, reads the file bytes, and calls adapter.sendMedia.
 
-/** Regex matching [SEND_IMAGE: <path>] or [SEND_FILE: <path>] on a standalone line (case-insensitive kind). */
+/**
+ * Matches a standalone [SEND_IMAGE: <path>] / [SEND_FILE: <path>] line.
+ * NOTE: carries the `g` flag — when using .test()/.exec() directly, reset lastIndex
+ * (e.g. new RegExp(source, flags)) or prefer extractMediaMarkers().
+ */
 export const MEDIA_MARKER_RE = /^\[SEND_(IMAGE|FILE):\s*(\S.*?)\]\s*$/gim;
 
 /**
@@ -1252,7 +1256,9 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
   setPeerBase(dir);
 
   // temp_file/ dir for agent-generated files to send (created if missing)
-  mkdir(join(dir, 'temp_file'), { recursive: true }).catch(() => {});
+  mkdir(join(dir, 'temp_file'), { recursive: true }).catch((e) => {
+    console.warn('[gateway] Failed to create temp_file/ dir:', e instanceof Error ? e.message : String(e));
+  });
 
   const config: GolemConfig = await loadConfig(dir);
   const verbose = opts.verbose ?? false;
