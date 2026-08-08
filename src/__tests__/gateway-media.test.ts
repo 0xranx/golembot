@@ -171,10 +171,15 @@ describe('resolveOutboundPath', () => {
     expect(result).not.toBeNull();
   });
 
-  it('accepts a path inside the OS temp directory', async () => {
+  it('rejects a path inside the OS temp directory', async () => {
     const tempFile = join(tmpdir(), 'golem-gen-image.png');
-    const result = await resolveOutboundPath(dir, tempFile);
-    expect(result).not.toBeNull();
+    await writeFile(tempFile, 'tmp-data');
+    try {
+      const result = await resolveOutboundPath(dir, tempFile);
+      expect(result).toBeNull();
+    } finally {
+      await rm(tempFile, { force: true });
+    }
   });
 
   it('accepts a relative temp dir path resolved against baseDir (still inside baseDir)', async () => {
@@ -182,14 +187,12 @@ describe('resolveOutboundPath', () => {
     expect(result).not.toBeNull();
   });
 
-  it('resolves a relative filename that exists only in the OS temp dir', async () => {
-    const tmpFile = join(tmpdir(), 'gen-only-in-tmp.png');
+  it('rejects an absolute path inside the OS temp directory (different file)', async () => {
+    const tmpFile = join(tmpdir(), 'gen-abs-only-in-tmp.png');
     await writeFile(tmpFile, 'tmp-content');
     try {
-      const result = await resolveOutboundPath(dir, 'gen-only-in-tmp.png');
-      expect(result).not.toBeNull();
-      // realpath canonicalises /var → /private/var on macOS
-      expect(result).toBe(await realpath(tmpFile));
+      const result = await resolveOutboundPath(dir, tmpFile);
+      expect(result).toBeNull();
     } finally {
       await rm(tmpFile, { force: true });
     }
@@ -217,7 +220,7 @@ describe('resolveOutboundPath', () => {
     expect(result).toBeNull();
   });
 
-  it('accepts a file under POSIX /tmp (or /private/tmp on macOS)', async () => {
+  it('rejects a file under POSIX /tmp (or /private/tmp on macOS)', async () => {
     let tmpRoot = '/private/tmp';
     try {
       await writeFile(join(tmpRoot, 'golem-posix-tmp-file.png'), 'posix-tmp-data');
@@ -228,26 +231,21 @@ describe('resolveOutboundPath', () => {
     const tmpFile = join(tmpRoot, 'golem-posix-tmp-file.png');
     try {
       const result = await resolveOutboundPath(dir, tmpFile);
-      expect(result).not.toBeNull();
-      expect(result).toBe(await realpath(tmpFile));
+      expect(result).toBeNull();
     } finally {
       await rm(tmpFile, { force: true });
     }
   });
 
-  it('accepts relative path resolved against /tmp root', async () => {
-    const fileName = 'golem-rel-tmp-test.png';
-    const tmpFile = join('/private/tmp', fileName);
-    const created = await writeFile(tmpFile, 'rel-tmp-data').then(
+  it('rejects an absolute path under /private/tmp (different root, file exists)', async () => {
+    const tmpFile = join('/private/tmp', 'golem-abs-posix-tmp.png');
+    const created = await writeFile(tmpFile, 'posix-abs-data').then(
       () => true,
       () => false,
     );
     try {
-      const result = await resolveOutboundPath(dir, fileName);
-      if (created) {
-        expect(result).not.toBeNull();
-        expect(result).toBe(await realpath(tmpFile));
-      }
+      const result = await resolveOutboundPath(dir, tmpFile);
+      expect(result).toBeNull();
     } finally {
       if (created) await rm(tmpFile, { force: true });
     }

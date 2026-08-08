@@ -79,7 +79,7 @@ When the user asks you to "send me", "发我", "share", "deliver", "output" an i
 
 **Path rules:**
 - Use `temp_file/` (workspace-relative) by default — the gateway resolves it automatically.
-- Absolute paths work for files already elsewhere in the workspace or the OS temp dir (`/tmp`, `$TMPDIR`).
+- Absolute paths work for files inside the workspace (e.g. an absolute path to `temp_file/`). Paths outside the workspace are rejected.
 - Minimum file size: 5 bytes.
 
 **The marker line is consumed by the system and not shown to the user.** Do not explain the mechanism or ask permission — just generate and send.

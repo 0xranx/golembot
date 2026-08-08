@@ -1,5 +1,4 @@
 import { mkdir, readFile as readFileAsync, realpath, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -155,31 +154,23 @@ export function extractMediaMarkers(text: string): {
 }
 
 /**
- * Resolve a file path from a media marker against allowed roots.
- * Returns the resolved absolute path or `null` if it escapes every allowed root.
+ * Resolve a file path from a media marker against the allowed root.
+ * Returns the resolved absolute path or `null` if it escapes the allowed root.
  *
- * - Relative paths are resolved against `baseDir` first, then against the OS
- *   temp dir (`os.tmpdir()`). The first matching file is returned.
- * - Absolute paths are checked against both allowed roots.
+ * - Only the assistant workspace directory (`baseDir`) is allowed.
+ * - Relative paths are resolved against `baseDir`.
+ * - Absolute paths are checked to ensure they stay inside `baseDir`.
  * - Symlinks are resolved via `realpath` to prevent symlink escapes.
- *   If the file does not exist, the prefix check alone is sufficient
- *   (only for the baseDir candidate; tmpdir requires the file to actually exist).
+ *   If the file does not exist, the prefix check alone is sufficient.
  */
 export async function resolveOutboundPath(baseDir: string, rawPath: string): Promise<string | null> {
   const resolvedBase = resolve(baseDir);
-  const resolvedTmp = resolve(tmpdir());
 
-  // Allowed roots: assistant dir, OS tmpdir, and POSIX /tmp (macOS symlinks /tmp→/private/tmp)
-  const allowedRoots = [...new Set([resolvedBase, resolvedTmp, resolve('/tmp'), resolve('/private/tmp')])];
+  // ── Single allowed root: the assistant workspace ──
+  async function tryOne(candidate: string): Promise<string | null> {
+    if (!candidate.startsWith(resolvedBase + sep) && candidate !== resolvedBase) return null;
 
-  // Try a candidate against one root. Returns:
-  // - resolved realpath if the file exists & is inside the root
-  // - null if prefix fails or realpath succeeds but escapes root
-  // - candidate (fallback) if realpath fails (file does not exist)
-  async function tryOne(candidate: string, root: string): Promise<string | null> {
-    if (!candidate.startsWith(root + sep) && candidate !== root) return null;
-
-    const realRoot = await realpath(root).catch(() => root);
+    const realRoot = await realpath(resolvedBase).catch(() => resolvedBase);
     try {
       const real = await realpath(candidate);
       return real.startsWith(realRoot + sep) || real === realRoot ? real : null;
@@ -189,33 +180,9 @@ export async function resolveOutboundPath(baseDir: string, rawPath: string): Pro
     }
   }
 
-  // ── Relative paths: iterate allowed roots in order; first existing file wins ──
-  if (!isAbsolute(rawPath)) {
-    let fallback: string | null = null;
-    const seen = new Set<string>();
-
-    for (const root of allowedRoots) {
-      const candidate = resolve(root, rawPath);
-      if (seen.has(candidate)) continue;
-      seen.add(candidate);
-
-      const rc = await tryOne(candidate, root);
-      if (rc === null) continue; // prefix failed or realpath escaped
-      if (rc !== candidate) return rc; // realpath succeeded & file exists inside root
-      // File doesn't exist yet: only baseDir gets fallback (other roots are strict
-      // to prevent symlink escapes from being resolved to a different root)
-      if (root === resolvedBase && fallback === null) fallback = candidate;
-    }
-    return fallback;
-  }
-
-  // ── Absolute paths: checked against all allowed roots ──
-  const absCandidate = resolve(rawPath);
-  for (const root of allowedRoots) {
-    const rc = await tryOne(absCandidate, root);
-    if (rc !== null) return rc;
-  }
-  return null;
+  // ── Resolve the candidate path ──
+  const candidate = isAbsolute(rawPath) ? resolve(rawPath) : resolve(resolvedBase, rawPath);
+  return tryOne(candidate);
 }
 
 /** Monotonic inbound counter per session key — a newer message interrupts pending auto-continue relays. */
