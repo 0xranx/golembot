@@ -6,6 +6,9 @@ const mockConnect = vi.fn().mockResolvedValue(undefined);
 const mockDisconnect = vi.fn().mockResolvedValue(undefined);
 const mockReplyStream = vi.fn().mockResolvedValue(undefined);
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+const mockUploadMedia = vi.fn();
+const mockReplyMedia = vi.fn().mockResolvedValue(undefined);
+const mockSendMediaMessage = vi.fn().mockResolvedValue(undefined);
 // biome-ignore lint/complexity/noBannedTypes: mock handler map for test
 const handlers = new Map<string, Function>();
 const constructorArgs: any[] = [];
@@ -18,6 +21,9 @@ class MockWSClient {
   disconnect = mockDisconnect;
   replyStream = mockReplyStream;
   sendMessage = mockSendMessage;
+  uploadMedia = mockUploadMedia;
+  replyMedia = mockReplyMedia;
+  sendMediaMessage = mockSendMediaMessage;
   // biome-ignore lint/complexity/noBannedTypes: mock
   on(event: string, handler: Function) {
     handlers.set(event, handler);
@@ -430,6 +436,131 @@ describe('WecomAdapter', () => {
         msgtype: 'text',
         text: { content: 'Proactive message' },
       });
+    });
+  });
+
+  describe('sendMedia', () => {
+    const msg: ChannelMessage = {
+      channelType: 'wecom',
+      senderId: 'u1',
+      chatId: 'chat-1',
+      chatType: 'dm',
+      text: 'hi',
+      raw: { frameData: 'incoming-frame' },
+    };
+
+    const smallImage = Buffer.alloc(100);
+    const smallFile = Buffer.alloc(200);
+
+    beforeEach(() => {
+      mockUploadMedia.mockReset();
+      mockReplyMedia.mockReset();
+      mockSendMediaMessage.mockReset();
+    });
+
+    it('sendMedia image: uploads with correct Buffer + metadata and calls replyMedia', async () => {
+      mockUploadMedia.mockResolvedValue({
+        type: 'image',
+        media_id: 'media-img-1',
+        created_at: '2025-01-01T00:00:00Z',
+      });
+
+      await adapter.sendMedia(msg, { kind: 'image', data: smallImage, fileName: 'photo.jpg' });
+
+      expect(mockUploadMedia).toHaveBeenCalledOnce();
+      expect(mockUploadMedia).toHaveBeenCalledWith(smallImage, { type: 'image', filename: 'photo.jpg' });
+      expect(mockReplyMedia).toHaveBeenCalledOnce();
+      expect(mockReplyMedia).toHaveBeenCalledWith({ frameData: 'incoming-frame' }, 'image', 'media-img-1');
+      expect(mockSendMediaMessage).not.toHaveBeenCalled();
+    });
+
+    it('sendMedia file: uploads with correct Buffer + metadata and calls replyMedia', async () => {
+      mockUploadMedia.mockResolvedValue({
+        type: 'file',
+        media_id: 'media-file-1',
+        created_at: '2025-01-01T00:00:00Z',
+      });
+
+      await adapter.sendMedia(msg, { kind: 'file', data: smallFile, fileName: 'doc.pdf' });
+
+      expect(mockUploadMedia).toHaveBeenCalledOnce();
+      expect(mockUploadMedia).toHaveBeenCalledWith(smallFile, { type: 'file', filename: 'doc.pdf' });
+      expect(mockReplyMedia).toHaveBeenCalledOnce();
+      expect(mockReplyMedia).toHaveBeenCalledWith({ frameData: 'incoming-frame' }, 'file', 'media-file-1');
+      expect(mockSendMediaMessage).not.toHaveBeenCalled();
+    });
+
+    it('sendMedia image without fileName defaults to image.png', async () => {
+      mockUploadMedia.mockResolvedValue({
+        type: 'image',
+        media_id: 'media-default-img',
+        created_at: '2025-01-01T00:00:00Z',
+      });
+
+      await adapter.sendMedia(msg, { kind: 'image', data: smallImage });
+
+      expect(mockUploadMedia).toHaveBeenCalledWith(smallImage, { type: 'image', filename: 'image.png' });
+    });
+
+    it('sendMedia file without fileName defaults to attachment.bin', async () => {
+      mockUploadMedia.mockResolvedValue({
+        type: 'file',
+        media_id: 'media-default-file',
+        created_at: '2025-01-01T00:00:00Z',
+      });
+
+      await adapter.sendMedia(msg, { kind: 'file', data: smallFile });
+
+      expect(mockUploadMedia).toHaveBeenCalledWith(smallFile, { type: 'file', filename: 'attachment.bin' });
+    });
+
+    it('oversized image (>10MB) rejects, uploadMedia NOT called', async () => {
+      const oversized = Buffer.alloc(10 * 1024 * 1024 + 1);
+
+      await expect(adapter.sendMedia(msg, { kind: 'image', data: oversized })).rejects.toThrow(
+        /too large.*image.*10\.0MB.*maximum is 10MB/i,
+      );
+      expect(mockUploadMedia).not.toHaveBeenCalled();
+    });
+
+    it('oversized file (>20MB) rejects, uploadMedia NOT called', async () => {
+      const oversized = Buffer.alloc(20 * 1024 * 1024 + 1);
+
+      await expect(adapter.sendMedia(msg, { kind: 'file', data: oversized })).rejects.toThrow(
+        /too large.*file.*20\.0MB.*maximum is 20MB/i,
+      );
+      expect(mockUploadMedia).not.toHaveBeenCalled();
+    });
+
+    it('msg.raw undefined → falls back to sendMediaMessage', async () => {
+      mockUploadMedia.mockResolvedValue({
+        type: 'image',
+        media_id: 'media-fallback',
+        created_at: '2025-01-01T00:00:00Z',
+      });
+
+      const noRawMsg: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'u1',
+        chatId: 'chat-proactive',
+        chatType: 'dm',
+        text: 'hi',
+        raw: undefined,
+      };
+
+      await adapter.sendMedia(noRawMsg, { kind: 'image', data: smallImage });
+
+      expect(mockUploadMedia).toHaveBeenCalledOnce();
+      expect(mockReplyMedia).not.toHaveBeenCalled();
+      expect(mockSendMediaMessage).toHaveBeenCalledOnce();
+      expect(mockSendMediaMessage).toHaveBeenCalledWith('chat-proactive', 'image', 'media-fallback');
+    });
+
+    it('wsClient null → resolves silently', async () => {
+      await adapter.stop(); // sets wsClient to null
+
+      await expect(adapter.sendMedia(msg, { kind: 'image', data: smallImage })).resolves.toBeUndefined();
+      expect(mockUploadMedia).not.toHaveBeenCalled();
     });
   });
 

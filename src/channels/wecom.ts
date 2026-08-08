@@ -1,4 +1,4 @@
-import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, OutboundMedia, ReplyOptions } from '../channel.js';
 import { importPeer } from '../peer-require.js';
 import type { WecomChannelConfig } from '../workspace.js';
 
@@ -121,7 +121,6 @@ export class WecomAdapter implements ChannelAdapter {
     return cached;
   }
 
-
   async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.wsClient) return;
     const frame = msg.raw;
@@ -175,7 +174,9 @@ export class WecomAdapter implements ChannelAdapter {
       this.activeStreamTimer = null;
     }
     if (this.activeStreamId && this.activeStreamFrame && this.wsClient) {
-      this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete✅', true).catch(() => {});
+      this.wsClient
+        .replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete✅', true)
+        .catch(() => {});
     }
     this.activeStreamId = null;
     this.activeStreamFrame = null;
@@ -198,6 +199,32 @@ export class WecomAdapter implements ChannelAdapter {
   async send(chatId: string, text: string): Promise<void> {
     if (!this.wsClient) return;
     await this.wsClient.sendMessage(chatId, { msgtype: 'text', text: { content: text } });
+  }
+
+  async sendMedia(msg: ChannelMessage, media: OutboundMedia): Promise<void> {
+    if (!this.wsClient) return;
+
+    const maxSize = media.kind === 'image' ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
+    if (media.data.length > maxSize) {
+      const kindLabel = media.kind === 'image' ? 'image' : 'file';
+      const maxMB = media.kind === 'image' ? 10 : 20;
+      throw new Error(
+        `Media too large: ${kindLabel} is ${(media.data.length / (1024 * 1024)).toFixed(1)}MB, maximum is ${maxMB}MB`,
+      );
+    }
+
+    const filename = media.fileName ?? (media.kind === 'image' ? 'image.png' : 'attachment.bin');
+
+    const upload = await this.wsClient.uploadMedia(media.data, {
+      type: media.kind,
+      filename,
+    });
+
+    if (msg.raw) {
+      await this.wsClient.replyMedia(msg.raw, media.kind, upload.media_id);
+    } else {
+      await this.wsClient.sendMediaMessage(msg.chatId, media.kind, upload.media_id);
+    }
   }
 
   async stop(): Promise<void> {
