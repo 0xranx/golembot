@@ -120,6 +120,12 @@ export const AUTO_CONTINUE_PROMPT =
   `[System: Auto-continue. Your previous reply ended with ${CONTINUE_SENTINEL}. Continue working on the task. ` +
   `End with ${CONTINUE_SENTINEL} again if it is still unfinished.]`;
 
+/** Prompt hint reminding agents how to send images/files via markers. */
+export const MEDIA_PROTOCOL_HINT =
+  '[System: When the user asks you to send/generate an image or file, save it to the workspace `temp_file/` dir and output ' +
+  '[SEND_IMAGE: temp_file/<file>] or [SEND_FILE: temp_file/<file>] on its own standalone line — the gateway sends it automatically. ' +
+  'Do NOT use the message-push / Send API for this (it only supports text).]';
+
 const TRAILING_CONTINUE_RE = /(?:^|\n)\s*\[CONTINUE\]\s*$/;
 
 /** Split a trailing [CONTINUE] sentinel line off a reply. */
@@ -299,6 +305,10 @@ export function buildGroupPrompt(
   if (injectContinue) {
     parts.push(TURN_END_CONTRACT);
   }
+
+  // Always inject media protocol hint into group prompts so agents remember
+  // how to send images/files even when the prompt is large and dilutes skill guidance.
+  parts.push(MEDIA_PROTOCOL_HINT);
 
   if (injectPass) {
     const base =

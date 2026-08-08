@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ChannelMessage } from '../channel.js';
 import type { StreamEvent } from '../engine.js';
+import type { GroupMessage } from '../gateway.js';
 import type { GolemConfig } from '../workspace.js';
 
 // ── extractMediaMarkers (pure helper) ──────────────────────────────────────────
@@ -736,5 +737,55 @@ describe('MEDIA_MARKER_RE', () => {
     expect(matches).toHaveLength(2);
     expect(matches[0][1]).toBe('IMAGE');
     expect(matches[1][1]).toBe('FILE');
+  });
+});
+
+// ── buildGroupPrompt injects MEDIA_PROTOCOL_HINT ──────────────────────────────
+
+describe('buildGroupPrompt - MEDIA_PROTOCOL_HINT', () => {
+  let buildGroupPrompt: typeof import('../gateway.js').buildGroupPrompt;
+  let MEDIA_PROTOCOL_HINT: string;
+
+  beforeEach(async () => {
+    const mod = await import('../gateway.js');
+    buildGroupPrompt = mod.buildGroupPrompt;
+    MEDIA_PROTOCOL_HINT = mod.MEDIA_PROTOCOL_HINT;
+  });
+
+  it('includes MEDIA_PROTOCOL_HINT in group prompt output', () => {
+    const history: GroupMessage[] = [];
+    const prompt = buildGroupPrompt(
+      history,
+      'alice',
+      'send me a chart',
+      false, // injectPass
+      'slack-C001',
+      '/assistant',
+    );
+
+    expect(prompt).toContain('[SEND_IMAGE:');
+    expect(prompt).toContain(MEDIA_PROTOCOL_HINT);
+  });
+
+  it('includes MEDIA_PROTOCOL_HINT even with continue/pass/peers injected', () => {
+    const history: GroupMessage[] = [
+      { senderName: 'alice', text: 'hello', isBot: false },
+      { senderName: 'bob', text: 'hi there', isBot: false },
+    ];
+    const prompt = buildGroupPrompt(
+      history,
+      'alice',
+      'send the report',
+      true, // injectPass
+      'slack-C001',
+      '/assistant',
+      ['bob'], // othersAddressed
+      [{ name: 'peer-bot', role: 'reviewer' }], // peers
+      true, // injectContinue
+    );
+
+    expect(prompt).toContain('[SEND_IMAGE:');
+    expect(prompt).toContain(MEDIA_PROTOCOL_HINT);
+    expect(prompt).toContain('[CONTINUE]');
   });
 });

@@ -1,6 +1,6 @@
 ---
 name: im-adapter
-description: "Format responses for instant messaging platforms such as Lark, DingTalk, WeCom, Slack, and Telegram. Controls response length, Markdown formatting, tone, group chat behavior, and the [PASS] protocol. Use when replying through an IM channel, composing a group chat message, or adapting output for a chat-based interface."
+description: "Format responses for instant messaging platforms such as Lark, DingTalk, WeCom, Slack, and Telegram. Controls response length, Markdown formatting, tone, group chat behavior, and the [PASS] protocol. Also covers sending images and files to the chat via [SEND_IMAGE]/[SEND_FILE] markers when the user asks for a picture or file. Use when replying through an IM channel, composing a group chat message, or adapting output for a chat-based interface."
 ---
 
 # IM Channel Response Guidelines
@@ -83,6 +83,8 @@ When the user asks you to "send me", "发我", "share", "deliver", "output" an i
 - Minimum file size: 5 bytes.
 
 **The marker line is consumed by the system and not shown to the user.** Do not explain the mechanism or ask permission — just generate and send.
+
+Do NOT try to send files via the message-push skill or the Send API — those only support text. Use the markers above.
 
 Example:
 ```
