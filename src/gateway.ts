@@ -945,7 +945,10 @@ export async function handleMessage(
         finalStatusText = '⚠️ Failed';
       }
 
-      const { body, hasContinue } = splitTrailingContinue(fullReply);
+      // Strip media markers before splitTrailingContinue so that the returned
+      // fullReply (which feeds group history + metrics) never contains marker lines.
+      const mediaStrippedReply = extractMediaMarkers(fullReply).body;
+      const { body, hasContinue } = splitTrailingContinue(mediaStrippedReply);
       const willRelay = hasContinue && mayRelay && !hasError;
       if (fullReply.trim()) {
         if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done');
@@ -1005,7 +1008,10 @@ export async function handleMessage(
         fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
       }
 
-      const { body, hasContinue } = splitTrailingContinue(fullReply);
+      // Strip media markers before splitTrailingContinue so that the returned
+      // fullReply (which feeds group history + metrics) never contains marker lines.
+      const mediaStrippedReplyBuf = extractMediaMarkers(fullReply).body;
+      const { body, hasContinue } = splitTrailingContinue(mediaStrippedReplyBuf);
       const willRelay = hasContinue && mayRelay && !hasError;
       if (fullReply.trim()) {
         await sendChunk(fullReply);

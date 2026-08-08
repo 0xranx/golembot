@@ -322,11 +322,15 @@ function makeDmMsg(overrides: Partial<ChannelMessage> = {}): ChannelMessage {
 describe('handleMessage - media marker integration', () => {
   let dir: string;
   let handleMessage: typeof import('../gateway.js').handleMessage;
+  let groupHistories: Map<string, Array<{ senderName: string; text: string; isBot: boolean }>>;
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'golem-mt-'));
     const mod = await import('../gateway.js');
     handleMessage = mod.handleMessage;
+    groupHistories = mod.groupHistories;
+    // Clear group histories between tests to avoid cross-test pollution
+    groupHistories.clear();
   });
 
   afterEach(async () => {
@@ -563,6 +567,52 @@ describe('handleMessage - media marker integration', () => {
     expect(allText).not.toContain('[SEND_IMAGE:');
     expect(allText).toContain('Working');
     expect(allText).toContain('All done.');
+  });
+
+  it('does NOT leak media markers into group conversation history', async () => {
+    const img = join(dir, 'group_img.png');
+    await writeFile(img, 'group-data');
+
+    const assistant = makeMockAssistant('Hello team!\n[SEND_IMAGE: group_img.png]\nHow is everyone?');
+    const adapter = makeMockAdapter(true);
+
+    const groupMsg = makeDmMsg({ chatType: 'group', chatId: 'G001', text: '@golem hello' });
+    await handleMessage(groupMsg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+    // Group history must not contain media marker lines
+    const key = `${groupMsg.channelType}:${groupMsg.chatId}`;
+    const hist = groupHistories.get(key);
+    expect(hist).toBeDefined();
+    expect(hist!.length).toBeGreaterThan(0);
+    const botText = hist!.find((m) => m.isBot)?.text ?? '';
+    expect(botText).not.toContain('[SEND_IMAGE:');
+    expect(botText).not.toContain('[SEND_FILE:');
+    expect(botText).toContain('Hello team!');
+    expect(botText).toContain('How is everyone?');
+  });
+
+  it('streaming mode with [CONTINUE] + media: marker and CONTINUE stripped, media sent once', async () => {
+    const img = join(dir, 'cont_s.png');
+    await writeFile(img, 'sdata');
+
+    const assistant = makeStreamingMockAssistant([
+      { type: 'text', content: 'Working\n' },
+      { type: 'text', content: '[SEND_IMAGE: cont_s.png]\n' },
+      { type: 'text', content: '[CONTINUE]\n' },
+      { type: 'done', sessionId: 'x' },
+    ]);
+    const adapter = makeMockAdapter(true);
+    // Disable auto-continue so the relay loop does not re-invoke the mock
+    const config = makeConfig({ streaming: { mode: 'streaming' }, autoContinue: 0 } as any);
+
+    await handleMessage(makeDmMsg(), config, assistant, adapter, 'slack', false, dir);
+
+    expect(adapter.mediaSends).toHaveLength(1);
+    expect(adapter.mediaSends[0].kind).toBe('image');
+    const allText = adapter.replies.map((r) => r.text).join('\n');
+    expect(allText).not.toContain('[SEND_IMAGE:');
+    expect(allText).not.toContain('[CONTINUE]');
+    expect(allText).toContain('Working');
   });
 });
 
