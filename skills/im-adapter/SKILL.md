@@ -73,7 +73,7 @@ When the user asks for a file or image and you have generated it (or can access 
 - `[SEND_IMAGE: <path>]` — send an image file (PNG, JPG, GIF; ≤ 10MB)
 - `[SEND_FILE: <path>]` — send any file (≤ 20MB)
 
-**Path rules:** Use a path relative to your workspace (the assistant directory). Absolute paths outside the workspace are rejected. If the file is outside the workspace, copy it into the workspace first (e.g. `cp` or write it into the working directory) and reference the new path.
+**Path rules:** By default, save generated temp files to the OS temp directory (`$TMPDIR` or `/tmp`) and reference the absolute path in the marker. If the user specifies a location (e.g. "save to workspace/reports/"), use that path instead. Relative paths are resolved against your workspace (the assistant directory). Absolute paths outside the workspace are accepted only when they fall under the OS temp directory.
 
 **Limits:** Images must be PNG, JPG, or GIF and ≤ 10MB. Files must be ≤ 20MB.
 

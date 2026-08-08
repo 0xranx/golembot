@@ -170,6 +170,27 @@ describe('resolveOutboundPath', () => {
     const result = await resolveOutboundPath(dir, 'nonexistent.png');
     expect(result).not.toBeNull();
   });
+
+  it('accepts a path inside the OS temp directory', async () => {
+    const tempFile = join(tmpdir(), 'golem-gen-image.png');
+    const result = await resolveOutboundPath(dir, tempFile);
+    expect(result).not.toBeNull();
+  });
+
+  it('accepts a relative temp dir path resolved against baseDir (still inside baseDir)', async () => {
+    const result = await resolveOutboundPath(dir, 'still-inside.png');
+    expect(result).not.toBeNull();
+  });
+
+  it('still rejects /etc/passwd (outside all allowed roots)', async () => {
+    const result = await resolveOutboundPath(dir, '/etc/passwd');
+    expect(result).toBeNull();
+  });
+
+  it('still rejects path that escapes via ../', async () => {
+    const result = await resolveOutboundPath(dir, '../../../etc/passwd');
+    expect(result).toBeNull();
+  });
 });
 
 // ── Gateway handleMessage media integration ────────────────────────────────────

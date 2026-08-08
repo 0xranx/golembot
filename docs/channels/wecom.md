@@ -37,7 +37,7 @@ WECOM_SECRET=xxxxxxxxxxxxxxxxxx
 - **Connection**: The SDK establishes and maintains a WebSocket connection to WeCom servers
 - **Reconnection**: Automatic reconnection and heartbeat are handled by the SDK
 - **Messages**: Incoming messages are received via WebSocket events and emitted as `ChannelMessage` (text only)
-- **Sending media**: The bot can send images and files when the agent outputs a `[SEND_IMAGE: <path>]` or `[SEND_FILE: <path>]` marker line. The adapter uses the SDK's `uploadMedia` + `replyMedia` flow to deliver the media. Images must be PNG, JPG, or GIF and ≤10MB; files ≤20MB. Paths must be relative to the assistant workspace.
+- **Sending media**: The bot can send images and files when the agent outputs a `[SEND_IMAGE: <path>]` or `[SEND_FILE: <path>]` marker line. Image messages (PNG/JPG, ≤10MB) are delivered inline with the streaming reply — they appear before the final "mission complete" in the WeCom UI. File messages are delivered as separate messages. Temp files default to the OS temp directory (`$TMPDIR`). Minimum file size is 5 bytes. Images must be PNG, JPG, or GIF and ≤10MB; files ≤20MB. Paths can be relative to the assistant workspace or absolute paths inside the OS temp directory.
 - **Reply**: Sends messages via the SDK's built-in reply method
 - **Proactive messaging**: `send()` is supported — the adapter can proactively send messages to any chat
 - **Chat type**: Always `dm` (WeCom bot messages are direct messages)
@@ -55,4 +55,4 @@ The adapter connects to WeCom via WebSocket automatically. No port forwarding or
 - Like Feishu and DingTalk, WeCom now uses **WebSocket** — no public IP or reverse proxy required
 - The `@wecom/aibot-node-sdk` handles reconnection and heartbeat automatically
 - The max message length is 2,048 characters; longer responses are automatically split
-- Only text messages are received; the bot can send images (PNG/JPG/GIF, ≤10MB) and files (≤20MB) via `[SEND_IMAGE: <path>]` / `[SEND_FILE: <path>]` markers
+- Only text messages are received; the bot can send images (PNG/JPG inline with the stream, GIF as separate message; ≤10MB) and files (≤20MB, min 5 bytes) via `[SEND_IMAGE: <path>]` / `[SEND_FILE: <path>]` markers

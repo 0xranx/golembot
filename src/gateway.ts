@@ -1,4 +1,5 @@
 import { mkdir, readFile as readFileAsync, realpath, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -154,35 +155,39 @@ export function extractMediaMarkers(text: string): {
 }
 
 /**
- * Resolve a file path from a media marker against the assistant directory.
- * Returns the resolved absolute path or `null` if it escapes the base directory.
+ * Resolve a file path from a media marker against allowed roots.
+ * Returns the resolved absolute path or `null` if it escapes every allowed root.
  *
  * - Relative paths are resolved against `baseDir`.
- * - Absolute paths are resolved and checked to be inside `baseDir`.
+ * - Absolute paths outside `baseDir` are checked against the OS temp dir.
  * - Symlinks are resolved via `realpath` to prevent symlink escapes.
  *   If the file does not exist, the prefix check alone is sufficient.
  */
 export async function resolveOutboundPath(baseDir: string, rawPath: string): Promise<string | null> {
   const resolvedBase = resolve(baseDir);
-  const candidate = resolve(baseDir, rawPath);
+  const candidate = resolve(resolvedBase, rawPath);
 
-  // Quick prefix check before realpath (catches obvious escapes like ../..)
-  if (!candidate.startsWith(resolvedBase + sep) && candidate !== resolvedBase) {
-    return null;
+  const allowedRoots = [resolvedBase, resolve(tmpdir())];
+
+  for (const root of allowedRoots) {
+    // Quick prefix check before realpath (catches obvious escapes like ../..)
+    if (!candidate.startsWith(root + sep) && candidate !== root) continue;
+
+    // Resolve the root through realpath to handle symlinks in the path
+    // (e.g. macOS /var → /private/var).
+    const realRoot = await realpath(root).catch(() => root);
+
+    try {
+      const real = await realpath(candidate);
+      return real.startsWith(realRoot + sep) || real === realRoot ? real : null;
+    } catch {
+      // File doesn't exist yet — fall back to the non-realpath prefix check
+      // (realRoot may differ from root on macOS where /var → /private/var).
+      return candidate.startsWith(root + sep) || candidate === root ? candidate : null;
+    }
   }
 
-  // Resolve the base directory through realpath to handle symlinks in the path
-  // (e.g. macOS /var → /private/var).
-  const realBase = await realpath(resolvedBase).catch(() => resolvedBase);
-
-  try {
-    const real = await realpath(candidate);
-    return real.startsWith(realBase + sep) || real === realBase ? real : null;
-  } catch {
-    // File doesn't exist yet — fall back to the non-realpath prefix check
-    // (realBase may differ from resolvedBase on macOS where /var → /private/var).
-    return candidate.startsWith(resolvedBase + sep) || candidate === resolvedBase ? candidate : null;
-  }
+  return null;
 }
 
 /** Monotonic inbound counter per session key — a newer message interrupts pending auto-continue relays. */
