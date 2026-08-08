@@ -29,7 +29,7 @@ import {
   writeConfig,
 } from './workspace.js';
 
-export type { ChannelAdapter, ChannelMessage, ImageAttachment, ReadReceipt } from './channel.js';
+export type { ChannelAdapter, ChannelMessage, ImageAttachment, OutboundMedia, ReadReceipt } from './channel.js';
 export { buildSessionKey, stripMention } from './channel.js';
 export { type CommandContext, type CommandResult, executeCommand, parseCommand } from './commands.js';
 export type { ChannelStatus, DashboardContext, GatewayMetrics, RecentMessage } from './dashboard.js';

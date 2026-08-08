@@ -62,6 +62,15 @@ export interface ReplyOptions {
   mentions?: MentionTarget[];
 }
 
+/** A media payload the bot SENDS to a chat (image or file). */
+export interface OutboundMedia {
+  kind: 'image' | 'file';
+  /** Raw media bytes. */
+  data: Buffer;
+  /** Optional original filename (used for upload metadata). */
+  fileName?: string;
+}
+
 /**
  * Read receipt emitted when a user reads a message sent by the bot.
  * Currently only supported by Feishu (via `im.message.message_read_v1` event).
@@ -87,6 +96,12 @@ export interface ChannelAdapter {
    * Not all adapters support this — check before calling.
    */
   send?(chatId: string, text: string): Promise<void>;
+  /**
+   * Optional: send an image or file attachment to the chat that `msg` came from.
+   * Used by the gateway when the agent emits a SEND_IMAGE/SEND_FILE protocol marker.
+   * Adapters that cannot send media simply omit this method — the gateway degrades gracefully.
+   */
+  sendMedia?(msg: ChannelMessage, media: OutboundMedia): Promise<void>;
   /**
    * Optional: send a "typing…" indicator to the chat.
    * Called before a long-running AI invocation so the user sees immediate feedback.
