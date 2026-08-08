@@ -629,7 +629,6 @@ export async function handleMessage(
   const streamingConfig = resolveStreamingConfig(config);
   const debugEventsEnabled = verbose || isDebugEventsEnabled();
   let hasVisibleStatus = false;
-  let mediaDelivered = false;
   let thinkingStatusTimer: ReturnType<typeof setTimeout> | undefined;
   let statusMessageId: string | undefined;
   let statusMessageText: string | undefined;
@@ -677,9 +676,6 @@ export async function handleMessage(
       return;
     }
     if (adapter.clearStatus) {
-      if (mediaDelivered) {
-        await new Promise((r) => setTimeout(r, 2000));
-      }
       const currentStatusId = statusMessageId;
       statusMessageId = undefined;
       await adapter.clearStatus(msg, currentStatusId ?? '');
@@ -746,7 +742,6 @@ export async function handleMessage(
           data,
           fileName: basename(resolved),
         });
-        mediaDelivered = true;
       } catch (e) {
         const reason = e instanceof Error ? e.message : String(e);
         const label = marker.kind === 'image' ? '图片' : '文件';
