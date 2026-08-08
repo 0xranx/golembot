@@ -11,6 +11,5 @@ golem.yaml
 skills/
 memory/
 
-# Agent-generated temp files for the send-media protocol (directory tracked via .gitkeep)
-temp_file/*
-!temp_file/.gitkeep
+# Agent-generated temp files for the send-media protocol (runtime dir, auto-created by gateway)
+temp_file/
