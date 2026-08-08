@@ -313,17 +313,18 @@ describe('WecomAdapter', () => {
       raw: { frameData: 'original' },
     };
 
-    it('closes stream with mission complete✅ and no msgItem when queue is empty', async () => {
+    it('closes stream with mission complete✅ (no image msgItem)', async () => {
       await adapter.typing(msg); // opens loading stream
       mockReplyStream.mockClear();
 
       await adapter.clearStatus(msg, 'status-1');
 
       expect(mockReplyStream).toHaveBeenCalledTimes(1);
-      const [, , text, isFinal, msgItem] = mockReplyStream.mock.calls[0];
-      expect(text).toBe('mission complete✅');
-      expect(isFinal).toBe(true);
-      expect(msgItem).toBeUndefined();
+      const callArgs = mockReplyStream.mock.calls[0];
+      expect(callArgs[0]).toEqual({ frameData: 'original' });
+      expect(callArgs[2]).toBe('mission complete✅');
+      expect(callArgs[3]).toBe(true);
+      expect(callArgs[4]).toBeUndefined();
     });
   });
 
@@ -459,97 +460,40 @@ describe('WecomAdapter', () => {
       mockSendMediaMessage.mockReset();
     });
 
-    it('sendMedia image: uploads with correct Buffer + metadata and calls replyMedia', async () => {
+    it('sendMedia image: uploads with correct Buffer + metadata and calls replyMedia (all formats)', async () => {
       mockUploadMedia.mockResolvedValue({
         type: 'image',
         media_id: 'media-img-1',
         created_at: '2025-01-01T00:00:00Z',
       });
 
-      // GIF image (not inlineable — goes through upload path)
-      const gifImage = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x01, 0x02, 0x03, 0x04, 0x05]);
+      const pngImage = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03, 0x04, 0x05]);
 
-      await adapter.sendMedia(msg, { kind: 'image', data: gifImage, fileName: 'photo.gif' });
+      await adapter.sendMedia(msg, { kind: 'image', data: pngImage, fileName: 'chart.png' });
 
       expect(mockUploadMedia).toHaveBeenCalledOnce();
-      expect(mockUploadMedia).toHaveBeenCalledWith(gifImage, { type: 'image', filename: 'photo.gif' });
+      expect(mockUploadMedia).toHaveBeenCalledWith(pngImage, { type: 'image', filename: 'chart.png' });
       expect(mockReplyMedia).toHaveBeenCalledOnce();
       expect(mockReplyMedia).toHaveBeenCalledWith({ frameData: 'incoming-frame' }, 'image', 'media-img-1');
       expect(mockSendMediaMessage).not.toHaveBeenCalled();
     });
 
-    it('sendMedia PNG image: queues for inline delivery (no uploadMedia)', async () => {
-      // PNG magic bytes: 89 50 4E 47 ... and enough data for min 5 bytes
-      const pngImage = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01, 0x02, 0x03, 0x04, 0x05]);
+    it('sendMedia JPEG image: goes through uploadMedia + replyMedia (no inline path)', async () => {
+      mockUploadMedia.mockResolvedValue({
+        type: 'image',
+        media_id: 'media-jpg-1',
+        created_at: '2025-01-01T00:00:00Z',
+      });
 
-      await adapter.sendMedia(msg, { kind: 'image', data: pngImage, fileName: 'chart.png' });
-
-      expect(mockUploadMedia).not.toHaveBeenCalled();
-      expect(mockReplyMedia).not.toHaveBeenCalled();
-
-      // Verify pending queue via clearStatus
-      mockReplyStream.mockClear();
-      await adapter.typing(msg);
-      mockReplyStream.mockClear();
-      await adapter.clearStatus(msg, 's');
-
-      expect(mockReplyStream).toHaveBeenCalled();
-      const call0 = mockReplyStream.mock.calls[0];
-      expect(call0[2]).toBe('mission complete✅');
-      expect(call0[3]).toBe(true);
-      // msgItem should be an array with 1 image item containing base64 + md5
-      const msgItem = call0[4];
-      expect(Array.isArray(msgItem)).toBe(true);
-      expect(msgItem).toHaveLength(1);
-      expect(msgItem[0].msgtype).toBe('image');
-      expect(typeof msgItem[0].image.base64).toBe('string');
-      expect(typeof msgItem[0].image.md5).toBe('string');
-      expect(msgItem[0].image.md5).toHaveLength(32);
-
-      // Queue should be cleared after clearStatus
-      expect((adapter as any).pendingStreamImages).toEqual([]);
-    });
-
-    it('sendMedia JPEG image: queues for inline delivery (no uploadMedia)', async () => {
-      // JPEG magic bytes: FF D8 FF
       const jpgImage = Buffer.from([0xff, 0xd8, 0xff, 0x01, 0x02]);
 
       await adapter.sendMedia(msg, { kind: 'image', data: jpgImage, fileName: 'photo.jpg' });
 
-      expect(mockUploadMedia).not.toHaveBeenCalled();
-      expect(mockReplyMedia).not.toHaveBeenCalled();
-
-      mockReplyStream.mockClear();
-      await adapter.typing(msg);
-      mockReplyStream.mockClear();
-      await adapter.clearStatus(msg, 's');
-
-      const msgItem = mockReplyStream.mock.calls[0][4];
-      expect(Array.isArray(msgItem)).toBe(true);
-      expect(msgItem).toHaveLength(1);
-      expect(msgItem[0].msgtype).toBe('image');
-    });
-
-    it('sendMedia with multiple inline images: all accumulated in clearStatus msgItem', async () => {
-      const png1 = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x01]);
-      const jpg1 = Buffer.from([0xff, 0xd8, 0xff, 0x01, 0x02]);
-
-      await adapter.sendMedia(msg, { kind: 'image', data: png1, fileName: 'a.png' });
-      await adapter.sendMedia(msg, { kind: 'image', data: jpg1, fileName: 'b.jpg' });
-
-      expect(mockUploadMedia).not.toHaveBeenCalled();
-
-      mockReplyStream.mockClear();
-      await adapter.typing(msg);
-      mockReplyStream.mockClear();
-      await adapter.clearStatus(msg, 's');
-
-      const msgItem = mockReplyStream.mock.calls[0][4];
-      expect(Array.isArray(msgItem)).toBe(true);
-      expect(msgItem).toHaveLength(2);
-      expect(msgItem[0].msgtype).toBe('image');
-      expect(msgItem[1].msgtype).toBe('image');
-      expect(msgItem[0].image.md5).not.toBe(msgItem[1].image.md5);
+      expect(mockUploadMedia).toHaveBeenCalledOnce();
+      expect(mockUploadMedia).toHaveBeenCalledWith(jpgImage, { type: 'image', filename: 'photo.jpg' });
+      expect(mockReplyMedia).toHaveBeenCalledOnce();
+      expect(mockReplyMedia).toHaveBeenCalledWith({ frameData: 'incoming-frame' }, 'image', 'media-jpg-1');
+      expect(mockSendMediaMessage).not.toHaveBeenCalled();
     });
 
     it('sendMedia file: uploads with correct Buffer + metadata and calls replyMedia', async () => {

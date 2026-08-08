@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type { ChannelAdapter, ChannelMessage, OutboundMedia, ReplyOptions } from '../channel.js';
 import { importPeer } from '../peer-require.js';
 import type { WecomChannelConfig } from '../workspace.js';
@@ -17,9 +16,6 @@ export class WecomAdapter implements ChannelAdapter {
   private activeStreamId: string | null = null;
   private activeStreamFrame: any = null;
   private activeStreamTimer: ReturnType<typeof setTimeout> | null = null;
-  private accumulatedText = '';
-  /** Images queued for inline delivery with the next finish=true stream frame. */
-  private pendingStreamImages: Array<{ base64: string; md5: string }> = [];
 
   constructor(config: WecomChannelConfig) {
     this.config = config;
@@ -177,25 +173,12 @@ export class WecomAdapter implements ChannelAdapter {
       this.activeStreamTimer = null;
     }
     if (this.activeStreamId && this.activeStreamFrame && this.wsClient) {
-      const images = this.pendingStreamImages;
-      this.pendingStreamImages = [];
-      if (images.length > 0) {
-        const msgItem = images.map((img) => ({
-          msgtype: 'image' as const,
-          image: { base64: img.base64, md5: img.md5 },
-        }));
-        this.wsClient
-          .replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete✅', true, msgItem)
-          .catch(() => {});
-      } else {
-        this.wsClient
-          .replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete✅', true)
-          .catch(() => {});
-      }
+      this.wsClient
+        .replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete✅', true)
+        .catch(() => {});
     }
     this.activeStreamId = null;
     this.activeStreamFrame = null;
-    this.accumulatedText = '';
   }
 
   async typing(msg: ChannelMessage): Promise<void> {
@@ -206,7 +189,6 @@ export class WecomAdapter implements ChannelAdapter {
     if (!this.activeStreamId) {
       this.activeStreamId = `reply-${Date.now()}`;
       this.activeStreamFrame = msg.raw;
-      this.accumulatedText = '';
       this.wsClient.replyStream(msg.raw, this.activeStreamId, '', false).catch(() => {});
     }
   }
@@ -231,21 +213,6 @@ export class WecomAdapter implements ChannelAdapter {
       throw new Error(
         `Media too large: ${kindLabel} is ${(media.data.length / (1024 * 1024)).toFixed(1)}MB, maximum is ${maxMB}MB`,
       );
-    }
-
-    // Inline images: PNG/JPG ≤ 10MB are delivered with the stream finish frame
-    // so they render BEFORE "mission complete" in the WeCom UI.
-    if (media.kind === 'image') {
-      const isPng =
-        media.data[0] === 0x89 && media.data[1] === 0x50 && media.data[2] === 0x4e && media.data[3] === 0x47;
-      const isJpg = media.data[0] === 0xff && media.data[1] === 0xd8 && media.data[2] === 0xff;
-      if (isPng || isJpg) {
-        this.pendingStreamImages.push({
-          base64: media.data.toString('base64'),
-          md5: createHash('md5').update(media.data).digest('hex'),
-        });
-        return;
-      }
     }
 
     const filename = media.fileName ?? (media.kind === 'image' ? 'image.png' : 'attachment.bin');
