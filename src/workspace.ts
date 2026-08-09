@@ -146,7 +146,7 @@ export interface CodexConfig {
 }
 
 export interface ProviderConfig {
-  /** API base URL (e.g. "https://api.minimax.chat/v1") */
+  /** API base URL (e.g. "https://api.minimax.io/v1") */
   baseUrl?: string;
   /** API key (supports ${ENV_VAR} placeholders) */
   apiKey?: string;

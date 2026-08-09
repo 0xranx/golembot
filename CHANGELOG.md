@@ -1,3 +1,10 @@
+## [0.48.4](https://github.com/0xranx/golembot/compare/v0.48.3...v0.48.4) (2026-08-04)
+
+
+### Bug Fixes
+
+* **provider:** refresh MiniMax preset to MiniMax-M3/M2.7 and current endpoints ([41920f9](https://github.com/0xranx/golembot/commit/41920f92dbcc028389944ddd218b12743f7c3519))
+
 ## [0.48.3](https://github.com/0xranx/golembot/compare/v0.48.2...v0.48.3) (2026-07-26)
 
 
