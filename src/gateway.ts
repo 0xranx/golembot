@@ -299,6 +299,8 @@ export function buildGroupPrompt(
   peers?: PeerBot[],
   /** When true, inject the turn-end contract so the agent signals unfinished work with [CONTINUE]. */
   injectContinue = false,
+  /** When true (default), inject the media protocol hint so agents know how to send images/files. */
+  mediaHintSupported = true,
 ): string {
   const parts: string[] = [];
 
@@ -306,9 +308,12 @@ export function buildGroupPrompt(
     parts.push(TURN_END_CONTRACT);
   }
 
-  // Always inject media protocol hint into group prompts so agents remember
-  // how to send images/files even when the prompt is large and dilutes skill guidance.
-  parts.push(MEDIA_PROTOCOL_HINT);
+  // Inject media protocol hint only when the channel adapter supports sendMedia.
+  // Otherwise, agents on non-sendMedia channels receive a visible degradation
+  // notice in processMedia instead.
+  if (mediaHintSupported) {
+    parts.push(MEDIA_PROTOCOL_HINT);
+  }
 
   if (injectPass) {
     const base =
@@ -585,11 +590,13 @@ export async function handleMessage(
       othersAddressed,
       peers,
       relayEnabled,
+      !!adapter.sendMedia,
     );
   } else {
     sessionKey = buildSessionKey(msg);
     const dmParts = [`[System: This is a private 1-on-1 conversation with ${senderLabel}.]`];
     if (relayEnabled) dmParts.push(TURN_END_CONTRACT);
+    if (adapter.sendMedia) dmParts.push(MEDIA_PROTOCOL_HINT);
     dmParts.push(msg.text);
     fullText = dmParts.join('\n');
   }
@@ -724,6 +731,8 @@ export async function handleMessage(
         }
 
         if (!adapter.sendMedia) {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 当前渠道不支持发送${label}，已忽略`);
           log(verbose, `[${channelType}] adapter lacks sendMedia, skipping ${marker.kind} ${marker.path}`);
           continue;
         }
