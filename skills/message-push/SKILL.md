@@ -9,6 +9,8 @@ You can send messages to IM channels proactively -- to groups or individual user
 
 ## Recognizing Push Intent
 
+Note: if the user asks you to send a FILE or IMAGE (e.g. a generated document, chart, photo), do NOT use this skill — instead save to `temp_file/` and emit `[SEND_IMAGE: ...]` / `[SEND_FILE: ...]` markers (see the im-adapter skill). This skill only sends TEXT messages.
+
 Watch for phrases like:
 - "send this to the ops group"
 - "tell Alice in DM that..."
