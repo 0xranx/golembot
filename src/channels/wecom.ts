@@ -169,16 +169,28 @@ export class WecomAdapter implements ChannelAdapter {
     return `silent-${Date.now()}`;
   }
 
-  async clearStatus(_msg: ChannelMessage, _statusId: string): Promise<void> {
-    const state = this.streams.get(_msg.chatId);
+  async updateStatus(msg: ChannelMessage, _statusId: string, text: string): Promise<void> {
+    const state = this.streams.get(msg.chatId);
     if (!state) return;
     if (state.timer) {
       clearTimeout(state.timer);
     }
     if (this.wsClient) {
-      this.wsClient.replyStream(state.frame, state.streamId, 'mission complete \u2705', true).catch(() => {});
+      this.wsClient.replyStream(state.frame, state.streamId, text, true).catch(() => {});
     }
-    this.streams.delete(_msg.chatId);
+    this.streams.delete(msg.chatId);
+  }
+
+  async clearStatus(msg: ChannelMessage, _statusId: string): Promise<void> {
+    const state = this.streams.get(msg.chatId);
+    if (!state) return;
+    if (state.timer) {
+      clearTimeout(state.timer);
+    }
+    if (this.wsClient) {
+      this.wsClient.replyStream(state.frame, state.streamId, '', true).catch(() => {});
+    }
+    this.streams.delete(msg.chatId);
   }
 
   async typing(msg: ChannelMessage): Promise<void> {
