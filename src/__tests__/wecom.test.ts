@@ -328,6 +328,99 @@ describe('WecomAdapter', () => {
     });
   });
 
+  describe('per-chatId stream isolation', () => {
+    it('typing creates independent streams for different chatIds', async () => {
+      const msgA: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uA',
+        chatId: 'chat-A',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'A' },
+      };
+      const msgB: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uB',
+        chatId: 'chat-B',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'B' },
+      };
+
+      await adapter.typing(msgA);
+      await adapter.typing(msgB);
+
+      expect(mockReplyStream).toHaveBeenCalledTimes(2);
+      const [frameA, streamIdA] = mockReplyStream.mock.calls[0];
+      const [frameB, streamIdB] = mockReplyStream.mock.calls[1];
+      expect(frameA).toEqual({ frameData: 'A' });
+      expect(frameB).toEqual({ frameData: 'B' });
+      expect(streamIdA).toMatch(/^reply-\d+$/);
+      expect(streamIdB).toMatch(/^reply-\d+$/);
+    });
+
+    it('clearStatus only closes the stream for its own chatId', async () => {
+      const msgA: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uA',
+        chatId: 'chat-A',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'A' },
+      };
+      const msgB: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uB',
+        chatId: 'chat-B',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'B' },
+      };
+
+      await adapter.typing(msgA);
+      await adapter.typing(msgB);
+      mockReplyStream.mockClear();
+
+      await adapter.clearStatus(msgA, 'status-A');
+
+      // Should only close A's stream, not B's
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
+      const [closedFrame] = mockReplyStream.mock.calls[0];
+      expect(closedFrame).toEqual({ frameData: 'A' });
+    });
+
+    it('reply in one chatId does not close another chatId stream', async () => {
+      const msgA: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uA',
+        chatId: 'chat-A',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'A' },
+      };
+      const msgB: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uB',
+        chatId: 'chat-B',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'B' },
+      };
+
+      await adapter.typing(msgA);
+      mockReplyStream.mockClear();
+
+      await adapter.reply(msgB, 'Reply from B');
+
+      // Should send B's reply directly (no stream for B to close)
+      // Should NOT touch A's stream
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
+      const [frame, , text] = mockReplyStream.mock.calls[0];
+      expect(frame).toEqual({ frameData: 'B' });
+      expect(text).toBe('Reply from B');
+    });
+  });
+
   describe('getGroupMembers', () => {
     it('returns empty map for unknown chat', async () => {
       const members = await adapter.getGroupMembers('no-such-chat');

@@ -2,6 +2,12 @@ import type { ChannelAdapter, ChannelMessage, OutboundMedia, ReplyOptions } from
 import { importPeer } from '../peer-require.js';
 import type { WecomChannelConfig } from '../workspace.js';
 
+interface StreamState {
+  streamId: string;
+  frame: any;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
 export class WecomAdapter implements ChannelAdapter {
   readonly name = 'wecom';
   readonly maxMessageLength = 2048;
@@ -13,9 +19,7 @@ export class WecomAdapter implements ChannelAdapter {
   private groupMemberCache = new Map<string, Map<string, string>>();
   private static readonly MEMBER_CACHE_TTL = 10 * 60 * 1000;
   private groupMemberCacheTime = new Map<string, number>();
-  private activeStreamId: string | null = null;
-  private activeStreamFrame: any = null;
-  private activeStreamTimer: ReturnType<typeof setTimeout> | null = null;
+  private streams = new Map<string, StreamState>();
 
   constructor(config: WecomChannelConfig) {
     this.config = config;
@@ -135,30 +139,28 @@ export class WecomAdapter implements ChannelAdapter {
       }
     }
 
-    // Close current stream and send reply text
-    if (this.activeStreamId && this.activeStreamFrame) {
-      if (this.activeStreamFrame !== frame) {
+    const state = this.streams.get(msg.chatId);
+    if (state) {
+      if (state.frame !== frame) {
         // Cross-conversation (group<->dm): silently close old stream, then process new message
-        this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, '', true).catch(() => {});
-        this.activeStreamId = null;
-        this.activeStreamFrame = null;
-        // Falls through to else branch below to create new stream
+        this.wsClient.replyStream(state.frame, state.streamId, '', true).catch(() => {});
+        this.streams.delete(msg.chatId);
+        // Falls through to no-state branch below to send directly
       } else {
-        this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, processedText, true).catch(() => {});
+        this.wsClient.replyStream(state.frame, state.streamId, processedText, true).catch(() => {});
         // Immediately open new empty stream (WeCom native loading UI)
-        this.activeStreamId = `reply-${Date.now()}`;
-        this.activeStreamFrame = frame;
-        this.wsClient.replyStream(frame, this.activeStreamId, '', false).catch(() => {});
+        const newStreamId = `reply-${Date.now()}`;
+        this.streams.set(msg.chatId, { streamId: newStreamId, frame, timer: null });
+        this.wsClient.replyStream(frame, newStreamId, '', false).catch(() => {});
       }
     }
-    if (!this.activeStreamId) {
+    if (!this.streams.has(msg.chatId)) {
       // No previous stream (slash command etc.), send directly without opening new loading stream
       const streamId = `reply-${Date.now()}`;
       this.wsClient.replyStream(frame, streamId, processedText, true).catch(() => {});
     }
-    if (this.activeStreamTimer) {
-      clearTimeout(this.activeStreamTimer);
-      this.activeStreamTimer = null;
+    if (state?.timer) {
+      clearTimeout(state.timer);
     }
   }
 
@@ -168,17 +170,15 @@ export class WecomAdapter implements ChannelAdapter {
   }
 
   async clearStatus(_msg: ChannelMessage, _statusId: string): Promise<void> {
-    if (this.activeStreamTimer) {
-      clearTimeout(this.activeStreamTimer);
-      this.activeStreamTimer = null;
+    const state = this.streams.get(_msg.chatId);
+    if (!state) return;
+    if (state.timer) {
+      clearTimeout(state.timer);
     }
-    if (this.activeStreamId && this.activeStreamFrame && this.wsClient) {
-      this.wsClient
-        .replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete \u2705', true)
-        .catch(() => {});
+    if (this.wsClient) {
+      this.wsClient.replyStream(state.frame, state.streamId, 'mission complete \u2705', true).catch(() => {});
     }
-    this.activeStreamId = null;
-    this.activeStreamFrame = null;
+    this.streams.delete(_msg.chatId);
   }
 
   async typing(msg: ChannelMessage): Promise<void> {
@@ -186,10 +186,11 @@ export class WecomAdapter implements ChannelAdapter {
     try {
       await this.wsClient.sendTyping?.(msg.chatId);
     } catch {}
-    if (!this.activeStreamId) {
-      this.activeStreamId = `reply-${Date.now()}`;
-      this.activeStreamFrame = msg.raw;
-      this.wsClient.replyStream(msg.raw, this.activeStreamId, '', false).catch(() => {});
+    const state = this.streams.get(msg.chatId);
+    if (!state) {
+      const streamId = `reply-${Date.now()}`;
+      this.streams.set(msg.chatId, { streamId, frame: msg.raw, timer: null });
+      this.wsClient.replyStream(msg.raw, streamId, '', false).catch(() => {});
     }
   }
 
