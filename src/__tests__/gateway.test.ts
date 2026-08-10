@@ -400,6 +400,26 @@ describe('group chat helpers - buildGroupPrompt', () => {
     expect(result).not.toContain('Focus on your own domain expertise');
   });
 
+  it('includes MEDIA_PROTOCOL_HINT when mediaHintSupported is true (default)', () => {
+    const result = buildGroupPrompt([], 'alice', 'send me a chart', false, 'slack:C123', '');
+    expect(result).toContain('[SEND_IMAGE:');
+    expect(result).toContain('[SEND_FILE:');
+    expect(result).toContain('Do NOT use the message-push');
+    // Still includes other required content
+    expect(result).toContain('[Group: slack:C123');
+    expect(result).toContain('[alice] send me a chart');
+  });
+
+  it('excludes MEDIA_PROTOCOL_HINT when mediaHintSupported is false', () => {
+    const result = buildGroupPrompt([], 'alice', 'hello', false, 'slack:C123', '', undefined, undefined, false, false);
+    expect(result).not.toContain('[SEND_IMAGE:');
+    expect(result).not.toContain('[SEND_FILE:');
+    expect(result).not.toContain('Do NOT use the message-push');
+    // Still has other required content
+    expect(result).toContain('[Group: slack:C123');
+    expect(result).toContain('[alice] hello');
+  });
+
   it('DM uses per-user session key (buildSessionKey still works)', async () => {
     const { buildSessionKey } = await import('../channel.js');
     const msg: ChannelMessage = {
@@ -672,6 +692,74 @@ describe('DiscordAdapter', () => {
     const { DiscordAdapter } = await import('../channels/discord.js');
     const adapter = new (DiscordAdapter as any)({ botToken: 'fake-token' });
     await expect(adapter.stop()).resolves.toBeUndefined();
+  });
+});
+
+describe('processMedia - degradation notice for non-sendMedia channels', () => {
+  it('sends visible degradation notice when adapter lacks sendMedia', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-sendmedia-'));
+    await mkdir(join(dir, 'temp_file'), { recursive: true });
+    // Create a small dummy file so it passes path/stat checks and reaches the sendMedia check
+    await writeFile(join(dir, 'temp_file', 'test.png'), Buffer.from('fake-png'));
+
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat(_text: string, _opts: { sessionKey: string }) {
+        yield { type: 'text' as const, content: 'Here is a chart\n[SEND_IMAGE: temp_file/test.png]' };
+        yield { type: 'done' as const, durationMs: 1 };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    // Adapter WITHOUT sendMedia
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'group',
+      text: 'send me a chart',
+      mentioned: true,
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+
+      // Assert the degradation notice was sent
+      const allReplies = replies.join('\n');
+      expect(allReplies).toContain('当前渠道不支持发送图片');
+      expect(allReplies).toContain('已忽略');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
   });
 });
 
