@@ -1319,6 +1319,44 @@ describe('ensureOpenCodeConfig', () => {
     const config = JSON.parse(raw);
     expect(config.model).toEqual({ default: 'anthropic/claude-sonnet-4-5' });
   });
+
+  it('does not rewrite opencode.json when only formatting differs (normalized comparison)', async () => {
+    // Compact JSON with the full content ensureOpenCodeConfig would produce
+    const compact = JSON.stringify({
+      permission: { '*': 'allow' },
+      model: 'anthropic/claude-sonnet-4-5',
+      provider: {
+        anthropic: {
+          options: { apiKey: '{env:ANTHROPIC_API_KEY}' },
+          models: { 'claude-sonnet-4-5': {} },
+        },
+      },
+    });
+    const configPath = join(workspace, 'opencode.json');
+    await writeFile(configPath, compact, 'utf-8');
+
+    await ensureOpenCodeConfig(workspace, 'anthropic/claude-sonnet-4-5');
+
+    const raw = await readFile(configPath, 'utf-8');
+    // File must NOT be rewritten — content byte-identical to the compact original
+    expect(raw).toBe(compact);
+  });
+
+  it('rewrites opencode.json when content differs (normalized comparison)', async () => {
+    // File with a different model and no permission — normalized content will differ
+    const configPath = join(workspace, 'opencode.json');
+    await writeFile(configPath, '{}', 'utf-8');
+
+    await ensureOpenCodeConfig(workspace, 'anthropic/claude-sonnet-4-5');
+
+    const raw = await readFile(configPath, 'utf-8');
+    // File was rewritten with the full config
+    expect(raw).not.toBe('{}');
+    const config = JSON.parse(raw);
+    expect(config.permission).toEqual({ '*': 'allow' });
+    expect(config.model).toBe('anthropic/claude-sonnet-4-5');
+    expect(config.provider.anthropic).toBeDefined();
+  });
 });
 
 // ═══════════════════════════════════════════════════════
