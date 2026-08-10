@@ -378,6 +378,18 @@ describe('workspace', () => {
       const content = await readFile(join(dir, 'AGENTS.md'), 'utf-8');
       expect(content).not.toContain('## Persona');
     });
+
+    it('always regenerates AGENTS.md when called again with different skills', async () => {
+      // First call creates AGENTS.md with skillA
+      await generateAgentsMd(dir, [{ name: 'skill-a', path: '/tmp/a', description: 'First skill' }]);
+
+      // Second call with different skills must overwrite the existing file
+      await generateAgentsMd(dir, [{ name: 'skill-b', path: '/tmp/b', description: 'Second skill' }]);
+
+      const content = await readFile(join(dir, 'AGENTS.md'), 'utf-8');
+      expect(content).toContain('- skill-b: Second skill');
+      expect(content).not.toContain('- skill-a: First skill');
+    });
   });
 
   // ── ensureReady ───────────────────────────────────
