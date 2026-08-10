@@ -313,7 +313,7 @@ describe('WecomAdapter', () => {
       raw: { frameData: 'original' },
     };
 
-    it('closes stream with mission complete\u2705 (no image msgItem)', async () => {
+    it('closes stream without hardcoded mission-complete text', async () => {
       await adapter.typing(msg); // opens loading stream
       mockReplyStream.mockClear();
 
@@ -322,9 +322,72 @@ describe('WecomAdapter', () => {
       expect(mockReplyStream).toHaveBeenCalledTimes(1);
       const callArgs = mockReplyStream.mock.calls[0];
       expect(callArgs[0]).toEqual({ frameData: 'original' });
-      expect(callArgs[2]).toBe('mission complete \u2705');
+      expect(callArgs[2]).toBe('');
       expect(callArgs[3]).toBe(true);
       expect(callArgs[4]).toBeUndefined();
+    });
+  });
+
+  describe('updateStatus', () => {
+    const msg: ChannelMessage = {
+      channelType: 'wecom',
+      senderId: 'u1',
+      chatId: 'c1',
+      chatType: 'dm',
+      text: 'hi',
+      raw: { frameData: 'original' },
+    };
+
+    it('sends the provided status text to the correct stream and closes it', async () => {
+      await adapter.typing(msg); // opens loading stream
+      mockReplyStream.mockClear();
+
+      await adapter.updateStatus(msg, 'status-1', '\u26a0\ufe0f Failed');
+
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
+      const callArgs = mockReplyStream.mock.calls[0];
+      expect(callArgs[0]).toEqual({ frameData: 'original' });
+      expect(callArgs[2]).toBe('\u26a0\ufe0f Failed');
+      expect(callArgs[3]).toBe(true);
+    });
+
+    it('no-ops when no stream exists for the chatId', async () => {
+      mockReplyStream.mockClear();
+
+      await adapter.updateStatus(msg, 'status-1', '\u26a0\ufe0f Failed');
+
+      expect(mockReplyStream).not.toHaveBeenCalled();
+    });
+
+    it('for one chatId does not affect another chatId stream', async () => {
+      const msgA: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uA',
+        chatId: 'chat-A',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'A' },
+      };
+      const msgB: ChannelMessage = {
+        channelType: 'wecom',
+        senderId: 'uB',
+        chatId: 'chat-B',
+        chatType: 'dm',
+        text: 'hi',
+        raw: { frameData: 'B' },
+      };
+
+      await adapter.typing(msgA);
+      await adapter.typing(msgB);
+      mockReplyStream.mockClear();
+
+      await adapter.updateStatus(msgA, 'status-A', '\u26a0\ufe0f Failed');
+
+      // Should only close A's stream, not B's
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
+      const [closedFrame, , closedText] = mockReplyStream.mock.calls[0];
+      expect(closedFrame).toEqual({ frameData: 'A' });
+      expect(closedText).toBe('\u26a0\ufe0f Failed');
     });
   });
 
