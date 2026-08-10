@@ -1,4 +1,4 @@
-import type { ChannelAdapter, ChannelMessage, ReplyOptions } from '../channel.js';
+import type { ChannelAdapter, ChannelMessage, OutboundMedia, ReplyOptions } from '../channel.js';
 import { importPeer } from '../peer-require.js';
 import type { WecomChannelConfig } from '../workspace.js';
 
@@ -9,6 +9,13 @@ export class WecomAdapter implements ChannelAdapter {
   private wsClient: any = null;
   private seenMsgIds = new Set<string>();
   private static readonly MAX_SEEN = 500;
+  /** chatId -> (display name -> userid), accumulated from incoming group frames. */
+  private groupMemberCache = new Map<string, Map<string, string>>();
+  private static readonly MEMBER_CACHE_TTL = 10 * 60 * 1000;
+  private groupMemberCacheTime = new Map<string, number>();
+  private activeStreamId: string | null = null;
+  private activeStreamFrame: any = null;
+  private activeStreamTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: WecomChannelConfig) {
     this.config = config;
@@ -72,32 +79,154 @@ export class WecomAdapter implements ChannelAdapter {
     const chatType = body.chattype || body.chatType || body.chat_type;
     const isGroup = chatType === 'group';
     const chatId = body.chatid || body.chatId || body.conversation_id || (!isGroup ? senderId : '');
+    const senderName: string | undefined = body.userName || body.from_name;
+
+    if (isGroup && chatId && senderId && senderName) {
+      let members = this.groupMemberCache.get(chatId);
+      if (!members) {
+        members = new Map();
+        this.groupMemberCache.set(chatId, members);
+      }
+      members.set(senderName, senderId);
+      this.groupMemberCacheTime.set(chatId, Date.now());
+    }
 
     const channelMsg: ChannelMessage = {
       channelType: 'wecom',
       senderId,
-      senderName: body.userName || body.from_name,
+      senderName,
       chatId,
       chatType: isGroup ? 'group' : 'dm',
       text,
       messageId: msgId,
-      mentioned: body.mentioned,
+      mentioned: isGroup ? true : undefined,
       raw: frame,
     };
 
     onMessage(channelMsg);
   }
 
-  async reply(msg: ChannelMessage, text: string, _options?: ReplyOptions): Promise<void> {
+  async getGroupMembers(chatId: string): Promise<Map<string, string>> {
+    // WeCom Smart Bot does not expose a member list API; return the cache
+    // accumulated from incoming group frames in handleFrame.
+    const cached = this.groupMemberCache.get(chatId);
+    if (!cached) return new Map();
+    const ts = this.groupMemberCacheTime.get(chatId) ?? 0;
+    if (Date.now() - ts >= WecomAdapter.MEMBER_CACHE_TTL) {
+      this.groupMemberCache.delete(chatId);
+      this.groupMemberCacheTime.delete(chatId);
+      return new Map();
+    }
+    return cached;
+  }
+
+  async reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void> {
     if (!this.wsClient) return;
     const frame = msg.raw;
-    const streamId = `reply-${Date.now()}`;
-    await this.wsClient.replyStream(frame, streamId, text, true);
+
+    let processedText = text;
+    const mentions = options?.mentions;
+    if (mentions && mentions.length > 0) {
+      for (const m of mentions) {
+        processedText = processedText.replace(
+          new RegExp(`@${m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g'),
+          `<@${m.platformId}>`,
+        );
+      }
+    }
+
+    // Close current stream and send reply text
+    if (this.activeStreamId && this.activeStreamFrame) {
+      if (this.activeStreamFrame !== frame) {
+        // Cross-conversation (group<->dm): silently close old stream, then process new message
+        this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, '', true).catch(() => {});
+        this.activeStreamId = null;
+        this.activeStreamFrame = null;
+        // Falls through to else branch below to create new stream
+      } else {
+        this.wsClient.replyStream(this.activeStreamFrame, this.activeStreamId, processedText, true).catch(() => {});
+        // Immediately open new empty stream (WeCom native loading UI)
+        this.activeStreamId = `reply-${Date.now()}`;
+        this.activeStreamFrame = frame;
+        this.wsClient.replyStream(frame, this.activeStreamId, '', false).catch(() => {});
+      }
+    }
+    if (!this.activeStreamId) {
+      // No previous stream (slash command etc.), send directly without opening new loading stream
+      const streamId = `reply-${Date.now()}`;
+      this.wsClient.replyStream(frame, streamId, processedText, true).catch(() => {});
+    }
+    if (this.activeStreamTimer) {
+      clearTimeout(this.activeStreamTimer);
+      this.activeStreamTimer = null;
+    }
+  }
+
+  async sendStatus(_msg: ChannelMessage, _text: string): Promise<string> {
+    // Don't send visible message (WeCom native loading UI is sufficient), only return status ID to maintain gateway lifecycle
+    return `silent-${Date.now()}`;
+  }
+
+  async clearStatus(_msg: ChannelMessage, _statusId: string): Promise<void> {
+    if (this.activeStreamTimer) {
+      clearTimeout(this.activeStreamTimer);
+      this.activeStreamTimer = null;
+    }
+    if (this.activeStreamId && this.activeStreamFrame && this.wsClient) {
+      this.wsClient
+        .replyStream(this.activeStreamFrame, this.activeStreamId, 'mission complete \u2705', true)
+        .catch(() => {});
+    }
+    this.activeStreamId = null;
+    this.activeStreamFrame = null;
+  }
+
+  async typing(msg: ChannelMessage): Promise<void> {
+    if (!this.wsClient) return;
+    try {
+      await this.wsClient.sendTyping?.(msg.chatId);
+    } catch {}
+    if (!this.activeStreamId) {
+      this.activeStreamId = `reply-${Date.now()}`;
+      this.activeStreamFrame = msg.raw;
+      this.wsClient.replyStream(msg.raw, this.activeStreamId, '', false).catch(() => {});
+    }
   }
 
   async send(chatId: string, text: string): Promise<void> {
     if (!this.wsClient) return;
     await this.wsClient.sendMessage(chatId, { msgtype: 'text', text: { content: text } });
+  }
+
+  async sendMedia(msg: ChannelMessage, media: OutboundMedia): Promise<void> {
+    if (!this.wsClient) return;
+
+    const minSize = 5;
+    if (media.data.length < minSize) {
+      throw new Error(`Media too small: file is ${media.data.length} bytes, minimum is ${minSize} bytes`);
+    }
+
+    const maxSize = media.kind === 'image' ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
+    if (media.data.length > maxSize) {
+      const kindLabel = media.kind === 'image' ? 'image' : 'file';
+      const maxMB = media.kind === 'image' ? 10 : 20;
+      throw new Error(
+        `Media too large: ${kindLabel} is ${(media.data.length / (1024 * 1024)).toFixed(1)}MB, maximum is ${maxMB}MB`,
+      );
+    }
+
+    const filename = media.fileName ?? (media.kind === 'image' ? 'image.png' : 'attachment.bin');
+
+    const upload = await this.wsClient.uploadMedia(media.data, {
+      type: media.kind,
+      filename,
+    });
+
+    if (msg.raw) {
+      await this.wsClient.replyMedia(msg.raw, media.kind, upload.media_id);
+    } else {
+      await this.wsClient.sendMediaMessage(msg.chatId, media.kind, upload.media_id);
+    }
   }
 
   async stop(): Promise<void> {
