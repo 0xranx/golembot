@@ -288,7 +288,7 @@ describe('group chat helpers - buildGroupPrompt', () => {
 
   it('excludes [PASS] instruction when injectPass=false', () => {
     const result = buildGroupPrompt([], 'alice', 'hi', false, 'slack:C123', '');
-    expect(result).not.toContain('[System:');
+    expect(result).not.toContain('[PASS]');
   });
 
   it('formats current message as [senderName] text', () => {
