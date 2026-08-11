@@ -94,7 +94,12 @@ describe('engine abort handling', () => {
       vi.doMock('node:child_process', () => ({ spawn: vi.fn(() => new FakeChild()) }));
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
-        return { ...original, isOnPath: () => true, spawnCommand: vi.fn(() => new FakeChild()) };
+        return {
+          ...original,
+          isOnPath: () => true,
+          resolveOnPath: () => 'opencode',
+          spawnCommand: vi.fn(() => new FakeChild()),
+        };
       });
       const { OpenCodeEngine } = await import('../engines/opencode.js');
       const message = await collectAbortMessage(new OpenCodeEngine(), workspace);

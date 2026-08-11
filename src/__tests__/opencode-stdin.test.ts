@@ -141,12 +141,14 @@ describe('findOpenCodeBin Windows .exe direct path (issue #7)', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
     const child = new StdinRecordingChild();
     const capturedBin: string[] = [];
+    const shimPath = join('C:\\Program Files\\nodejs', 'opencode.ps1');
+    const expectedExe = join('C:\\Program Files\\nodejs', 'node_modules', 'opencode-ai', 'bin', 'opencode.exe');
     try {
       vi.doMock('../engines/shared.js', async (importOriginal) => {
         const original = await importOriginal<typeof import('../engines/shared.js')>();
         return {
           ...original,
-          resolveOnPath: vi.fn(() => 'C:\\Program Files\\nodejs\\opencode.ps1'),
+          resolveOnPath: vi.fn(() => shimPath),
           spawnCommand: vi.fn((bin: string, args: string[]) => {
             capturedBin.push(bin);
             capturedArgs = args;
@@ -162,9 +164,7 @@ describe('findOpenCodeBin Windows .exe direct path (issue #7)', () => {
         const original = await importOriginal<typeof import('node:fs')>();
         return {
           ...original,
-          existsSync: vi.fn(
-            (p: string) => p === 'C:\\Program Files\\nodejs\\node_modules\\opencode-ai\\bin\\opencode.exe',
-          ),
+          existsSync: vi.fn((p: string) => p === expectedExe),
         };
       });
 
@@ -172,7 +172,7 @@ describe('findOpenCodeBin Windows .exe direct path (issue #7)', () => {
       for await (const _evt of OpenCodeEngine.prototype.invoke('test', { workspace: ws, skillPaths: [] })) {
         break;
       }
-      expect(capturedBin[0]).toBe('C:\\Program Files\\nodejs\\node_modules\\opencode-ai\\bin\\opencode.exe');
+      expect(capturedBin[0]).toBe(expectedExe);
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     }
