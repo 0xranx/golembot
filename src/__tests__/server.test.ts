@@ -634,6 +634,51 @@ describe('Golem HTTP Server', () => {
       expect(body.type).toBe('command');
       expect(body.text).toContain('gateway mode');
     });
+
+    it('/cron list works with cronCtx but no runTask (coordinator undefined)', async () => {
+      const assistant = createAssistant({ dir });
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'http-standalone',
+        name: 'standalone-task',
+        schedule: '0 6 * * *',
+        prompt: 'daily',
+        enabled: true,
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+      // No runTask — simulates gateway started without tasks configured (no coordinator)
+      server = createGolemServer(assistant, {}, undefined, dir, () => ({ taskStore, scheduler }));
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+
+      const res = await request(server, 'POST', '/chat', { message: '/cron list' });
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.type).toBe('command');
+      expect(body.text).toContain('standalone-task');
+    });
+
+    it('/cron run shows Not available with cronCtx but no runTask (coordinator undefined)', async () => {
+      const assistant = createAssistant({ dir });
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'http-standalone',
+        name: 'standalone-task',
+        schedule: '0 6 * * *',
+        prompt: 'daily',
+        enabled: true,
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+      server = createGolemServer(assistant, {}, undefined, dir, () => ({ taskStore, scheduler }));
+      await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+
+      const res = await request(server, 'POST', '/chat', { message: '/cron run http-standalone' });
+      expect(res.status).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.type).toBe('command');
+      expect(body.text).toContain('Not available');
+    });
   });
 
   // ── Task REST API ──────────────────────────────────────
@@ -657,6 +702,15 @@ describe('Golem HTTP Server', () => {
       return new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
     }
 
+    function startServerWithCronNoRunTask(token?: string) {
+      const assistant = createAssistant({ dir });
+      taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      const cronCtx: CronContext = { taskStore, scheduler };
+      server = createGolemServer(assistant, { token }, undefined, dir, () => cronCtx);
+      return new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    }
+
     describe('GET /api/tasks', () => {
       it('returns empty array when no tasks', async () => {
         await startServerWithCron();
@@ -669,6 +723,23 @@ describe('Golem HTTP Server', () => {
         await startServer();
         const res = await request(server, 'GET', '/api/tasks');
         expect(res.status).toBe(503);
+      });
+
+      it('lists tasks when cron context has no runTask (coordinator undefined)', async () => {
+        await startServerWithCronNoRunTask();
+        await taskStore.addTask({
+          id: 'no-run',
+          name: 'standalone',
+          schedule: '0 6 * * *',
+          prompt: 'daily',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00Z',
+        });
+        const res = await request(server, 'GET', '/api/tasks');
+        expect(res.status).toBe(200);
+        const tasks = JSON.parse(res.body);
+        expect(tasks).toHaveLength(1);
+        expect(tasks[0].name).toBe('standalone');
       });
     });
 
@@ -780,6 +851,20 @@ describe('Golem HTTP Server', () => {
         await startServerWithCron();
         const res = await request(server, 'POST', '/api/tasks/no-such/run');
         expect(res.status).toBe(404);
+      });
+
+      it('returns 503 when cron context has no runTask (coordinator undefined)', async () => {
+        await startServerWithCronNoRunTask();
+        await taskStore.addTask({
+          id: 'no-run',
+          name: 'standalone',
+          schedule: '0 6 * * *',
+          prompt: 'daily',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00Z',
+        });
+        const res = await request(server, 'POST', '/api/tasks/no-run/run');
+        expect(res.status).toBe(503);
       });
     });
   });

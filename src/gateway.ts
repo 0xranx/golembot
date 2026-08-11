@@ -1187,7 +1187,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
     serverOpts,
     dashboardCtx,
     dir,
-    () => (coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined),
+    () => ({ taskStore, scheduler, runTask: coordinator ? (id) => coordinator!.runTask(id) : undefined }),
     () => adapterMap,
   );
 
