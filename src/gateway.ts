@@ -529,10 +529,28 @@ export async function handleMessage(
       scheduler: cronCtx?.scheduler,
       runTask: cronCtx?.runTask,
     };
+
+    // Open the native loading stream immediately so the user sees feedback
+    // while the command executes (not after).
+    const isStop = parsed.name === 'stop';
+    if (adapter.typing && !isStop) {
+      await adapter.typing(msg).catch(() => {});
+    }
+
     const result = await executeCommand(parsed, cmdCtx);
     if (result) {
       log(verbose, `[${channelType}] slash command: ${parsed.name}`);
-      await adapter.reply(msg, result.text);
+      if (isStop) {
+        // /stop is special: the aborted handler owns the finalText (⏹️ Stopped).
+        await adapter.reply(msg, result.text);
+      } else if (adapter.typing && adapter.clearStatus) {
+        // executeCommand may have been fast — ensure the loading is visible
+        // for at least 200ms before closing with the command output.
+        await new Promise<void>((r) => setTimeout(r, 200));
+        await adapter.clearStatus(msg, '', result.text.trim()).catch(() => {});
+      } else {
+        await adapter.reply(msg, result.text);
+      }
       return;
     }
     // Unknown command — fall through to agent
@@ -682,7 +700,7 @@ export async function handleMessage(
     await adapter.reply(msg, text.trim());
   };
 
-  const finalizeStatusUpdate = async (finalText = '✅ Done'): Promise<void> => {
+  const finalizeStatusUpdate = async (finalText = '✅ Done', isUserAbort = false): Promise<void> => {
     cancelThinkingStatus();
     // Skip only when neither a status message exists nor the adapter has clearStatus.
     // Adapters that support streaming (e.g. WeCom) need clearStatus called even without
@@ -690,9 +708,20 @@ export async function handleMessage(
     if (!statusMessageId && !adapter.clearStatus) return;
     debugEventLog(debugEventsEnabled, `[event-debug] gateway status-final textChars=${finalText.length}`);
     if (adapter.nativeStreaming && adapter.clearStatus) {
-      const currentStatusId = statusMessageId;
-      statusMessageId = undefined;
-      await adapter.clearStatus(msg, currentStatusId ?? '', finalText);
+      if (isUserAbort) {
+        // /stop: close the stream without writing content, let the slash
+        // handler's "Stopped the current task." land first, then send the
+        // ⏹️ Stopped finalText as a separate message.
+        await adapter.clearStatus(msg, statusMessageId ?? '', '').catch(() => {});
+        await new Promise(r => setTimeout(r, 200));
+        await adapter.reply(msg, finalText).catch(() => {});
+      } else {
+        // Normal completion / timeout / generic failure: keep the original
+        // behavior — clearStatus closes the stream with the finalText inline.
+        const currentStatusId = statusMessageId;
+        statusMessageId = undefined;
+        await adapter.clearStatus(msg, currentStatusId ?? '', finalText);
+      }
       statusFinalized = true;
       return;
     }
@@ -997,7 +1026,7 @@ export async function handleMessage(
       const { body, hasContinue } = splitTrailingContinue(mediaStrippedReply);
       const willRelay = hasContinue && mayRelay && !hasError;
       if (fullReply.trim()) {
-        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done');
+        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done', lastErrorMessage === 'Agent invocation stopped by user');
         log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..." (streaming)`);
         trackMetrics({ responsePreview: body.trim().slice(0, 120) });
       }
@@ -1084,7 +1113,7 @@ export async function handleMessage(
           }
           finalStatusText = notice.status;
         }
-        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done');
+        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done', lastErrorMessage === 'Agent invocation stopped by user');
         log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..."`);
         trackMetrics({ responsePreview: body.trim().slice(0, 120) });
       }

@@ -207,15 +207,17 @@ export class WecomAdapter implements ChannelAdapter {
 
   async typing(msg: ChannelMessage): Promise<void> {
     if (!this.wsClient) return;
-    try {
-      await this.wsClient.sendTyping?.(msg.chatId);
-    } catch {}
+    // Open the loading stream FIRST so the user sees the loading UI immediately.
+    // sendTyping is optional and may be slow/unsupported — don't block the stream on it.
     const state = this.streams.get(msg.chatId);
     if (!state) {
       const streamId = `reply-${Date.now()}-${++this.streamSeq}`;
       this.streams.set(msg.chatId, { streamId, frame: msg.raw, timer: null });
       this.wsClient.replyStream(msg.raw, streamId, '', false).catch(() => {});
     }
+    try {
+      await this.wsClient.sendTyping?.(msg.chatId);
+    } catch {}
   }
 
   async send(chatId: string, text: string): Promise<void> {
