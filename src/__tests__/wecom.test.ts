@@ -313,7 +313,7 @@ describe('WecomAdapter', () => {
       raw: { frameData: 'original' },
     };
 
-    it('closes stream without hardcoded mission-complete text', async () => {
+    it('closes stream with default ✅ Done marker', async () => {
       await adapter.typing(msg); // opens loading stream
       mockReplyStream.mockClear();
 
@@ -322,9 +322,48 @@ describe('WecomAdapter', () => {
       expect(mockReplyStream).toHaveBeenCalledTimes(1);
       const callArgs = mockReplyStream.mock.calls[0];
       expect(callArgs[0]).toEqual({ frameData: 'original' });
-      expect(callArgs[2]).toBe('');
+      expect(callArgs[2]).toBe('✅ Done');
       expect(callArgs[3]).toBe(true);
       expect(callArgs[4]).toBeUndefined();
+    });
+
+    it('closes stream with custom finalText', async () => {
+      await adapter.typing(msg); // opens loading stream
+      mockReplyStream.mockClear();
+
+      await adapter.clearStatus(msg, 'status-1', '⚠️ Failed');
+
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
+      const callArgs = mockReplyStream.mock.calls[0];
+      expect(callArgs[2]).toBe('⚠️ Failed');
+      expect(callArgs[3]).toBe(true);
+    });
+
+    it('falls back to replyStream when no stream exists (final status not lost)', async () => {
+      mockReplyStream.mockClear();
+      mockSendMessage.mockClear();
+
+      // No typing()/reply() called first → no stream state for chatId.
+      // WeCom's aibot_send_msg rejects msgtype:'text' (errcode 40008), so the
+      // final status is delivered via replyStream on the incoming frame instead.
+      await adapter.clearStatus(msg, 'status-1', '⏹️ Stopped');
+
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(mockReplyStream).toHaveBeenCalledTimes(1);
+      const callArgs = mockReplyStream.mock.calls[0];
+      expect(callArgs[0]).toEqual({ frameData: 'original' });
+      expect(callArgs[2]).toBe('⏹️ Stopped');
+      expect(callArgs[3]).toBe(true);
+    });
+
+    it('does not send when no stream exists and finalText is the default ✅ Done', async () => {
+      mockReplyStream.mockClear();
+      mockSendMessage.mockClear();
+
+      await adapter.clearStatus(msg, 'status-1');
+
+      expect(mockReplyStream).not.toHaveBeenCalled();
+      expect(mockSendMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -338,17 +377,13 @@ describe('WecomAdapter', () => {
       raw: { frameData: 'original' },
     };
 
-    it('sends the provided status text to the correct stream and closes it', async () => {
+    it('is a no-op and does not close the stream', async () => {
       await adapter.typing(msg); // opens loading stream
       mockReplyStream.mockClear();
 
       await adapter.updateStatus(msg, 'status-1', '\u26a0\ufe0f Failed');
 
-      expect(mockReplyStream).toHaveBeenCalledTimes(1);
-      const callArgs = mockReplyStream.mock.calls[0];
-      expect(callArgs[0]).toEqual({ frameData: 'original' });
-      expect(callArgs[2]).toBe('\u26a0\ufe0f Failed');
-      expect(callArgs[3]).toBe(true);
+      expect(mockReplyStream).not.toHaveBeenCalled();
     });
 
     it('no-ops when no stream exists for the chatId', async () => {
@@ -359,7 +394,7 @@ describe('WecomAdapter', () => {
       expect(mockReplyStream).not.toHaveBeenCalled();
     });
 
-    it('for one chatId does not affect another chatId stream', async () => {
+    it('does not affect streams for other chatIds', async () => {
       const msgA: ChannelMessage = {
         channelType: 'wecom',
         senderId: 'uA',
@@ -383,11 +418,25 @@ describe('WecomAdapter', () => {
 
       await adapter.updateStatus(msgA, 'status-A', '\u26a0\ufe0f Failed');
 
-      // Should only close A's stream, not B's
-      expect(mockReplyStream).toHaveBeenCalledTimes(1);
-      const [closedFrame, , closedText] = mockReplyStream.mock.calls[0];
-      expect(closedFrame).toEqual({ frameData: 'A' });
-      expect(closedText).toBe('\u26a0\ufe0f Failed');
+      // Should not call replyStream at all (no-op)
+      expect(mockReplyStream).not.toHaveBeenCalled();
+    });
+
+    it('after no-op updateStatus, reply() can still close the stream with real content', async () => {
+      await adapter.typing(msg); // opens loading stream
+      mockReplyStream.mockClear();
+
+      await adapter.updateStatus(msg, 'status-1', '\u26a0\ufe0f Failed'); // no-op
+      await adapter.reply(msg, 'Real answer');
+
+      // reply() closes the typing stream with real content and opens a new one
+      expect(mockReplyStream).toHaveBeenCalledTimes(2);
+      const [, , text0, isFinal0] = mockReplyStream.mock.calls[0];
+      const [, , text1, isFinal1] = mockReplyStream.mock.calls[1];
+      expect(text0).toBe('Real answer');
+      expect(isFinal0).toBe(true);
+      expect(text1).toBe('');
+      expect(isFinal1).toBe(false);
     });
   });
 
@@ -418,8 +467,9 @@ describe('WecomAdapter', () => {
       const [frameB, streamIdB] = mockReplyStream.mock.calls[1];
       expect(frameA).toEqual({ frameData: 'A' });
       expect(frameB).toEqual({ frameData: 'B' });
-      expect(streamIdA).toMatch(/^reply-\d+$/);
-      expect(streamIdB).toMatch(/^reply-\d+$/);
+      expect(streamIdA).toMatch(/^reply-\d+-\d+$/);
+      expect(streamIdB).toMatch(/^reply-\d+-\d+$/);
+      expect(streamIdA).not.toBe(streamIdB);
     });
 
     it('clearStatus only closes the stream for its own chatId', async () => {

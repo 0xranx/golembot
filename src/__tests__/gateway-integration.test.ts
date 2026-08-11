@@ -952,7 +952,8 @@ describe('handleMessage — full gateway pipeline', () => {
       const msg = makeDmMsg();
       await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
       expect(adapter.replies).toHaveLength(1);
-      expect(adapter.replies[0].text).toContain('error occurred');
+      // Generic engine errors surface the agent's actual error output.
+      expect(adapter.replies[0].text).toContain('engine blew up');
     });
 
     it('exception in assistant.chat → sends fallback error reply', async () => {
@@ -1375,7 +1376,8 @@ describe('handleMessage — full gateway pipeline', () => {
       const config = makeConfig({ streaming: { mode: 'streaming' } } as any);
       await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
       expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
-      expect(adapter.replies.some((r) => r.text.includes('error occurred'))).toBe(true);
+      // Generic engine errors surface the agent's actual error output.
+      expect(adapter.replies.some((r) => r.text.includes('engine crashed'))).toBe(true);
     });
 
     it('streaming mode sends an interruption notice after a partial timeout', async () => {
@@ -2113,6 +2115,51 @@ describe('auto-continue relay ([CONTINUE] sentinel)', () => {
       const adapter = makeMockAdapter();
       await handleMessage(makeDmMsg(), makeConfig(), obj, adapter, 'slack', false, dir);
       expect(obj.callCount).toBe(1);
+    });
+
+    it('closes leftover typing streams for nativeStreaming adapters at task end', async () => {
+      // Regression: a /stop landing between 4s typing ticks leaves an open
+      // loading stream open (WeCom). The finally block must issue a silent
+      // clearStatus(msg, '', '') to close it.
+      const clearCalls: Array<{ statusId: string; finalText: string }> = [];
+      const adapter = makeMockAdapter() as MockAdapter & {
+        nativeStreaming: boolean;
+        typing: (m: ChannelMessage) => Promise<void>;
+        clearStatus: (m: ChannelMessage, statusId: string, finalText?: string) => Promise<void>;
+      };
+      adapter.nativeStreaming = true;
+      adapter.typing = vi.fn(async () => {});
+      adapter.clearStatus = vi.fn(async (_m, statusId, finalText = '') => {
+        clearCalls.push({ statusId, finalText });
+      });
+
+      const obj: MockAssistant = {
+        ...mockAssistantStubs,
+        callCount: 0,
+        lastSessionKey: undefined,
+        lastPrompt: undefined,
+        async *chat(message: string, opts: { sessionKey?: string } = {}) {
+          const round = obj.callCount++;
+          obj.lastPrompt = message;
+          obj.lastSessionKey = opts.sessionKey;
+          if (round === 0) {
+            // Round 1 signals CONTINUE → relay sets the 4s typing interval.
+            yield { type: 'text' as const, content: 'step 1\n[CONTINUE]' };
+            yield { type: 'done' as const, sessionId: 'mock-sid' };
+          } else {
+            // Round 2 (relay) aborts (simulates /stop) → relay breaks → finally runs.
+            yield { type: 'error' as const, message: 'Agent invocation stopped by user' };
+          }
+        },
+      };
+
+      await handleMessage(makeDmMsg(), makeConfig(), obj, adapter, 'slack', false, dir);
+
+      // The relay must have happened (two chat rounds) and started the typing interval.
+      expect(obj.callCount).toBe(2);
+      expect(adapter.typing).toHaveBeenCalled();
+      // The finally block must have issued a silent cleanup call (empty finalText).
+      expect(clearCalls.some((c) => c.finalText === '')).toBe(true);
     });
 
     it('is interrupted when a newer message arrives for the same session', async () => {

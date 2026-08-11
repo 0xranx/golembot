@@ -5,6 +5,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamEvent } from '../engine.js';
 
+// Expose findOpenCodeBin for testing via a hidden export in the module
+// (we will verify behaviour indirectly by mocking resolveOnPath)
+
 /**
  * Issue #43 — the prompt must be piped to opencode via stdin, never passed as
  * an argv element: multi-line prompts containing [System:] / [CONTINUE]
@@ -113,5 +116,105 @@ describe('OpenCodeEngine prompt delivery (issue #43)', () => {
 
     expect(events.some((e) => e.type === 'text' && e.content === 'ok')).toBe(true);
     expect(events.some((e) => e.type === 'done')).toBe(true);
+  });
+});
+
+describe('findOpenCodeBin Windows .exe direct path (issue #7)', () => {
+  let ws: string;
+  let capturedArgs: string[];
+
+  beforeEach(async () => {
+    vi.resetModules();
+    ws = await mkdtemp(join(tmpdir(), 'golem-oc-exe-'));
+    capturedArgs = [];
+  });
+
+  afterEach(async () => {
+    vi.doUnmock('../engines/shared.js');
+    vi.doUnmock('node:fs');
+    vi.restoreAllMocks();
+    await rm(ws, { recursive: true, force: true });
+  });
+
+  it('returns the direct .exe path when npm global layout is detected', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const child = new StdinRecordingChild();
+    const capturedBin: string[] = [];
+    try {
+      vi.doMock('../engines/shared.js', async (importOriginal) => {
+        const original = await importOriginal<typeof import('../engines/shared.js')>();
+        return {
+          ...original,
+          resolveOnPath: vi.fn(() => 'C:\\Program Files\\nodejs\\opencode.ps1'),
+          spawnCommand: vi.fn((bin: string, args: string[]) => {
+            capturedBin.push(bin);
+            capturedArgs = args;
+            setTimeout(() => {
+              child.stdout.emit('data', Buffer.from(`\n`));
+              child.emit('close', 0);
+            }, 10);
+            return child;
+          }),
+        };
+      });
+      vi.doMock('node:fs', async (importOriginal) => {
+        const original = await importOriginal<typeof import('node:fs')>();
+        return {
+          ...original,
+          existsSync: vi.fn(
+            (p: string) => p === 'C:\\Program Files\\nodejs\\node_modules\\opencode-ai\\bin\\opencode.exe',
+          ),
+        };
+      });
+
+      const { OpenCodeEngine } = await import('../engines/opencode.js');
+      for await (const _evt of OpenCodeEngine.prototype.invoke('test', { workspace: ws, skillPaths: [] })) {
+        break;
+      }
+      expect(capturedBin[0]).toBe('C:\\Program Files\\nodejs\\node_modules\\opencode-ai\\bin\\opencode.exe');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
+  });
+
+  it('falls back to "opencode" when .exe is absent', async () => {
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const child = new StdinRecordingChild();
+    const capturedBin: string[] = [];
+    try {
+      vi.doMock('../engines/shared.js', async (importOriginal) => {
+        const original = await importOriginal<typeof import('../engines/shared.js')>();
+        return {
+          ...original,
+          resolveOnPath: vi.fn(() => 'C:\\Program Files\\nodejs\\opencode.cmd'),
+          spawnCommand: vi.fn((bin: string, args: string[]) => {
+            capturedBin.push(bin);
+            capturedArgs = args;
+            setTimeout(() => {
+              child.stdout.emit('data', Buffer.from(`\n`));
+              child.emit('close', 0);
+            }, 10);
+            return child;
+          }),
+        };
+      });
+      vi.doMock('node:fs', async (importOriginal) => {
+        const original = await importOriginal<typeof import('node:fs')>();
+        return {
+          ...original,
+          existsSync: vi.fn(() => false),
+        };
+      });
+
+      const { OpenCodeEngine } = await import('../engines/opencode.js');
+      for await (const _evt of OpenCodeEngine.prototype.invoke('test', { workspace: ws, skillPaths: [] })) {
+        break;
+      }
+      expect(capturedBin[0]).toBe('opencode');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
   });
 });

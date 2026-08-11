@@ -75,22 +75,34 @@ function summarizeToolCall(name: string, args: string, maxLen = 72): string {
   return `🔧 ${label} ${preview}`;
 }
 
-function buildErrorNotice(errorMessage: string, timeoutSeconds: number): { reply: string; status: string } {
+function buildErrorNotice(
+  errorMessage: string,
+  timeoutSeconds: number,
+  hasPartialOutput: boolean,
+): { reply: string; status: string } {
   if (/stopped by user/i.test(errorMessage)) {
     return {
-      reply: 'The task was stopped before completion. The partial reply above may be incomplete.',
+      reply: hasPartialOutput
+        ? 'The task was stopped before completion. The partial reply above may be incomplete.'
+        : 'The task was stopped before completion.',
       status: '⏹️ Stopped',
     };
   }
   if (/timed out/i.test(errorMessage)) {
     return {
-      reply: `Task timed out after ${timeoutSeconds}s. The partial reply above may be incomplete.`,
+      reply: hasPartialOutput
+        ? `Task timed out after ${timeoutSeconds}s. The partial reply above may be incomplete.`
+        : `Task timed out after ${timeoutSeconds}s.`,
       status: `⚠️ Timed out (${timeoutSeconds}s)`,
     };
   }
+  const detail = errorMessage.trim().replace(/\s+/g, ' ').slice(0, 200);
+  if (detail) {
+    return { reply: detail, status: '⚠️ Failed' };
+  }
   return {
-    reply: 'The reply was interrupted before completion. The partial reply above may be incomplete.',
-    status: '⚠️ Interrupted',
+    reply: 'Sorry, an error occurred while processing your message. Please try again later.',
+    status: '⚠️ Failed',
   };
 }
 
@@ -479,6 +491,7 @@ export async function handleMessage(
     ChannelAdapter,
     | 'reply'
     | 'maxMessageLength'
+    | 'nativeStreaming'
     | 'typing'
     | 'getGroupMembers'
     | 'sendStatus'
@@ -676,6 +689,13 @@ export async function handleMessage(
     // a prior sendStatus, to finalize the open stream.
     if (!statusMessageId && !adapter.clearStatus) return;
     debugEventLog(debugEventsEnabled, `[event-debug] gateway status-final textChars=${finalText.length}`);
+    if (adapter.nativeStreaming && adapter.clearStatus) {
+      const currentStatusId = statusMessageId;
+      statusMessageId = undefined;
+      await adapter.clearStatus(msg, currentStatusId ?? '', finalText);
+      statusFinalized = true;
+      return;
+    }
     if (statusMessageId && adapter.updateStatus) {
       await adapter.updateStatus(msg, statusMessageId, finalText);
       statusMessageText = finalText;
@@ -685,7 +705,7 @@ export async function handleMessage(
     if (adapter.clearStatus) {
       const currentStatusId = statusMessageId;
       statusMessageId = undefined;
-      await adapter.clearStatus(msg, currentStatusId ?? '');
+      await adapter.clearStatus(msg, currentStatusId ?? '', finalText);
     }
   };
 
@@ -775,7 +795,7 @@ export async function handleMessage(
     if (!body.trim()) return;
     hasVisibleStatus = true;
     cancelThinkingStatus();
-    if (statusMessageId && adapter.updateStatus && statusMessageText !== '✍️ replying...') {
+    if (statusMessageId && adapter.updateStatus && !adapter.nativeStreaming && statusMessageText !== '✍️ replying...') {
       await adapter.updateStatus(msg, statusMessageId, '✍️ replying...');
       statusMessageText = '✍️ replying...';
     }
@@ -955,17 +975,20 @@ export async function handleMessage(
       }
 
       if (!trimmed && hasError) {
-        await sendChunk('Sorry, an error occurred while processing your message. Please try again later.');
-        fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
+        // No partial output + error: surface the detailed reply text (no emoji)
+        // through sendChunk so the user sees the real outcome. The emoji status
+        // is delivered separately via finalizeStatusUpdate → clearStatus.
+        fullReply = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmed).reply;
+        if (!adapter.nativeStreaming || (hasError && !/stopped by user/i.test(lastErrorMessage))) {
+          await sendChunk(fullReply);
+        }
       }
 
       let finalStatusText: string | undefined;
-      if (trimmed && hasError) {
-        const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds);
-        await sendChunk(notice.reply);
+      if (hasError) {
+        const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmed);
+        if (trimmed) await sendChunk(notice.reply);
         finalStatusText = notice.status;
-      } else if (hasError) {
-        finalStatusText = '⚠️ Failed';
       }
 
       // Strip media markers before splitTrailingContinue so that the returned
@@ -1027,8 +1050,11 @@ export async function handleMessage(
         return { fullReply: '', hasError, silent: true, sawContinue: false };
       }
 
-      if (!fullReply.trim() && hasError) {
-        fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
+      if (!trimmedBuf && hasError) {
+        // No partial output + error: surface the detailed reply text (no emoji)
+        // through sendChunk so the user sees the real outcome. The emoji status
+        // is delivered separately via finalizeStatusUpdate → clearStatus.
+        fullReply = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmedBuf).reply;
       }
 
       // Strip media markers before splitTrailingContinue so that the returned
@@ -1037,17 +1063,26 @@ export async function handleMessage(
       const { body, hasContinue } = splitTrailingContinue(mediaStrippedReplyBuf);
       const willRelay = hasContinue && mayRelay && !hasError;
       if (fullReply.trim()) {
-        await sendChunk(fullReply);
-        let finalStatusText: string | undefined;
+        // nativeStreaming adapters (WeCom) deliver the no-output error text via
+        // finalizeStatusUpdate → clearStatus; sendChunk here would duplicate it.
+        // User-initiated /stop: the command handler already sent text; only
+        // finalizeStatusUpdate → clearStatus delivers the ⏹️ Stopped finalText.
+        // Other errors (timeout / engine failure) without output: sendChunk the
+        // detailed reply so the user sees the real cause.
         if (
-          hasError &&
-          fullReply !== 'Sorry, an error occurred while processing your message. Please try again later.'
+          trimmedBuf ||
+          !adapter.nativeStreaming ||
+          (!trimmedBuf && hasError && !/stopped by user/i.test(lastErrorMessage))
         ) {
-          const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds);
-          await sendChunk(notice.reply);
+          await sendChunk(fullReply);
+        }
+        let finalStatusText: string | undefined;
+        if (hasError) {
+          const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmedBuf);
+          if (trimmedBuf) {
+            await sendChunk(notice.reply);
+          }
           finalStatusText = notice.status;
-        } else if (hasError) {
-          finalStatusText = '⚠️ Failed';
         }
         if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done');
         log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..."`);
@@ -1112,6 +1147,13 @@ export async function handleMessage(
     }
     cancelThinkingStatus();
     if (typingTimer !== undefined) clearInterval(typingTimer);
+    // nativeStreaming adapters (WeCom): the auto-continue typing interval may
+    // have opened a loading stream just before being cleared (e.g. a /stop
+    // landed between ticks). Silently close any leftover stream without
+    // resending the final text (empty finalText = no visible message).
+    if (adapter.nativeStreaming && adapter.clearStatus) {
+      await adapter.clearStatus(msg, '', '').catch(() => {});
+    }
   }
 }
 
@@ -1545,6 +1587,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
           ChannelAdapter,
           | 'reply'
           | 'maxMessageLength'
+          | 'nativeStreaming'
           | 'typing'
           | 'getGroupMembers'
           | 'sendStatus'
@@ -1553,6 +1596,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
           | 'sendMedia'
         > = {
           maxMessageLength: adapter.maxMessageLength,
+          nativeStreaming: adapter.nativeStreaming,
           typing: adapter.typing?.bind(adapter),
           getGroupMembers: adapter.getGroupMembers?.bind(adapter),
           sendStatus: adapter.sendStatus?.bind(adapter),

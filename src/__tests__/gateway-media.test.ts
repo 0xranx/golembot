@@ -468,6 +468,8 @@ describe('handleMessage - media marker integration', () => {
     expect(allText).toContain('more');
     expect(allText).not.toContain('[SEND_IMAGE:');
     expect(adapter.mediaSends).toHaveLength(0);
+    // Degradation notice: the user must see why the image was not sent.
+    expect(allText).toContain('当前渠道不支持发送图片');
   });
 
   it('sends error notice when file is missing', async () => {
