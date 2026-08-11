@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChannelAdapter, ChannelMessage } from '../channel.js';
 import { detectMention } from '../channel.js';
 import {
@@ -923,6 +923,145 @@ describe('finalizeStatusUpdate error status text (issue #4)', () => {
       expect(replies.length).toBeGreaterThan(0);
       expect(replies.join('\n')).toContain('The task was stopped before completion');
       expect(replies.join('\n')).not.toContain('Sorry, an error occurred');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+
+  it('nativeStreaming: /stop closes the stream empty then sends ⏹️ Stopped separately', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-native-stop-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'error' as const, message: 'Agent invocation stopped by user' };
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'user' as const,
+          partialText: undefined,
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      nativeStreaming: true,
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger stop',
+      raw: {},
+    };
+
+    vi.useFakeTimers();
+    try {
+      const promise = handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // advance past the 200ms isUserAbort delay so finalizeStatusUpdate completes
+      await vi.advanceTimersByTimeAsync(500);
+      await promise;
+      // The stream must be closed with EMPTY content first (loading stream closes silently).
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[cleared.length - 1].finalText).toBe('');
+      // The ⏹️ Stopped finalText must be a separate user-visible message.
+      expect(replies).toContain('⏹️ Stopped');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+      vi.useRealTimers();
+    }
+  });
+
+  it('nativeStreaming: normal completion closes stream with ✅ Done inline (no separate message)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-native-done-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'text' as const, content: 'All good' };
+        yield { type: 'done' as const, sessionId: 'x' };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      nativeStreaming: true,
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'hello',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // Normal completion: clearStatus closes the stream WITH the finalText inline.
+      expect(cleared.some((c) => c.finalText === '✅ Done')).toBe(true);
+      // No separate ⏹️/⚠️ final status message — finalText lives in the stream close.
+      expect(replies.some((r) => r.includes('⏹️') || r.includes('⚠️') || r.includes('✅'))).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true });
       clearGroupChatState('slack:C001');
