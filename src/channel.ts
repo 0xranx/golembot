@@ -87,6 +87,12 @@ export interface ChannelAdapter {
   readonly name: string;
   /** Optional: override the default 4000-char message split limit for this channel. */
   readonly maxMessageLength?: number;
+  /**
+   * Optional: adapter manages its own streaming state (e.g. WeCom native loading UI).
+   * When true, the gateway skips intermediate status updates and routes the final
+   * status through clearStatus(msg, statusId, finalText).
+   */
+  readonly nativeStreaming?: boolean;
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
   reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
@@ -116,7 +122,7 @@ export interface ChannelAdapter {
   /** Optional: update a previously created status/progress message. */
   updateStatus?(msg: ChannelMessage, statusId: string, text: string): Promise<void>;
   /** Optional: clear a previously created status/progress message. */
-  clearStatus?(msg: ChannelMessage, statusId: string): Promise<void>;
+  clearStatus?(msg: ChannelMessage, statusId: string, finalText?: string): Promise<void>;
   /**
    * Optional: resolve group members for @mention support.
    * Returns a map of display name → platform-specific user ID.

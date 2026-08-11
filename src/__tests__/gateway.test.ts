@@ -786,3 +786,217 @@ describe('ReadReceipt', () => {
     expect(receipts[0]).toEqual({ messageId: 'msg-001', readerId: 'user-123' });
   });
 });
+
+describe('finalizeStatusUpdate error status text (issue #4)', () => {
+  it('passes ⚠️ Timed out (Xs) to clearStatus when agent times out with no partial output', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-timeout-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'error' as const, message: 'Agent invocation timed out' };
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'timeout' as const,
+          partialText: undefined,
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger timeout',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor', timeout: 1 } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // finalizeStatusUpdate should route the ⚠️ Timed out status through clearStatus
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[0].finalText).toBe('⚠️ Timed out (1s)');
+      // The user-facing reply must surface the specific outcome, not a generic error.
+      expect(replies.length).toBeGreaterThan(0);
+      expect(replies.join('\n')).toContain('Task timed out after 1s');
+      expect(replies.join('\n')).not.toContain('Sorry, an error occurred');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+
+  it('passes ⏹️ Stopped to clearStatus and user reply when agent is stopped by user with no partial output', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-stop-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'error' as const, message: 'Agent invocation stopped by user' };
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'user' as const,
+          partialText: undefined,
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger stop',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[0].finalText).toBe('⏹️ Stopped');
+      // The user-facing reply must surface the specific outcome, not a generic error.
+      expect(replies.length).toBeGreaterThan(0);
+      expect(replies.join('\n')).toContain('The task was stopped before completion');
+      expect(replies.join('\n')).not.toContain('Sorry, an error occurred');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+
+  it('sends notice.reply and passes ⚠️ Timed out when agent times out with partial output', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-partial-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'timeout' as const,
+          partialText: 'Here is partial output',
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger timeout with partial',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor', timeout: 1 } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // Should send partial output + timeout notice reply
+      expect(replies.length).toBeGreaterThanOrEqual(1);
+      const allReplies = replies.join('\n');
+      expect(allReplies).toContain('Here is partial output');
+      expect(allReplies).toContain('timed out after 1s');
+      // finalizeStatusUpdate should route the ⚠️ Timed out status
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[0].finalText).toBe('⚠️ Timed out (1s)');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+});

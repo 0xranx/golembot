@@ -1,9 +1,10 @@
+import { existsSync } from 'node:fs';
 import { lstat, mkdir, readdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
 import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 import { openCodeProviderEnv } from './provider-env.js';
-import { isOnPath, spawnCommand } from './shared.js';
+import { resolveOnPath, spawnCommand } from './shared.js';
 
 // ── Provider env resolution ──────────────────────────────
 
@@ -249,12 +250,23 @@ export async function ensureOpenCodeConfig(
 // ── Engine ───────────────────────────────────────────────
 
 function findOpenCodeBin(): string {
-  if (!isOnPath('opencode')) {
+  const resolved = resolveOnPath('opencode');
+  if (!resolved) {
     throw new Error(
       `OpenCode CLI ("opencode") not found in PATH\n` +
         `Install it with: npm install -g opencode-ai\n` +
         `See: https://opencode.ai/docs`,
     );
+  }
+  // Windows: npm global installs place a .cmd/.ps1 shim that forwards to
+  // node_modules/opencode-ai/bin/opencode.exe.  Using the .exe directly
+  // avoids PowerShell -File stdin encoding issues (CJK garbled on GBK systems).
+  if (process.platform === 'win32') {
+    const shimDir = dirname(resolved);
+    const exeDirect = join(shimDir, 'node_modules', 'opencode-ai', 'bin', 'opencode.exe');
+    if (existsSync(exeDirect)) {
+      return exeDirect;
+    }
   }
   return 'opencode';
 }

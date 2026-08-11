@@ -11,6 +11,7 @@ interface StreamState {
 export class WecomAdapter implements ChannelAdapter {
   readonly name = 'wecom';
   readonly maxMessageLength = 2048;
+  readonly nativeStreaming = true;
   private config: WecomChannelConfig;
   private wsClient: any = null;
   private seenMsgIds = new Set<string>();
@@ -20,6 +21,7 @@ export class WecomAdapter implements ChannelAdapter {
   private static readonly MEMBER_CACHE_TTL = 10 * 60 * 1000;
   private groupMemberCacheTime = new Map<string, number>();
   private streams = new Map<string, StreamState>();
+  private streamSeq = 0;
 
   constructor(config: WecomChannelConfig) {
     this.config = config;
@@ -149,14 +151,14 @@ export class WecomAdapter implements ChannelAdapter {
       } else {
         this.wsClient.replyStream(state.frame, state.streamId, processedText, true).catch(() => {});
         // Immediately open new empty stream (WeCom native loading UI)
-        const newStreamId = `reply-${Date.now()}`;
+        const newStreamId = `reply-${Date.now()}-${++this.streamSeq}`;
         this.streams.set(msg.chatId, { streamId: newStreamId, frame, timer: null });
         this.wsClient.replyStream(frame, newStreamId, '', false).catch(() => {});
       }
     }
     if (!this.streams.has(msg.chatId)) {
       // No previous stream (slash command etc.), send directly without opening new loading stream
-      const streamId = `reply-${Date.now()}`;
+      const streamId = `reply-${Date.now()}-${++this.streamSeq}`;
       this.wsClient.replyStream(frame, streamId, processedText, true).catch(() => {});
     }
     if (state?.timer) {
@@ -169,26 +171,36 @@ export class WecomAdapter implements ChannelAdapter {
     return `silent-${Date.now()}`;
   }
 
-  async updateStatus(msg: ChannelMessage, _statusId: string, text: string): Promise<void> {
-    const state = this.streams.get(msg.chatId);
-    if (!state) return;
-    if (state.timer) {
-      clearTimeout(state.timer);
-    }
-    if (this.wsClient) {
-      this.wsClient.replyStream(state.frame, state.streamId, text, true).catch(() => {});
-    }
-    this.streams.delete(msg.chatId);
+  async updateStatus(_msg: ChannelMessage, _statusId: string, _text: string): Promise<void> {
+    // No-op: WeCom's native loading UI is sufficient for intermediate status
+    // updates (thinking, replying, tool hints). The stream stays open so
+    // reply() can continue its close-and-reopen cycle per chunk.
   }
 
-  async clearStatus(msg: ChannelMessage, _statusId: string): Promise<void> {
+  async clearStatus(msg: ChannelMessage, _statusId: string, finalText = '✅ Done'): Promise<void> {
     const state = this.streams.get(msg.chatId);
-    if (!state) return;
+    if (!state) {
+      // No open stream (e.g. task aborted before any chunk was sent): still
+      // surface the final status text so ⏹️ Stopped / ⚠️ Timed out are not lost.
+      // WeCom's aibot_send_msg rejects msgtype:'text' (errcode 40008), so reply
+      // via the incoming frame's response_url instead.
+      if (finalText && finalText !== '✅ Done' && this.wsClient) {
+        if (msg.raw) {
+          const streamId = `reply-${Date.now()}-${++this.streamSeq}`;
+          await this.wsClient.replyStream(msg.raw, streamId, finalText, true).catch(() => {});
+        } else {
+          await this.wsClient
+            .sendMessage(msg.chatId, { msgtype: 'text', text: { content: finalText } })
+            .catch(() => {});
+        }
+      }
+      return;
+    }
     if (state.timer) {
       clearTimeout(state.timer);
     }
     if (this.wsClient) {
-      this.wsClient.replyStream(state.frame, state.streamId, '', true).catch(() => {});
+      this.wsClient.replyStream(state.frame, state.streamId, finalText, true).catch(() => {});
     }
     this.streams.delete(msg.chatId);
   }
@@ -200,7 +212,7 @@ export class WecomAdapter implements ChannelAdapter {
     } catch {}
     const state = this.streams.get(msg.chatId);
     if (!state) {
-      const streamId = `reply-${Date.now()}`;
+      const streamId = `reply-${Date.now()}-${++this.streamSeq}`;
       this.streams.set(msg.chatId, { streamId, frame: msg.raw, timer: null });
       this.wsClient.replyStream(msg.raw, streamId, '', false).catch(() => {});
     }
