@@ -400,8 +400,19 @@ describe('group chat helpers - buildGroupPrompt', () => {
     expect(result).not.toContain('Focus on your own domain expertise');
   });
 
-  it('includes MEDIA_PROTOCOL_HINT when mediaHintSupported is true (default)', () => {
-    const result = buildGroupPrompt([], 'alice', 'send me a chart', false, 'slack:C123', '');
+  it('includes MEDIA_PROTOCOL_HINT when mediaHintSupported is true', () => {
+    const result = buildGroupPrompt(
+      [],
+      'alice',
+      'send me a chart',
+      false,
+      'slack:C123',
+      '',
+      undefined,
+      undefined,
+      false,
+      true,
+    );
     expect(result).toContain('[SEND_IMAGE:');
     expect(result).toContain('[SEND_FILE:');
     expect(result).toContain('Do NOT use the message-push');

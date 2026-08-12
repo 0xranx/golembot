@@ -54,6 +54,7 @@ describe('OpenCodeEngine prompt delivery (issue #43)', () => {
       return {
         ...original,
         isOnPath: () => true,
+        resolveOnPath: () => 'opencode',
         spawnCommand: vi.fn((_bin: string, args: string[]) => {
           capturedArgs = args;
           const ndjson = [

@@ -763,6 +763,10 @@ describe('buildGroupPrompt - MEDIA_PROTOCOL_HINT', () => {
       false, // injectPass
       'slack-C001',
       '/assistant',
+      undefined, // othersAddressed
+      undefined, // peers
+      false, // injectContinue
+      true, // mediaHintSupported
     );
 
     expect(prompt).toContain('[SEND_IMAGE:');
@@ -784,6 +788,7 @@ describe('buildGroupPrompt - MEDIA_PROTOCOL_HINT', () => {
       ['bob'], // othersAddressed
       [{ name: 'peer-bot', role: 'reviewer' }], // peers
       true, // injectContinue
+      true, // mediaHintSupported
     );
 
     expect(prompt).toContain('[SEND_IMAGE:');
