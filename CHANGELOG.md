@@ -1,3 +1,12 @@
+## [0.48.6](https://github.com/0xranx/golembot/compare/v0.48.5...v0.48.6) (2026-08-12)
+
+
+### Bug Fixes
+
+* **gateway:** decouple cronCtx from coordinator so /cron works without tasks configured ([9a8ff01](https://github.com/0xranx/golembot/commit/9a8ff01c810599b53c5a4447cd819eea5ccedf83))
+* **gateway:** decouple HTTP cronCtx from coordinator so /cron works without tasks configured ([8f0875e](https://github.com/0xranx/golembot/commit/8f0875e96dbee7de1039f337dd5fa30dd1569879))
+* **index:** report the effective model in getStatus so /model matches the engine ([2d89d5b](https://github.com/0xranx/golembot/commit/2d89d5be0adc293783c1aebbea7c876771ef759b))
+
 ## [0.48.5](https://github.com/0xranx/golembot/compare/v0.48.4...v0.48.5) (2026-08-12)
 
 
