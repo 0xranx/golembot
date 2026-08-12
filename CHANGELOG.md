@@ -1,3 +1,10 @@
+## [0.48.5](https://github.com/0xranx/golembot/compare/v0.48.4...v0.48.5) (2026-08-12)
+
+
+### Bug Fixes
+
+* **opencode:** compare normalized JSON before rewriting opencode.json ([10f7790](https://github.com/0xranx/golembot/commit/10f7790b4f3b8d455099497de89b156af65c3f45))
+
 ## [0.48.4](https://github.com/0xranx/golembot/compare/v0.48.3...v0.48.4) (2026-08-04)
 
 
