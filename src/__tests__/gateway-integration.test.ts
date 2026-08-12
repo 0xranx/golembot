@@ -1685,6 +1685,34 @@ describe('handleMessage — full gateway pipeline', () => {
       await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
       expect(adapter.replies[0].text).toContain('/cron');
     });
+
+    // PR #49 blocker 1 regression: Telegram implements typing + a two-param
+    // clearStatus(msg, statusId) but no nativeStreaming, so gateway.ts:546
+    // routes slash-command output through the clearStatus branch. Telegram's
+    // clearStatus (src/channels/telegram.ts:160) returns early on an empty
+    // statusId and never receives finalText, so the slash output is silently
+    // dropped unless it is delivered via the reply() path instead.
+    it('slash command output is delivered via reply for non-nativeStreaming adapters (Telegram)', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      // Telegram-shaped adapter: typing + two-param clearStatus, no nativeStreaming.
+      const adapter: MockAdapter & { typing?: (msg: ChannelMessage) => Promise<void> } = {
+        replies: [],
+        statusOps: [],
+        async reply(msg: ChannelMessage, text: string, options?: ReplyOptions) {
+          adapter.replies.push({ msg, text, options });
+        },
+        async typing() {},
+        async clearStatus(msg: ChannelMessage, statusId: string) {
+          if (!statusId) return; // Telegram: empty statusId → no-op, finalText ignored.
+          adapter.statusOps.push({ type: 'clear', id: statusId });
+        },
+      };
+      const msg = makeDmMsg({ text: '/help' });
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies.length).toBe(1);
+      expect(adapter.replies[0].text).toContain('/help');
+    });
   });
 
   // ── /cron E2E through gateway handleMessage ──────────────────────────────

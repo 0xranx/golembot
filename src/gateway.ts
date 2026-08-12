@@ -311,8 +311,8 @@ export function buildGroupPrompt(
   peers?: PeerBot[],
   /** When true, inject the turn-end contract so the agent signals unfinished work with [CONTINUE]. */
   injectContinue = false,
-  /** When true (default), inject the media protocol hint so agents know how to send images/files. */
-  mediaHintSupported = true,
+  /** When true, inject the media protocol hint so agents know how to send images/files. */
+  mediaHintSupported = false,
 ): string {
   const parts: string[] = [];
 
@@ -543,11 +543,15 @@ export async function handleMessage(
       if (isStop) {
         // /stop is special: the aborted handler owns the finalText (⏹️ Stopped).
         await adapter.reply(msg, result.text);
-      } else if (adapter.typing && adapter.clearStatus) {
+      } else if (adapter.nativeStreaming) {
+        // nativeStreaming adapters (WeCom) implement a 3-arg clearStatus that
+        // carries the finalText — so slash output can be delivered in-place.
+        // Telegram/Slack use a 2-arg clearStatus that silently swallows text,
+        // so they must fall through to reply() below.
         // executeCommand may have been fast — ensure the loading is visible
         // for at least 200ms before closing with the command output.
         await new Promise<void>((r) => setTimeout(r, 200));
-        await adapter.clearStatus(msg, '', result.text.trim()).catch(() => {});
+        await adapter.clearStatus!(msg, '', result.text.trim()).catch(() => {});
       } else {
         await adapter.reply(msg, result.text);
       }
@@ -713,7 +717,7 @@ export async function handleMessage(
         // handler's "Stopped the current task." land first, then send the
         // ⏹️ Stopped finalText as a separate message.
         await adapter.clearStatus(msg, statusMessageId ?? '', '').catch(() => {});
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise((r) => setTimeout(r, 200));
         await adapter.reply(msg, finalText).catch(() => {});
       } else {
         // Normal completion / timeout / generic failure: keep the original
@@ -1026,7 +1030,11 @@ export async function handleMessage(
       const { body, hasContinue } = splitTrailingContinue(mediaStrippedReply);
       const willRelay = hasContinue && mayRelay && !hasError;
       if (fullReply.trim()) {
-        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done', lastErrorMessage === 'Agent invocation stopped by user');
+        if (!willRelay)
+          await finalizeStatusUpdate(
+            finalStatusText ?? '✅ Done',
+            lastErrorMessage === 'Agent invocation stopped by user',
+          );
         log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..." (streaming)`);
         trackMetrics({ responsePreview: body.trim().slice(0, 120) });
       }
@@ -1113,7 +1121,11 @@ export async function handleMessage(
           }
           finalStatusText = notice.status;
         }
-        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done', lastErrorMessage === 'Agent invocation stopped by user');
+        if (!willRelay)
+          await finalizeStatusUpdate(
+            finalStatusText ?? '✅ Done',
+            lastErrorMessage === 'Agent invocation stopped by user',
+          );
         log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..."`);
         trackMetrics({ responsePreview: body.trim().slice(0, 120) });
       }
