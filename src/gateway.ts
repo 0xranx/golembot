@@ -407,7 +407,7 @@ export async function handleMessage(
   verbose: boolean,
   dir: string,
   metrics?: GatewayMetrics,
-  cronCtx?: { taskStore: TaskStore; scheduler: Scheduler; runTask: (id: string) => Promise<string> },
+  cronCtx?: { taskStore: TaskStore; scheduler: Scheduler; runTask?: (id: string) => Promise<string> },
   /** Fleet peers for multi-bot awareness. */
   peers?: PeerBot[],
 ): Promise<void> {
@@ -1187,7 +1187,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
     serverOpts,
     dashboardCtx,
     dir,
-    () => (coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined),
+    () => ({ taskStore, scheduler, runTask: coordinator ? (id) => coordinator!.runTask(id) : undefined }),
     () => adapterMap,
   );
 
@@ -1276,7 +1276,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
               verbose,
               dir,
               metrics,
-              coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined,
+              { taskStore, scheduler, runTask: coordinator ? (id) => coordinator!.runTask(id) : undefined },
               fleetPeers,
             ),
           );
@@ -1396,7 +1396,7 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
           verbose,
           dir,
           metrics,
-          coordinator ? { taskStore, scheduler, runTask: (id) => coordinator!.runTask(id) } : undefined,
+          { taskStore, scheduler, runTask: coordinator ? (id) => coordinator!.runTask(id) : undefined },
           fleetPeers,
         );
 

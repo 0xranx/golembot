@@ -1862,6 +1862,34 @@ describe('handleMessage — full gateway pipeline', () => {
       expect(adapter.replies[0].text).toContain('gateway mode');
     });
 
+    it('/cron works with cronCtx but no runTask (coordinator undefined)', async () => {
+      const taskStore = new TaskStore(dir);
+      const scheduler = new Scheduler();
+      await taskStore.addTask({
+        id: 'cr1',
+        name: 'standalone-task',
+        schedule: '0 6 * * *',
+        prompt: 'daily standup',
+        enabled: true,
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      const assistant = makeMockAssistant('x');
+      const adapter1 = makeMockAdapter();
+      const msgList = makeDmMsg({ text: '/cron list' });
+      const cronCtx = { taskStore, scheduler, runTask: undefined };
+
+      // /cron list should work — taskStore is available
+      await handleMessage(msgList, makeConfig(), assistant, adapter1, 'slack', false, dir, undefined, cronCtx);
+      expect(adapter1.replies[0].text).toContain('standalone-task');
+
+      // /cron run should show unavailable — runTask is undefined
+      const adapter2 = makeMockAdapter();
+      const msgRun = makeDmMsg({ text: '/cron run cr1' });
+      await handleMessage(msgRun, makeConfig(), assistant, adapter2, 'slack', false, dir, undefined, cronCtx);
+      expect(adapter2.replies[0].text).toContain('Not available');
+    });
+
     it('/cron works in group chat via @mention', async () => {
       const taskStore = new TaskStore(dir);
       const scheduler = new Scheduler();

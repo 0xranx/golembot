@@ -666,11 +666,18 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     }> {
       const config = await loadConfig(dir);
       const skills = await scanSkills(dir);
+      const engineType = engineOverride || config.engine;
+      const baseProvider = providerOverride || config.provider;
+      const provider = usingFallback && baseProvider?.fallback ? baseProvider.fallback : baseProvider;
+      // Mirror doChat()'s model resolution exactly so the reported model is the
+      // one actually used by the engine (provider.models[engine] > modelOverride
+      // > provider.model > config.model).
+      const model = provider?.models?.[engineType] || modelOverride || provider?.model || config.model;
       return {
         config,
         skills,
-        engine: engineOverride || config.engine,
-        model: modelOverride || config.model,
+        engine: engineType,
+        model,
       };
     },
 

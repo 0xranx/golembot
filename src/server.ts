@@ -10,7 +10,8 @@ import { patchConfigFull } from './workspace.js';
 export interface CronContext {
   taskStore: TaskStore;
   scheduler: Scheduler;
-  runTask: (id: string) => Promise<string>;
+  /** Execute a task immediately; unavailable when no coordinator (no tasks configured). */
+  runTask?: (id: string) => Promise<string>;
 }
 
 export interface ServerOpts {
@@ -47,9 +48,9 @@ function refreshScheduler(cronCtx: CronContext): void {
     .then((tasks) => {
       cronCtx.scheduler.stop();
       for (const task of tasks) {
-        if (task.enabled) {
+        if (task.enabled && cronCtx.runTask) {
           cronCtx.scheduler.addTask(task, async () => {
-            await cronCtx.runTask(task.id);
+            await cronCtx.runTask!(task.id);
           });
         }
       }
@@ -386,6 +387,10 @@ export function createGolemServer(
 
       // POST /api/tasks/:id/run — execute immediately
       if (subAction === 'run' && req.method === 'POST') {
+        if (!cronCtx.runTask) {
+          json(res, 503, { error: 'Task execution not available (no coordinator)' });
+          return;
+        }
         try {
           const reply = await cronCtx.runTask(taskId);
           json(res, 200, { ok: true, reply });
