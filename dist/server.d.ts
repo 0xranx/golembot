@@ -6,7 +6,8 @@ import type { TaskStore } from './task-store.js';
 export interface CronContext {
     taskStore: TaskStore;
     scheduler: Scheduler;
-    runTask: (id: string) => Promise<string>;
+    /** Execute a task immediately; unavailable when no coordinator (no tasks configured). */
+    runTask?: (id: string) => Promise<string>;
 }
 export interface ServerOpts {
     port?: number;

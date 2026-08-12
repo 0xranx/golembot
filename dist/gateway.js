@@ -998,7 +998,7 @@ export async function startGateway(opts) {
     // shutdown is assigned later after httpServer is created — use a wrapper
     let shutdownFn;
     const serverOpts = { port, token, hostname: host, onShutdown: () => shutdownFn?.() };
-    const httpServer = createGolemServer(assistant, serverOpts, dashboardCtx, dir, () => (coordinator ? { taskStore, scheduler, runTask: (id) => coordinator.runTask(id) } : undefined), () => adapterMap);
+    const httpServer = createGolemServer(assistant, serverOpts, dashboardCtx, dir, () => ({ taskStore, scheduler, runTask: coordinator ? (id) => coordinator.runTask(id) : undefined }), () => adapterMap);
     // Declare scheduler & coordinator early so adapter callbacks can reference them safely.
     const scheduler = new Scheduler();
     let coordinator;
@@ -1067,7 +1067,7 @@ export async function startGateway(opts) {
                 }
                 else {
                     // Direct mode (original behavior)
-                    await adapter.start((msg) => handleMessage(msg, config, assistant, adapter, type, verbose, dir, metrics, coordinator ? { taskStore, scheduler, runTask: (id) => coordinator.runTask(id) } : undefined, fleetPeers));
+                    await adapter.start((msg) => handleMessage(msg, config, assistant, adapter, type, verbose, dir, metrics, { taskStore, scheduler, runTask: coordinator ? (id) => coordinator.runTask(id) : undefined }, fleetPeers));
                 }
                 adapters.push(adapter);
                 adapterMap.set(type, adapter);
@@ -1162,7 +1162,7 @@ export async function startGateway(opts) {
                     }
                 },
             };
-            await handleMessage(msg, config, assistant, wrappedAdapter, chMsg.channelType, verbose, dir, metrics, coordinator ? { taskStore, scheduler, runTask: (id) => coordinator.runTask(id) } : undefined, fleetPeers);
+            await handleMessage(msg, config, assistant, wrappedAdapter, chMsg.channelType, verbose, dir, metrics, { taskStore, scheduler, runTask: coordinator ? (id) => coordinator.runTask(id) : undefined }, fleetPeers);
             // Update session activity timestamp AFTER the Agent finishes responding,
             // not just at enqueue time.  This extends the history-fetch suppression
             // window to cover the full Agent processing duration.

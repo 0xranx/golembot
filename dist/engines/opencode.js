@@ -155,6 +155,9 @@ export async function ensureOpenCodeConfig(workspace, model, mcpConfig) {
         existing.permission = { '*': 'allow' };
     }
     if (model && !existing.model) {
+        // Only set the model when opencode.json has none, so a user-authored model
+        // is never overwritten. The gateway always passes --model at invoke time,
+        // so this field only affects running the opencode CLI directly.
         existing.model = model;
     }
     // Register provider block so OpenCode can authenticate and locate the model.

@@ -21,7 +21,7 @@ function refreshScheduler(cronCtx) {
         .then((tasks) => {
         cronCtx.scheduler.stop();
         for (const task of tasks) {
-            if (task.enabled) {
+            if (task.enabled && cronCtx.runTask) {
                 cronCtx.scheduler.addTask(task, async () => {
                     await cronCtx.runTask(task.id);
                 });
@@ -340,6 +340,10 @@ export function createGolemServer(assistant, opts = {}, dashboard, dir, getCronC
             const subAction = taskMatch[2]; // "run" or undefined
             // POST /api/tasks/:id/run — execute immediately
             if (subAction === 'run' && req.method === 'POST') {
+                if (!cronCtx.runTask) {
+                    json(res, 503, { error: 'Task execution not available (no coordinator)' });
+                    return;
+                }
                 try {
                     const reply = await cronCtx.runTask(taskId);
                     json(res, 200, { ok: true, reply });

@@ -81,7 +81,7 @@ export declare function parseMentions(text: string, memberCache: Map<string, str
 export declare function handleMessage(msg: ChannelMessage, config: GolemConfig, assistant: Pick<Assistant, 'chat' | 'setEngine' | 'setModel' | 'getStatus' | 'resetSession' | 'cancel' | 'listModels'>, adapter: Pick<ChannelAdapter, 'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers' | 'sendStatus' | 'updateStatus' | 'clearStatus'>, channelType: string, verbose: boolean, dir: string, metrics?: GatewayMetrics, cronCtx?: {
     taskStore: TaskStore;
     scheduler: Scheduler;
-    runTask: (id: string) => Promise<string>;
+    runTask?: (id: string) => Promise<string>;
 }, 
 /** Fleet peers for multi-bot awareness. */
 peers?: PeerBot[]): Promise<void>;

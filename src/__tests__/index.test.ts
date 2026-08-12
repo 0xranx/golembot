@@ -1131,3 +1131,54 @@ describe('provider fallback circuit breaker', () => {
     vi.useRealTimers();
   });
 });
+
+describe('getStatus model resolution', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'golem-test-status-'));
+    await mkdir(join(dir, 'skills', 'general'), { recursive: true });
+    await writeFile(
+      join(dir, 'skills', 'general', 'SKILL.md'),
+      '---\nname: general\ndescription: General assistant\n---\n# General\n',
+    );
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('reports provider.model when it outranks config.model', async () => {
+    // Regression: /model wrote xyzq/... into golem.yaml model, but the engine
+    // actually uses provider.model (higher priority). getStatus must report the
+    // effective model, not the stale config.model.
+    await writeFile(
+      join(dir, 'golem.yaml'),
+      [
+        'name: test-bot',
+        'engine: opencode',
+        'model: xyzq/deepseek-v4-flash',
+        'provider:',
+        '  model: opencode-go/deepseek-v4-flash',
+      ].join('\n'),
+    );
+    const assistant = createAssistant({ dir });
+    const status = await assistant.getStatus();
+    expect(status.model).toBe('opencode-go/deepseek-v4-flash');
+  });
+
+  it('reports config.model when no provider.model is set', async () => {
+    await writeFile(join(dir, 'golem.yaml'), 'name: test-bot\nengine: cursor\nmodel: claude-sonnet-4-6\n');
+    const assistant = createAssistant({ dir });
+    const status = await assistant.getStatus();
+    expect(status.model).toBe('claude-sonnet-4-6');
+  });
+
+  it('reports undefined when no model is configured anywhere', async () => {
+    await writeFile(join(dir, 'golem.yaml'), 'name: test-bot\nengine: cursor\n');
+    const assistant = createAssistant({ dir });
+    const status = await assistant.getStatus();
+    expect(status.model).toBeUndefined();
+  });
+});
