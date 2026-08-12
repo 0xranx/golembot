@@ -227,8 +227,18 @@ export async function ensureOpenCodeConfig(
 
   // Only write when content actually changed, so a running OpenCode process
   // is not disturbed by needless config rewrites on every invocation.
+  // Compare normalized JSON to avoid rewriting when only whitespace/formatting differs.
   const next = `${JSON.stringify(existing, null, 2)}\n`;
-  if (next !== originalRaw) {
+  let shouldWrite = true;
+  if (originalRaw) {
+    try {
+      const normalizedOriginal = `${JSON.stringify(JSON.parse(originalRaw), null, 2)}\n`;
+      shouldWrite = next !== normalizedOriginal;
+    } catch {
+      // originalRaw is malformed — overwrite with corrected version
+    }
+  }
+  if (shouldWrite) {
     await writeFile(configPath, next, 'utf-8');
   }
 }
