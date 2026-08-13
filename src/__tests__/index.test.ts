@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentEngine, InvokeOpts, StreamEvent } from '../engine.js';
+import type { AgentEngine, InvokeOpts, ListModelsOpts, StreamEvent } from '../engine.js';
 
 // ── Mock engines ────────────────────────────────────────
 
@@ -1180,5 +1180,53 @@ describe('getStatus model resolution', () => {
     const assistant = createAssistant({ dir });
     const status = await assistant.getStatus();
     expect(status.model).toBeUndefined();
+  });
+});
+
+describe('listModels model resolution', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'golem-test-listmodels-'));
+    await mkdir(join(dir, 'skills', 'general'), { recursive: true });
+    await writeFile(
+      join(dir, 'skills', 'general', 'SKILL.md'),
+      '---\nname: general\ndescription: General assistant\n---\n# General\n',
+    );
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('passes the effective model (provider.model) to engine.listModels', async () => {
+    // Regression: listModels() used modelOverride || config.model, ignoring
+    // provider precedence. It must pass the same effective model that
+    // doChat()/getStatus() resolve, so the hint matches actual invocation.
+    await writeFile(
+      join(dir, 'golem.yaml'),
+      [
+        'name: test-bot',
+        'engine: opencode',
+        'model: xyzq/deepseek-v4-flash',
+        'provider:',
+        '  model: opencode-go/deepseek-v4-flash',
+      ].join('\n'),
+    );
+
+    let capturedModel: string | undefined;
+    mockedCreateEngine.mockReturnValue({
+      async *invoke(): AsyncIterable<StreamEvent> {},
+      async listModels(opts: ListModelsOpts) {
+        capturedModel = opts.model;
+        return ['model-a', 'model-b'];
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    await assistant.listModels();
+
+    expect(capturedModel).toBe('opencode-go/deepseek-v4-flash');
   });
 });
