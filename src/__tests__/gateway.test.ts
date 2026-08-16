@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChannelAdapter, ChannelMessage } from '../channel.js';
 import { detectMention } from '../channel.js';
 import {
@@ -288,7 +288,7 @@ describe('group chat helpers - buildGroupPrompt', () => {
 
   it('excludes [PASS] instruction when injectPass=false', () => {
     const result = buildGroupPrompt([], 'alice', 'hi', false, 'slack:C123', '');
-    expect(result).not.toContain('[System:');
+    expect(result).not.toContain('[PASS]');
   });
 
   it('formats current message as [senderName] text', () => {
@@ -398,6 +398,37 @@ describe('group chat helpers - buildGroupPrompt', () => {
     expect(result).toContain('[Peers: AnalystBot (product analyst)]');
     expect(result).toContain('[PASS]');
     expect(result).not.toContain('Focus on your own domain expertise');
+  });
+
+  it('includes MEDIA_PROTOCOL_HINT when mediaHintSupported is true', () => {
+    const result = buildGroupPrompt(
+      [],
+      'alice',
+      'send me a chart',
+      false,
+      'slack:C123',
+      '',
+      undefined,
+      undefined,
+      false,
+      true,
+    );
+    expect(result).toContain('[SEND_IMAGE:');
+    expect(result).toContain('[SEND_FILE:');
+    expect(result).toContain('Do NOT use the message-push');
+    // Still includes other required content
+    expect(result).toContain('[Group: slack:C123');
+    expect(result).toContain('[alice] send me a chart');
+  });
+
+  it('excludes MEDIA_PROTOCOL_HINT when mediaHintSupported is false', () => {
+    const result = buildGroupPrompt([], 'alice', 'hello', false, 'slack:C123', '', undefined, undefined, false, false);
+    expect(result).not.toContain('[SEND_IMAGE:');
+    expect(result).not.toContain('[SEND_FILE:');
+    expect(result).not.toContain('Do NOT use the message-push');
+    // Still has other required content
+    expect(result).toContain('[Group: slack:C123');
+    expect(result).toContain('[alice] hello');
   });
 
   it('DM uses per-user session key (buildSessionKey still works)', async () => {
@@ -675,6 +706,74 @@ describe('DiscordAdapter', () => {
   });
 });
 
+describe('processMedia - degradation notice for non-sendMedia channels', () => {
+  it('sends visible degradation notice when adapter lacks sendMedia', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-sendmedia-'));
+    await mkdir(join(dir, 'temp_file'), { recursive: true });
+    // Create a small dummy file so it passes path/stat checks and reaches the sendMedia check
+    await writeFile(join(dir, 'temp_file', 'test.png'), Buffer.from('fake-png'));
+
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat(_text: string, _opts: { sessionKey: string }) {
+        yield { type: 'text' as const, content: 'Here is a chart\n[SEND_IMAGE: temp_file/test.png]' };
+        yield { type: 'done' as const, durationMs: 1 };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    // Adapter WITHOUT sendMedia
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'group',
+      text: 'send me a chart',
+      mentioned: true,
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+
+      // Assert the degradation notice was sent
+      const allReplies = replies.join('\n');
+      expect(allReplies).toContain('当前渠道不支持发送图片');
+      expect(allReplies).toContain('已忽略');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+});
+
 describe('ReadReceipt', () => {
   it('readReceiptHandler is optional on ChannelAdapter', () => {
     const adapter = createMockAdapter('test');
@@ -696,5 +795,358 @@ describe('ReadReceipt', () => {
     });
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toEqual({ messageId: 'msg-001', readerId: 'user-123' });
+  });
+});
+
+describe('finalizeStatusUpdate error status text (issue #4)', () => {
+  it('passes ⚠️ Timed out (Xs) to clearStatus when agent times out with no partial output', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-timeout-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'error' as const, message: 'Agent invocation timed out' };
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'timeout' as const,
+          partialText: undefined,
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger timeout',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor', timeout: 1 } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // finalizeStatusUpdate should route the ⚠️ Timed out status through clearStatus
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[0].finalText).toBe('⚠️ Timed out (1s)');
+      // The user-facing reply must surface the specific outcome, not a generic error.
+      expect(replies.length).toBeGreaterThan(0);
+      expect(replies.join('\n')).toContain('Task timed out after 1s');
+      expect(replies.join('\n')).not.toContain('Sorry, an error occurred');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+
+  it('passes ⏹️ Stopped to clearStatus and user reply when agent is stopped by user with no partial output', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-stop-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'error' as const, message: 'Agent invocation stopped by user' };
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'user' as const,
+          partialText: undefined,
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger stop',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[0].finalText).toBe('⏹️ Stopped');
+      // The user-facing reply must surface the specific outcome, not a generic error.
+      expect(replies.length).toBeGreaterThan(0);
+      expect(replies.join('\n')).toContain('The task was stopped before completion');
+      expect(replies.join('\n')).not.toContain('Sorry, an error occurred');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+
+  it('nativeStreaming: /stop closes the stream empty then sends ⏹️ Stopped separately', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-native-stop-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'error' as const, message: 'Agent invocation stopped by user' };
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'user' as const,
+          partialText: undefined,
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      nativeStreaming: true,
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger stop',
+      raw: {},
+    };
+
+    vi.useFakeTimers();
+    try {
+      const promise = handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // advance past the 200ms isUserAbort delay so finalizeStatusUpdate completes
+      await vi.advanceTimersByTimeAsync(500);
+      await promise;
+      // The stream must be closed with EMPTY content first (loading stream closes silently).
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[cleared.length - 1].finalText).toBe('');
+      // The ⏹️ Stopped finalText must be a separate user-visible message.
+      expect(replies).toContain('⏹️ Stopped');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+      vi.useRealTimers();
+    }
+  });
+
+  it('nativeStreaming: normal completion closes stream with ✅ Done inline (no separate message)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-native-done-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield { type: 'text' as const, content: 'All good' };
+        yield { type: 'done' as const, sessionId: 'x' };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      nativeStreaming: true,
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'hello',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // Normal completion: clearStatus closes the stream WITH the finalText inline.
+      expect(cleared.some((c) => c.finalText === '✅ Done')).toBe(true);
+      // No separate ⏹️/⚠️ final status message — finalText lives in the stream close.
+      expect(replies.some((r) => r.includes('⏹️') || r.includes('⚠️') || r.includes('✅'))).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
+  });
+
+  it('sends notice.reply and passes ⚠️ Timed out when agent times out with partial output', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-status-partial-'));
+    const cleared: Array<{ statusId: string; finalText: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        yield {
+          type: 'completion' as const,
+          status: 'aborted' as const,
+          reason: 'timeout' as const,
+          partialText: 'Here is partial output',
+        };
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'cursor', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+      async clearStatus(_msg: ChannelMessage, statusId: string, finalText = '') {
+        cleared.push({ statusId, finalText });
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: 'trigger timeout with partial',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor', timeout: 1 } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+      // Should send partial output + timeout notice reply
+      expect(replies.length).toBeGreaterThanOrEqual(1);
+      const allReplies = replies.join('\n');
+      expect(allReplies).toContain('Here is partial output');
+      expect(allReplies).toContain('timed out after 1s');
+      // finalizeStatusUpdate should route the ⚠️ Timed out status
+      expect(cleared.length).toBeGreaterThan(0);
+      expect(cleared[0].finalText).toBe('⚠️ Timed out (1s)');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001');
+    }
   });
 });

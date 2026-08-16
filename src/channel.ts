@@ -62,6 +62,15 @@ export interface ReplyOptions {
   mentions?: MentionTarget[];
 }
 
+/** A media payload the bot SENDS to a chat (image or file). */
+export interface OutboundMedia {
+  kind: 'image' | 'file';
+  /** Raw media bytes. */
+  data: Buffer;
+  /** Optional original filename (used for upload metadata). */
+  fileName?: string;
+}
+
 /**
  * Read receipt emitted when a user reads a message sent by the bot.
  * Currently only supported by Feishu (via `im.message.message_read_v1` event).
@@ -78,6 +87,12 @@ export interface ChannelAdapter {
   readonly name: string;
   /** Optional: override the default 4000-char message split limit for this channel. */
   readonly maxMessageLength?: number;
+  /**
+   * Optional: adapter manages its own streaming state (e.g. WeCom native loading UI).
+   * When true, the gateway skips intermediate status updates and routes the final
+   * status through clearStatus(msg, statusId, finalText).
+   */
+  readonly nativeStreaming?: boolean;
   start(onMessage: (msg: ChannelMessage) => void | Promise<void>): Promise<void>;
   reply(msg: ChannelMessage, text: string, options?: ReplyOptions): Promise<void>;
   stop(): Promise<void>;
@@ -87,6 +102,12 @@ export interface ChannelAdapter {
    * Not all adapters support this — check before calling.
    */
   send?(chatId: string, text: string): Promise<void>;
+  /**
+   * Optional: send an image or file attachment to the chat that `msg` came from.
+   * Used by the gateway when the agent emits a SEND_IMAGE/SEND_FILE protocol marker.
+   * Adapters that cannot send media simply omit this method — the gateway degrades gracefully.
+   */
+  sendMedia?(msg: ChannelMessage, media: OutboundMedia): Promise<void>;
   /**
    * Optional: send a "typing…" indicator to the chat.
    * Called before a long-running AI invocation so the user sees immediate feedback.
@@ -101,7 +122,7 @@ export interface ChannelAdapter {
   /** Optional: update a previously created status/progress message. */
   updateStatus?(msg: ChannelMessage, statusId: string, text: string): Promise<void>;
   /** Optional: clear a previously created status/progress message. */
-  clearStatus?(msg: ChannelMessage, statusId: string): Promise<void>;
+  clearStatus?(msg: ChannelMessage, statusId: string, finalText?: string): Promise<void>;
   /**
    * Optional: resolve group members for @mention support.
    * Returns a map of display name → platform-specific user ID.

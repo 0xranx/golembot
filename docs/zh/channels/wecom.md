@@ -37,6 +37,7 @@ WECOM_SECRET=xxxxxxxxxxxxxxxxxx
 - **连接**：SDK 自动建立并维护与企业微信服务器的 WebSocket 连接
 - **重连**：SDK 自动处理重连和心跳
 - **消息**：通过 WebSocket 事件接收入站消息，转换为 `ChannelMessage`（仅文本）
+- **发送媒体**：Bot 可通过 agent 输出的 `[SEND_IMAGE: <path>]` 或 `[SEND_FILE: <path>]` 标记行发送图片和文件。图片和文件作为独立媒体消息发送——bot 先发送媒体消息，经过短暂确认延迟后再发送完成标记（"mission complete"），从而媒体在标记之前显示于 WeCom UI 中。Agent 默认将文件保存到 `temp_file/` 工作区目录（网关启动时自动创建）。最小文件大小为 5 字节。图片需为 PNG、JPG 或 GIF 格式，≤10MB；文件 ≤20MB。路径可相对于助手工作区，或为工作区内的绝对路径；工作区外的路径将被拒绝。
 - **回复**：通过 SDK 内置的回复方法发送消息
 - **主动消息**：支持 `send()` —— 适配器可以主动向任意会话发送消息
 - **会话类型**：始终为 `dm`（企业微信 Bot 消息为私聊）
@@ -54,4 +55,4 @@ golembot gateway --verbose
 - 与飞书和钉钉一样，企业微信现在也使用 **WebSocket** —— 无需公网 IP 或反向代理
 - `@wecom/aibot-node-sdk` 自动处理重连和心跳
 - 最大消息长度 2,048 字符；更长的回复会自动拆分
-- 仅处理文本消息
+- 仅接收文本消息；Bot 可通过 `[SEND_IMAGE: <path>]` / `[SEND_FILE: <path>]` 标记发送图片（PNG、JPG、GIF；≤10MB）和文件（≤20MB，最小 5 字节），作为独立媒体消息在完成标记前发送。Agent 默认保存到 `temp_file/`（工作区相对路径）；工作区外的路径将被拒绝。

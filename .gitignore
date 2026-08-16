@@ -6,6 +6,8 @@ dist/
 .env.local
 docs/.vitepress/cache/
 docs/drafts/
+# Agent-generated temp files for the send-media protocol (runtime dir, auto-created by gateway)
+temp_file/
 # GolemBot runtime files (local bot instance, not part of the library)
 golem.yaml
 skills/

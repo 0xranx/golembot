@@ -1,6 +1,6 @@
 ---
 name: im-adapter
-description: "Format responses for instant messaging platforms such as Lark, DingTalk, WeCom, Slack, and Telegram. Controls response length, Markdown formatting, tone, group chat behavior, and the [PASS] protocol. Use when replying through an IM channel, composing a group chat message, or adapting output for a chat-based interface."
+description: "Format responses for instant messaging platforms such as Lark, DingTalk, WeCom, Slack, and Telegram. Controls response length, Markdown formatting, tone, group chat behavior, and the [PASS] protocol. Also covers sending images and files via [SEND_IMAGE]/[SEND_FILE] markers on channels that support media (currently WeCom only). Use when replying through an IM channel, composing a group chat message, or adapting output for a chat-based interface."
 ---
 
 # IM Channel Response Guidelines
@@ -65,6 +65,35 @@ Group messages are prefixed with metadata like `[Group: slack-team | MemoryFile:
 - If the user asks you to perform an action (query data, write a file, etc.), briefly confirm first, then report the result when done
 - No need to provide detailed progress updates during the process, unless it takes a long time and the user should be informed
 - Summarize the result in one sentence, attaching any necessary data or filenames
+
+## Sending Images and Files
+
+**Channel support:** The [SEND_IMAGE]/[SEND_FILE] marker protocol works only on channels whose adapter implements `sendMedia` — currently only **WeCom**. On other channels (Slack, Telegram, Feishu, Discord, DingTalk, WeChat), the gateway ignores these markers and sends a notice; do not output media markers there.
+
+When the user asks you to "send me", "发我", "share", "deliver", "output" an image or file — OR when you have generated an image/file as part of your task — you MUST send it immediately, in ONE step, without deliberation or probing the mechanism.
+
+**How to send (the ONLY steps):**
+1. Save the file into the `temp_file/` directory inside the workspace. Create `temp_file/` if it does not exist.
+2. Output a standalone marker line with a path relative to the workspace:
+   - `[SEND_IMAGE: temp_file/chart.png]` — for images (PNG, JPG, GIF; ≤10MB)
+   - `[SEND_FILE: temp_file/report.pdf]` — for files (≤20MB)
+3. Narrate briefly in normal text what you are sending.
+
+**Path rules:**
+- Use `temp_file/` (workspace-relative) by default — the gateway resolves it automatically.
+- Absolute paths work for files inside the workspace (e.g. an absolute path to `temp_file/`). Paths outside the workspace are rejected.
+- Minimum file size: 5 bytes.
+
+**The marker line is consumed by the system and not shown to the user.** Do not explain the mechanism or ask permission — just generate and send.
+
+Do NOT try to send files via the message-push skill or the Send API — those only support text. Use the markers above.
+
+Example:
+```
+我已经生成了销售数据图表。
+[SEND_IMAGE: temp_file/sales-chart.png]
+需要原始数据的话告诉我，我可以把 CSV 也发给你。
+```
 
 ## Things to Avoid
 

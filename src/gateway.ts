@@ -1,5 +1,5 @@
-import { mkdir, readFile as readFileAsync } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { mkdir, readFile as readFileAsync, realpath, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildConversationKey,
@@ -75,22 +75,34 @@ function summarizeToolCall(name: string, args: string, maxLen = 72): string {
   return `🔧 ${label} ${preview}`;
 }
 
-function buildErrorNotice(errorMessage: string, timeoutSeconds: number): { reply: string; status: string } {
+function buildErrorNotice(
+  errorMessage: string,
+  timeoutSeconds: number,
+  hasPartialOutput: boolean,
+): { reply: string; status: string } {
   if (/stopped by user/i.test(errorMessage)) {
     return {
-      reply: 'The task was stopped before completion. The partial reply above may be incomplete.',
+      reply: hasPartialOutput
+        ? 'The task was stopped before completion. The partial reply above may be incomplete.'
+        : 'The task was stopped before completion.',
       status: '⏹️ Stopped',
     };
   }
   if (/timed out/i.test(errorMessage)) {
     return {
-      reply: `Task timed out after ${timeoutSeconds}s. The partial reply above may be incomplete.`,
+      reply: hasPartialOutput
+        ? `Task timed out after ${timeoutSeconds}s. The partial reply above may be incomplete.`
+        : `Task timed out after ${timeoutSeconds}s.`,
       status: `⚠️ Timed out (${timeoutSeconds}s)`,
     };
   }
+  const detail = errorMessage.trim().replace(/\s+/g, ' ').slice(0, 200);
+  if (detail) {
+    return { reply: detail, status: '⚠️ Failed' };
+  }
   return {
-    reply: 'The reply was interrupted before completion. The partial reply above may be incomplete.',
-    status: '⚠️ Interrupted',
+    reply: 'Sorry, an error occurred while processing your message. Please try again later.',
+    status: '⚠️ Failed',
   };
 }
 
@@ -120,12 +132,79 @@ export const AUTO_CONTINUE_PROMPT =
   `[System: Auto-continue. Your previous reply ended with ${CONTINUE_SENTINEL}. Continue working on the task. ` +
   `End with ${CONTINUE_SENTINEL} again if it is still unfinished.]`;
 
+/** Prompt hint reminding agents how to send images/files via markers. */
+export const MEDIA_PROTOCOL_HINT =
+  '[System: When the user asks you to send/generate an image or file, save it to the workspace `temp_file/` dir and output ' +
+  '[SEND_IMAGE: temp_file/<file>] or [SEND_FILE: temp_file/<file>] on its own standalone line — the gateway sends it automatically. ' +
+  'Do NOT use the message-push / Send API for this (it only supports text).]';
+
 const TRAILING_CONTINUE_RE = /(?:^|\n)\s*\[CONTINUE\]\s*$/;
 
 /** Split a trailing [CONTINUE] sentinel line off a reply. */
 export function splitTrailingContinue(text: string): { body: string; hasContinue: boolean } {
   if (!TRAILING_CONTINUE_RE.test(text)) return { body: text, hasContinue: false };
   return { body: text.replace(TRAILING_CONTINUE_RE, '').trimEnd(), hasContinue: true };
+}
+
+// —— Media marker protocol parsing ————————————————————————————————————————————
+// Agents output standalone lines [SEND_IMAGE: <path>] or [SEND_FILE: <path>]
+// in their reply text. The gateway extracts these, resolves the file path against
+// the assistant directory, reads the file bytes, and calls adapter.sendMedia.
+
+/**
+ * Matches a standalone [SEND_IMAGE: <path>] / [SEND_FILE: <path>] line.
+ * NOTE: carries the `g` flag — when using .test()/.exec() directly, reset lastIndex
+ * (e.g. new RegExp(source, flags)) or prefer extractMediaMarkers().
+ */
+export const MEDIA_MARKER_RE = /^\[SEND_(IMAGE|FILE):\s*(\S.*?)\]\s*$/gim;
+
+/**
+ * Extract media markers from agent reply text.
+ * Returns the stripped body and the list of parsed markers.
+ * Pure function — no side effects, safe to call idempotently.
+ */
+export function extractMediaMarkers(text: string): {
+  body: string;
+  markers: Array<{ kind: 'image' | 'file'; path: string }>;
+} {
+  const markers: Array<{ kind: 'image' | 'file'; path: string }> = [];
+  const body = text.replace(MEDIA_MARKER_RE, (_match, kind: string, rawPath: string) => {
+    markers.push({ kind: kind.toLowerCase() as 'image' | 'file', path: rawPath.trim() });
+    return '';
+  });
+  return { body, markers };
+}
+
+/**
+ * Resolve a file path from a media marker against the allowed root.
+ * Returns the resolved absolute path or `null` if it escapes the allowed root.
+ *
+ * - Only the assistant workspace directory (`baseDir`) is allowed.
+ * - Relative paths are resolved against `baseDir`.
+ * - Absolute paths are checked to ensure they stay inside `baseDir`.
+ * - Symlinks are resolved via `realpath` to prevent symlink escapes.
+ *   If the file does not exist, the prefix check alone is sufficient.
+ */
+export async function resolveOutboundPath(baseDir: string, rawPath: string): Promise<string | null> {
+  const resolvedBase = resolve(baseDir);
+
+  // —— Single allowed root: the assistant workspace ——
+  async function tryOne(candidate: string): Promise<string | null> {
+    if (!candidate.startsWith(resolvedBase + sep) && candidate !== resolvedBase) return null;
+
+    const realRoot = await realpath(resolvedBase).catch(() => resolvedBase);
+    try {
+      const real = await realpath(candidate);
+      return real.startsWith(realRoot + sep) || real === realRoot ? real : null;
+    } catch {
+      // File doesn't exist yet — return candidate as fallback
+      return candidate;
+    }
+  }
+
+  // —— Resolve the candidate path ——
+  const candidate = isAbsolute(rawPath) ? resolve(rawPath) : resolve(resolvedBase, rawPath);
+  return tryOne(candidate);
 }
 
 /** Monotonic inbound counter per session key — a newer message interrupts pending auto-continue relays. */
@@ -232,11 +311,20 @@ export function buildGroupPrompt(
   peers?: PeerBot[],
   /** When true, inject the turn-end contract so the agent signals unfinished work with [CONTINUE]. */
   injectContinue = false,
+  /** When true, inject the media protocol hint so agents know how to send images/files. */
+  mediaHintSupported = false,
 ): string {
   const parts: string[] = [];
 
   if (injectContinue) {
     parts.push(TURN_END_CONTRACT);
+  }
+
+  // Inject media protocol hint only when the channel adapter supports sendMedia.
+  // Otherwise, agents on non-sendMedia channels receive a visible degradation
+  // notice in processMedia instead.
+  if (mediaHintSupported) {
+    parts.push(MEDIA_PROTOCOL_HINT);
   }
 
   if (injectPass) {
@@ -401,7 +489,15 @@ export async function handleMessage(
   >,
   adapter: Pick<
     ChannelAdapter,
-    'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers' | 'sendStatus' | 'updateStatus' | 'clearStatus'
+    | 'reply'
+    | 'maxMessageLength'
+    | 'nativeStreaming'
+    | 'typing'
+    | 'getGroupMembers'
+    | 'sendStatus'
+    | 'updateStatus'
+    | 'clearStatus'
+    | 'sendMedia'
   >,
   channelType: string,
   verbose: boolean,
@@ -433,10 +529,32 @@ export async function handleMessage(
       scheduler: cronCtx?.scheduler,
       runTask: cronCtx?.runTask,
     };
+
+    // Open the native loading stream immediately so the user sees feedback
+    // while the command executes (not after).
+    const isStop = parsed.name === 'stop';
+    if (adapter.typing && !isStop) {
+      await adapter.typing(msg).catch(() => {});
+    }
+
     const result = await executeCommand(parsed, cmdCtx);
     if (result) {
       log(verbose, `[${channelType}] slash command: ${parsed.name}`);
-      await adapter.reply(msg, result.text);
+      if (isStop) {
+        // /stop is special: the aborted handler owns the finalText (⏹️ Stopped).
+        await adapter.reply(msg, result.text);
+      } else if (adapter.nativeStreaming) {
+        // nativeStreaming adapters (WeCom) implement a 3-arg clearStatus that
+        // carries the finalText — so slash output can be delivered in-place.
+        // Telegram/Slack use a 2-arg clearStatus that silently swallows text,
+        // so they must fall through to reply() below.
+        // executeCommand may have been fast — ensure the loading is visible
+        // for at least 200ms before closing with the command output.
+        await new Promise<void>((r) => setTimeout(r, 200));
+        await adapter.clearStatus!(msg, '', result.text.trim()).catch(() => {});
+      } else {
+        await adapter.reply(msg, result.text);
+      }
       return;
     }
     // Unknown command — fall through to agent
@@ -507,11 +625,13 @@ export async function handleMessage(
       othersAddressed,
       peers,
       relayEnabled,
+      !!adapter.sendMedia,
     );
   } else {
     sessionKey = buildSessionKey(msg);
     const dmParts = [`[System: This is a private 1-on-1 conversation with ${senderLabel}.]`];
     if (relayEnabled) dmParts.push(TURN_END_CONTRACT);
+    if (adapter.sendMedia) dmParts.push(MEDIA_PROTOCOL_HINT);
     dmParts.push(msg.text);
     fullText = dmParts.join('\n');
   }
@@ -584,11 +704,32 @@ export async function handleMessage(
     await adapter.reply(msg, text.trim());
   };
 
-  const finalizeStatusUpdate = async (finalText = '✅ Done'): Promise<void> => {
+  const finalizeStatusUpdate = async (finalText = '✅ Done', isUserAbort = false): Promise<void> => {
     cancelThinkingStatus();
-    if (!statusMessageId) return;
+    // Skip only when neither a status message exists nor the adapter has clearStatus.
+    // Adapters that support streaming (e.g. WeCom) need clearStatus called even without
+    // a prior sendStatus, to finalize the open stream.
+    if (!statusMessageId && !adapter.clearStatus) return;
     debugEventLog(debugEventsEnabled, `[event-debug] gateway status-final textChars=${finalText.length}`);
-    if (adapter.updateStatus) {
+    if (adapter.nativeStreaming && adapter.clearStatus) {
+      if (isUserAbort) {
+        // /stop: close the stream without writing content, let the slash
+        // handler's "Stopped the current task." land first, then send the
+        // ⏹️ Stopped finalText as a separate message.
+        await adapter.clearStatus(msg, statusMessageId ?? '', '').catch(() => {});
+        await new Promise((r) => setTimeout(r, 200));
+        await adapter.reply(msg, finalText).catch(() => {});
+      } else {
+        // Normal completion / timeout / generic failure: keep the original
+        // behavior — clearStatus closes the stream with the finalText inline.
+        const currentStatusId = statusMessageId;
+        statusMessageId = undefined;
+        await adapter.clearStatus(msg, currentStatusId ?? '', finalText);
+      }
+      statusFinalized = true;
+      return;
+    }
+    if (statusMessageId && adapter.updateStatus) {
       await adapter.updateStatus(msg, statusMessageId, finalText);
       statusMessageText = finalText;
       statusFinalized = true;
@@ -597,7 +738,7 @@ export async function handleMessage(
     if (adapter.clearStatus) {
       const currentStatusId = statusMessageId;
       statusMessageId = undefined;
-      await adapter.clearStatus(msg, currentStatusId);
+      await adapter.clearStatus(msg, currentStatusId ?? '', finalText);
     }
   };
 
@@ -607,36 +748,106 @@ export async function handleMessage(
     }, 1500);
   }
 
+  // Pre-declare so processMedia can reference sendChunk for error notices.
+  let sendChunk: (rawText: string) => Promise<void>;
+
+  // Helper: extract and process outbound media markers from text.
+  // Returns the stripped body. Error notices are sent via sendChunk.
+  const processMedia = async (rawText: string): Promise<string> => {
+    const { body, markers } = extractMediaMarkers(rawText);
+    if (markers.length === 0) return body;
+
+    for (const marker of markers) {
+      try {
+        const resolved = await resolveOutboundPath(dir, marker.path);
+        if (!resolved) {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：路径超出助手目录范围`);
+          continue;
+        }
+
+        const maxSize = marker.kind === 'image' ? 10 * 1024 * 1024 : 20 * 1024 * 1024;
+        let fileStat;
+        try {
+          fileStat = await stat(resolved);
+        } catch {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：文件不存在或无法读取`);
+          continue;
+        }
+
+        if (fileStat.size > maxSize) {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          const maxLabel = marker.kind === 'image' ? '10MB' : '20MB';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：文件大小超过${maxLabel}`);
+          continue;
+        }
+
+        if (!adapter.sendMedia) {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 当前渠道不支持发送${label}，已忽略`);
+          log(verbose, `[${channelType}] adapter lacks sendMedia, skipping ${marker.kind} ${marker.path}`);
+          continue;
+        }
+
+        let data: Buffer;
+        try {
+          data = await readFileAsync(resolved);
+        } catch {
+          const label = marker.kind === 'image' ? '图片' : '文件';
+          await sendChunk(`⚠️ 无法发送${label} ${marker.path}：文件读取失败`);
+          continue;
+        }
+
+        await adapter.sendMedia(msg, {
+          kind: marker.kind,
+          data,
+          fileName: basename(resolved),
+        });
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        const label = marker.kind === 'image' ? '图片' : '文件';
+        log(verbose, `[${channelType}] media processing failed for ${marker.path}: ${reason}`);
+        await sendChunk(`⚠️ 无法发送${label} ${marker.path}：${reason}`);
+      }
+    }
+
+    return body;
+  };
+
   // Helper: send a text chunk to the IM channel (handles splitMessage + mentions).
-  const sendChunk = async (rawText: string): Promise<void> => {
+  sendChunk = async (rawText: string): Promise<void> => {
+    // Extract and process media markers before anything else (idempotent).
+    const text = await processMedia(rawText);
+
     // Safety net: never leak the [CONTINUE] auto-continue sentinel to IM
-    const { body: text, hasContinue } = splitTrailingContinue(rawText);
+    const { body, hasContinue } = splitTrailingContinue(text);
     if (hasContinue) {
       log(verbose, `[${channelType}] sendChunk stripped trailing ${CONTINUE_SENTINEL} sentinel`);
     }
-    if (!text.trim()) return;
+    if (!body.trim()) return;
     hasVisibleStatus = true;
     cancelThinkingStatus();
-    if (statusMessageId && adapter.updateStatus && statusMessageText !== '✍️ replying...') {
+    if (statusMessageId && adapter.updateStatus && !adapter.nativeStreaming && statusMessageText !== '✍️ replying...') {
       await adapter.updateStatus(msg, statusMessageId, '✍️ replying...');
       statusMessageText = '✍️ replying...';
     }
     // Final safety net: never send [PASS]/[SKIP] sentinel values to IM
-    const sentinel = text.trim();
+    const sentinel = body.trim();
     if (sentinel === '[PASS]' || sentinel === '[SKIP]') {
       log(verbose, `[${channelType}] sendChunk blocked sentinel: ${sentinel}`);
       return;
     }
-    const chunks = splitMessage(text.trim(), maxLen);
+    const chunks = splitMessage(body.trim(), maxLen);
     debugEventLog(
       debugEventsEnabled,
-      `[event-debug] gateway reply totalChars=${text.trim().length} chunks=${chunks.length} chatType=${msg.chatType}`,
+      `[event-debug] gateway reply totalChars=${body.trim().length} chunks=${chunks.length} chatType=${msg.chatType}`,
     );
     let mentions: MentionTarget[] = [];
     if (msg.chatType === 'group' && adapter.getGroupMembers) {
       try {
         const memberCache = await adapter.getGroupMembers(msg.chatId);
-        mentions = parseMentions(text.trim(), memberCache).mentions;
+        mentions = parseMentions(body.trim(), memberCache).mentions;
       } catch {
         /* best effort */
       }
@@ -797,23 +1008,33 @@ export async function handleMessage(
       }
 
       if (!trimmed && hasError) {
-        await sendChunk('Sorry, an error occurred while processing your message. Please try again later.');
-        fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
+        // No partial output + error: surface the detailed reply text (no emoji)
+        // through sendChunk so the user sees the real outcome. The emoji status
+        // is delivered separately via finalizeStatusUpdate → clearStatus.
+        fullReply = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmed).reply;
+        if (!adapter.nativeStreaming || (hasError && !/stopped by user/i.test(lastErrorMessage))) {
+          await sendChunk(fullReply);
+        }
       }
 
       let finalStatusText: string | undefined;
-      if (trimmed && hasError) {
-        const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds);
-        await sendChunk(notice.reply);
+      if (hasError) {
+        const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmed);
+        if (trimmed) await sendChunk(notice.reply);
         finalStatusText = notice.status;
-      } else if (hasError) {
-        finalStatusText = '⚠️ Failed';
       }
 
-      const { body, hasContinue } = splitTrailingContinue(fullReply);
+      // Strip media markers before splitTrailingContinue so that the returned
+      // fullReply (which feeds group history + metrics) never contains marker lines.
+      const mediaStrippedReply = extractMediaMarkers(fullReply).body;
+      const { body, hasContinue } = splitTrailingContinue(mediaStrippedReply);
       const willRelay = hasContinue && mayRelay && !hasError;
       if (fullReply.trim()) {
-        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done');
+        if (!willRelay)
+          await finalizeStatusUpdate(
+            finalStatusText ?? '✅ Done',
+            lastErrorMessage === 'Agent invocation stopped by user',
+          );
         log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..." (streaming)`);
         trackMetrics({ responsePreview: body.trim().slice(0, 120) });
       }
@@ -866,26 +1087,45 @@ export async function handleMessage(
         return { fullReply: '', hasError, silent: true, sawContinue: false };
       }
 
-      if (!fullReply.trim() && hasError) {
-        fullReply = 'Sorry, an error occurred while processing your message. Please try again later.';
+      if (!trimmedBuf && hasError) {
+        // No partial output + error: surface the detailed reply text (no emoji)
+        // through sendChunk so the user sees the real outcome. The emoji status
+        // is delivered separately via finalizeStatusUpdate → clearStatus.
+        fullReply = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmedBuf).reply;
       }
 
-      const { body, hasContinue } = splitTrailingContinue(fullReply);
+      // Strip media markers before splitTrailingContinue so that the returned
+      // fullReply (which feeds group history + metrics) never contains marker lines.
+      const mediaStrippedReplyBuf = extractMediaMarkers(fullReply).body;
+      const { body, hasContinue } = splitTrailingContinue(mediaStrippedReplyBuf);
       const willRelay = hasContinue && mayRelay && !hasError;
       if (fullReply.trim()) {
-        await sendChunk(fullReply);
-        let finalStatusText: string | undefined;
+        // nativeStreaming adapters (WeCom) deliver the no-output error text via
+        // finalizeStatusUpdate → clearStatus; sendChunk here would duplicate it.
+        // User-initiated /stop: the command handler already sent text; only
+        // finalizeStatusUpdate → clearStatus delivers the ⏹️ Stopped finalText.
+        // Other errors (timeout / engine failure) without output: sendChunk the
+        // detailed reply so the user sees the real cause.
         if (
-          hasError &&
-          fullReply !== 'Sorry, an error occurred while processing your message. Please try again later.'
+          trimmedBuf ||
+          !adapter.nativeStreaming ||
+          (!trimmedBuf && hasError && !/stopped by user/i.test(lastErrorMessage))
         ) {
-          const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds);
-          await sendChunk(notice.reply);
-          finalStatusText = notice.status;
-        } else if (hasError) {
-          finalStatusText = '⚠️ Failed';
+          await sendChunk(fullReply);
         }
-        if (!willRelay) await finalizeStatusUpdate(finalStatusText ?? '✅ Done');
+        let finalStatusText: string | undefined;
+        if (hasError) {
+          const notice = buildErrorNotice(lastErrorMessage, timeoutSeconds, !!trimmedBuf);
+          if (trimmedBuf) {
+            await sendChunk(notice.reply);
+          }
+          finalStatusText = notice.status;
+        }
+        if (!willRelay)
+          await finalizeStatusUpdate(
+            finalStatusText ?? '✅ Done',
+            lastErrorMessage === 'Agent invocation stopped by user',
+          );
         log(verbose, `[${channelType}] replied to ${senderLabel}: "${fullReply.trim().slice(0, 80)}..."`);
         trackMetrics({ responsePreview: body.trim().slice(0, 120) });
       }
@@ -948,6 +1188,13 @@ export async function handleMessage(
     }
     cancelThinkingStatus();
     if (typingTimer !== undefined) clearInterval(typingTimer);
+    // nativeStreaming adapters (WeCom): the auto-continue typing interval may
+    // have opened a loading stream just before being cleared (e.g. a /stop
+    // landed between ticks). Silently close any leftover stream without
+    // resending the final text (empty finalText = no visible message).
+    if (adapter.nativeStreaming && adapter.clearStatus) {
+      await adapter.clearStatus(msg, '', '').catch(() => {});
+    }
   }
 }
 
@@ -1104,6 +1351,11 @@ export function startInboxConsumer(
 export async function startGateway(opts: GatewayOpts): Promise<void> {
   const dir = resolve(opts.dir || '.');
   setPeerBase(dir);
+
+  // temp_file/ dir for agent-generated files to send (created if missing)
+  mkdir(join(dir, 'temp_file'), { recursive: true }).catch((e) => {
+    console.warn('[gateway] Failed to create temp_file/ dir:', e instanceof Error ? e.message : String(e));
+  });
 
   const config: GolemConfig = await loadConfig(dir);
   const verbose = opts.verbose ?? false;
@@ -1297,6 +1549,15 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
             );
           }
         }
+        if (type === 'wecom') {
+          const gc = resolveGroupChatConfig(config);
+          if (gc.groupPolicy !== 'mention-only') {
+            console.warn(
+              `   ⚠️  WeCom groupPolicy "${gc.groupPolicy}" will behave like "mention-only" — ` +
+                `the platform only delivers @mention messages to bots.`,
+            );
+          }
+        }
       } catch (e) {
         channelStatuses.push({ type, status: 'failed', error: (e as Error).message });
       }
@@ -1365,14 +1626,24 @@ export async function startGateway(opts: GatewayOpts): Promise<void> {
         // Wrap adapter to fallback to send() when reply() throws.
         const wrappedAdapter: Pick<
           ChannelAdapter,
-          'reply' | 'maxMessageLength' | 'typing' | 'getGroupMembers' | 'sendStatus' | 'updateStatus' | 'clearStatus'
+          | 'reply'
+          | 'maxMessageLength'
+          | 'nativeStreaming'
+          | 'typing'
+          | 'getGroupMembers'
+          | 'sendStatus'
+          | 'updateStatus'
+          | 'clearStatus'
+          | 'sendMedia'
         > = {
           maxMessageLength: adapter.maxMessageLength,
+          nativeStreaming: adapter.nativeStreaming,
           typing: adapter.typing?.bind(adapter),
           getGroupMembers: adapter.getGroupMembers?.bind(adapter),
           sendStatus: adapter.sendStatus?.bind(adapter),
           updateStatus: adapter.updateStatus?.bind(adapter),
           clearStatus: adapter.clearStatus?.bind(adapter),
+          sendMedia: adapter.sendMedia?.bind(adapter),
           reply: async (m, text, opts) => {
             try {
               await adapter.reply(m, text, opts);
