@@ -684,7 +684,11 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     async listModels(): Promise<string[]> {
       const config = await loadConfig(dir);
       const engineType = engineOverride || config.engine;
-      const model = modelOverride || config.model;
+      const baseProvider = providerOverride || config.provider;
+      const provider = usingFallback && baseProvider?.fallback ? baseProvider.fallback : baseProvider;
+      // Align with doChat()/getStatus() so the model hint passed to
+      // engine.listModels matches the one actually used for invocation.
+      const model = provider?.models?.[engineType] || modelOverride || provider?.model || config.model;
       const engine = createEngine(engineType);
       if (!engine.listModels) return [];
       return engine.listModels({ apiKey, model });
