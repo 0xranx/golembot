@@ -1957,3 +1957,79 @@ describe('ensureOpenCodeConfig mcp', () => {
     expect(stat2.mtimeMs).toBe(stat1.mtimeMs);
   });
 });
+
+describe('CodexEngine.listModels local model cache', () => {
+  let codexHome: string;
+  let previousCodexHome: string | undefined;
+  let previousCodexApiKey: string | undefined;
+  let previousOpenAiApiKey: string | undefined;
+
+  beforeEach(async () => {
+    codexHome = await mkdtemp(join(tmpdir(), 'golem-codex-models-'));
+
+    previousCodexHome = process.env.CODEX_HOME;
+    previousCodexApiKey = process.env.CODEX_API_KEY;
+    previousOpenAiApiKey = process.env.OPENAI_API_KEY;
+
+    process.env.CODEX_HOME = codexHome;
+    delete process.env.CODEX_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+  });
+
+  afterEach(async () => {
+    if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = previousCodexHome;
+
+    if (previousCodexApiKey === undefined) delete process.env.CODEX_API_KEY;
+    else process.env.CODEX_API_KEY = previousCodexApiKey;
+
+    if (previousOpenAiApiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousOpenAiApiKey;
+
+    await rm(codexHome, { recursive: true, force: true });
+  });
+
+  it('reads listable models from CODEX_HOME and orders them by priority', async () => {
+    await writeFile(
+      join(codexHome, 'models_cache.json'),
+      JSON.stringify({
+        models: [
+          { slug: 'model-low', visibility: 'list', priority: 20 },
+          { slug: 'model-hidden', visibility: 'hidden', priority: 1 },
+          { slug: 'model-high', visibility: 'list', priority: 5 },
+          { visibility: 'list', priority: 0 },
+        ],
+      }),
+    );
+
+    const engine = new CodexEngine();
+
+    await expect(engine.listModels({})).resolves.toEqual(['model-high', 'model-low']);
+  });
+
+  it('falls back to the static model list when the cache is missing', async () => {
+    const engine = new CodexEngine();
+
+    await expect(engine.listModels({})).resolves.toEqual([
+      'gpt-5.4',
+      'gpt-5.3-codex',
+      'gpt-5.2-codex',
+      'gpt-5.1-codex-max',
+      'codex-mini-latest',
+    ]);
+  });
+
+  it('falls back to the static model list when the cache is malformed', async () => {
+    await writeFile(join(codexHome, 'models_cache.json'), '{invalid-json');
+
+    const engine = new CodexEngine();
+
+    await expect(engine.listModels({})).resolves.toEqual([
+      'gpt-5.4',
+      'gpt-5.3-codex',
+      'gpt-5.2-codex',
+      'gpt-5.1-codex-max',
+      'codex-mini-latest',
+    ]);
+  });
+});
