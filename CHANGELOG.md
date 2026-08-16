@@ -1,3 +1,23 @@
+# [0.49.0](https://github.com/0xranx/golembot/compare/v0.48.6...v0.49.0) (2026-08-16)
+
+
+### Bug Fixes
+
+* **gateway:** inject MEDIA_PROTOCOL_HINT only when adapter supports sendMedia ([5836e03](https://github.com/0xranx/golembot/commit/5836e035f37f5ea1bca91da3bb9daaa70aa7992e))
+* **gateway:** route slash command output via nativeStreaming and harden opencode test mocks ([9883beb](https://github.com/0xranx/golembot/commit/9883bebd1a73f308c640000d1fca22096dc085e9)), closes [#49](https://github.com/0xranx/golembot/issues/49)
+* **index:** align listModels model resolution with getStatus/doChat ([283c453](https://github.com/0xranx/golembot/commit/283c453b41ef49da8387115c6a4f06f5d555a582))
+* **wecom:** key streaming state by chatId to prevent cross-session interference ([5f40ee8](https://github.com/0xranx/golembot/commit/5f40ee8e430f753882e452b9a0bb01a55372d1ba))
+* **wecom:** pass gateway final status text through clearStatus and clean up error/stop flows ([9a68f28](https://github.com/0xranx/golembot/commit/9a68f2820f2d5b1c99e4ce875c0e047ccfe576d8))
+
+
+### Features
+
+* **channel:** add OutboundMedia type and sendMedia to ChannelAdapter ([41c5805](https://github.com/0xranx/golembot/commit/41c58053fe950b8151de26f8643ead1e7395d5ea))
+* **gateway:** add media marker protocol, streaming status pipeline, and cronCtx decoupling ([dd7ed6f](https://github.com/0xranx/golembot/commit/dd7ed6f1b3893e3eb3653f748dc74af0051f2d02))
+* **wecom:** implement updateStatus and fix clearStatus to use gateway status text ([57f7d31](https://github.com/0xranx/golembot/commit/57f7d3120508d9d2a2e8793f25bdbec8526e43da))
+* **wecom:** stream slash command output with native loading UI ([1f66777](https://github.com/0xranx/golembot/commit/1f667777684ce205b8b74369fc8b32ba137eaffa))
+* **wecom:** support group chat with [@mention](https://github.com/mention), streaming reply, typing, and sendMedia ([2faccd0](https://github.com/0xranx/golembot/commit/2faccd076deeb7f29fc52c554be75ec7a28cfd08))
+
 ## [0.48.6](https://github.com/0xranx/golembot/compare/v0.48.5...v0.48.6) (2026-08-12)
 
 
