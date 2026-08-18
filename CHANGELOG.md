@@ -1,3 +1,11 @@
+## [0.49.1](https://github.com/0xranx/golembot/compare/v0.49.0...v0.49.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* **codex:** discover models from Codex local cache ([e817dcd](https://github.com/0xranx/golembot/commit/e817dcdd7ac0081c5ce0a81f1ba0c06fd66b65ed))
+* **codex:** place exec flags before resume subcommand ([6300a74](https://github.com/0xranx/golembot/commit/6300a7488561334087fcab740836cedbbb88e6e0))
+
 # [0.49.0](https://github.com/0xranx/golembot/compare/v0.48.6...v0.49.0) (2026-08-16)
 
 

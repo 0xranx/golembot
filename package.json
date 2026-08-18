@@ -1,6 +1,6 @@
 {
   "name": "golembot",
-  "version": "0.49.0",
+  "version": "0.49.1",
   "description": "GolemBot - Local-first AI assistant powered by Coding Agent CLI engines. Connect to Slack, Telegram, Discord, Feishu, DingTalk, WeCom, WeChat.",
   "type": "module",
   "main": "./dist/index.js",
