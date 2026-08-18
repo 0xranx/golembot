@@ -47,7 +47,7 @@ export function buildCodexExecArgs(
   const imageFlags = (opts.imagePaths ?? []).flatMap((path) => ['--image', path]);
   const trailingArgs = [prompt, ...imageFlags];
   return opts.sessionId
-    ? [...globalFlags, 'exec', 'resume', ...sharedFlags, ...modelFlag, opts.sessionId, ...trailingArgs]
+    ? [...globalFlags, 'exec', ...sharedFlags, 'resume', ...modelFlag, opts.sessionId, ...trailingArgs]
     : [...globalFlags, 'exec', ...sharedFlags, ...modelFlag, ...trailingArgs];
 }
 

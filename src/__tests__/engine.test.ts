@@ -1650,7 +1650,6 @@ describe('buildCodexExecArgs', () => {
 
     expect(args).toEqual([
       'exec',
-      'resume',
       '--json',
       '--dangerously-bypass-approvals-and-sandbox',
       '--skip-git-repo-check',
@@ -1660,6 +1659,7 @@ describe('buildCodexExecArgs', () => {
       'model_provider="minimax"',
       '-c',
       'model_providers.minimax.wire_api="responses"',
+      'resume',
       '--model',
       'gpt-5.4',
       'thread_123',
