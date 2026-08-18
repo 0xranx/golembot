@@ -1,4 +1,5 @@
-import { lstat, mkdir, readdir, symlink, unlink } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, symlink, unlink } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { assessCodexProviderCompatibility } from '../codex-provider-compat.js';
 import { debugEventLog, isDebugEventsEnabled, summarizeJsonEventLine } from '../debug-events.js';
@@ -339,6 +340,28 @@ export class CodexEngine implements AgentEngine {
   }
 
   async listModels(opts: ListModelsOpts): Promise<string[]> {
+    try {
+      const codexHome = process.env.CODEX_HOME || join(homedir(), '.codex');
+      const cachePath = join(codexHome, 'models_cache.json');
+      const raw = await readFile(cachePath, 'utf8');
+      const data = JSON.parse(raw) as {
+        models?: Array<{
+          slug?: string;
+          visibility?: string;
+          priority?: number;
+        }>;
+      };
+
+      const models = (data.models ?? [])
+        .filter((m) => m.slug && m.visibility === 'list')
+        .sort((a, b) => (a.priority ?? Number.MAX_SAFE_INTEGER) - (b.priority ?? Number.MAX_SAFE_INTEGER))
+        .map((m) => m.slug as string);
+
+      if (models.length > 0) return models;
+    } catch {
+      /* fallback below */
+    }
+
     const apiKey = opts.apiKey || process.env.CODEX_API_KEY || process.env.OPENAI_API_KEY;
     if (apiKey) {
       try {
