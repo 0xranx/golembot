@@ -6,6 +6,7 @@ export class DiscordAdapter implements ChannelAdapter {
   readonly name = 'discord';
   /** Discord's per-message character limit for regular messages. */
   readonly maxMessageLength = 2000;
+  private static readonly MEMBER_FETCH_TIMEOUT_MS = 2_000;
 
   private config: DiscordChannelConfig;
   private client: any = null;
@@ -108,7 +109,20 @@ export class DiscordAdapter implements ChannelAdapter {
     try {
       const channel = await this.client.channels.fetch(chatId);
       if (!channel?.guild) return new Map();
-      const guildMembers = await channel.guild.members.fetch();
+      const memberManager = channel.guild.members;
+      const cachedMembers = memberManager.cache ?? new Map();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      let guildMembers;
+      try {
+        guildMembers = await Promise.race([
+          memberManager.fetch().catch(() => cachedMembers),
+          new Promise((resolve) => {
+            timeout = setTimeout(() => resolve(cachedMembers), DiscordAdapter.MEMBER_FETCH_TIMEOUT_MS);
+          }),
+        ]);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
       const members = new Map<string, string>();
       for (const [id, member] of guildMembers) {
         if (member.user.bot) continue;

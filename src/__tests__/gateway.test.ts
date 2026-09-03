@@ -704,6 +704,81 @@ describe('DiscordAdapter', () => {
     const adapter = new (DiscordAdapter as any)({ botToken: 'fake-token' });
     await expect(adapter.stop()).resolves.toBeUndefined();
   });
+
+  it('replies with cached mentions when the full member fetch hangs', async () => {
+    vi.useFakeTimers();
+    const dir = await mkdtemp(join(tmpdir(), 'golem-discord-members-'));
+    try {
+      const { DiscordAdapter } = await import('../channels/discord.js');
+      const adapter = new (DiscordAdapter as any)({ botToken: 'fake-token' });
+      const replies: string[] = [];
+      let memberFetchStarted = false;
+      const cachedMembers = new Map([
+        [
+          'user-1',
+          {
+            displayName: 'Alice',
+            user: { bot: false, username: 'alice' },
+          },
+        ],
+      ]);
+      adapter.client = {
+        channels: {
+          fetch: async () => ({
+            guild: {
+              members: {
+                cache: cachedMembers,
+                fetch: async () => {
+                  memberFetchStarted = true;
+                  return new Promise(() => {});
+                },
+              },
+            },
+          }),
+        },
+      };
+      const assistant = {
+        async *chat() {
+          yield { type: 'text' as const, content: 'Hello @Alice' };
+          yield { type: 'done' as const, durationMs: 1 };
+        },
+      };
+      const msg: ChannelMessage = {
+        channelType: 'discord',
+        senderId: 'user-2',
+        senderName: 'Bob',
+        chatId: 'channel-1',
+        chatType: 'group',
+        text: 'hello',
+        mentioned: true,
+        raw: {
+          async reply(payload: { content: string }) {
+            replies.push(payload.content);
+          },
+        },
+      };
+
+      const task = handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'cursor' } as any,
+        assistant as any,
+        adapter,
+        'discord',
+        false,
+        dir,
+      );
+
+      await vi.waitFor(() => expect(memberFetchStarted).toBe(true));
+      await vi.advanceTimersByTimeAsync(2_000);
+      await task;
+
+      expect(replies).toEqual(['Hello <@user-1>']);
+    } finally {
+      vi.useRealTimers();
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('discord:channel-1');
+    }
+  });
 });
 
 describe('processMedia - degradation notice for non-sendMedia channels', () => {

@@ -844,7 +844,8 @@ export async function handleMessage(
       `[event-debug] gateway reply totalChars=${body.trim().length} chunks=${chunks.length} chatType=${msg.chatType}`,
     );
     let mentions: MentionTarget[] = [];
-    if (msg.chatType === 'group' && adapter.getGroupMembers) {
+    const hasOutgoingMention = /@[\w\u4e00-\u9fff]{1,20}/.test(body.trim());
+    if (msg.chatType === 'group' && hasOutgoingMention && adapter.getGroupMembers) {
       try {
         const memberCache = await adapter.getGroupMembers(msg.chatId);
         mentions = parseMentions(body.trim(), memberCache).mentions;

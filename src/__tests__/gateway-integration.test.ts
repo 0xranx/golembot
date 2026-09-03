@@ -1130,14 +1130,19 @@ describe('handleMessage — full gateway pipeline', () => {
       expect(adapter.replies[0].options).toBeUndefined();
     });
 
-    it('passes no mentions when reply text has no @patterns matching members', async () => {
+    it('does not fetch group members when reply text has no @ pattern', async () => {
+      let called = false;
       const assistant = makeMockAssistant('sure, I will handle it');
       const adapter = makeMockAdapter();
-      adapter.getGroupMembers = async () => new Map([['alice', 'ou_alice']]);
+      adapter.getGroupMembers = async () => {
+        called = true;
+        return new Map([['alice', 'ou_alice']]);
+      };
       const msg = makeGroupMsg({ text: '@golem do it' });
       const config = makeConfig({ groupChat: { groupPolicy: 'mention-only' } } as any);
       await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
 
+      expect(called).toBe(false);
       expect(adapter.replies.length).toBeGreaterThanOrEqual(1);
       expect(adapter.replies[0].options).toBeUndefined();
     });
