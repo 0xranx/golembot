@@ -1,3 +1,10 @@
+## [0.49.2](https://github.com/0xranx/golembot/compare/v0.49.1...v0.49.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* **discord:** avoid blocking group replies on member fetch ([7e12396](https://github.com/0xranx/golembot/commit/7e12396422782138ae83a6114608ec31439e13bc))
+
 ## [0.49.1](https://github.com/0xranx/golembot/compare/v0.49.0...v0.49.1) (2026-08-18)
 
 
