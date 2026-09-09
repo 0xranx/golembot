@@ -833,6 +833,37 @@ describe('Golem HTTP Server', () => {
       expect(body.type).toBe('command');
       expect(body.text).toContain('Not available');
     });
+
+    it('keeps unknown slash commands as ordinary chat through POST /chat (native command passthrough is gateway-only)', async () => {
+      let capturedPrompt: string | undefined;
+      let invokeCommandCalled = false;
+      vi.mocked(createEngine).mockImplementation(() => ({
+        async *invoke(prompt: string, _opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          capturedPrompt = prompt;
+          yield { type: 'text', content: 'ordinary chat reply' };
+          yield { type: 'done', sessionId: 'srv-sess-unknown' };
+        },
+        async *invokeCommand(_c: string, _a: string, _opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          invokeCommandCalled = true;
+          yield { type: 'done', sessionId: 'srv-sess-unknown' };
+        },
+      }));
+
+      await startServerWithDir();
+      const res = await request(server, 'POST', '/chat', {
+        message: '/review current changes',
+        sessionKey: 'http-session',
+      });
+
+      expect(res.status).toBe(200);
+      const events = res.body
+        .split('\n\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line.replace('data: ', '')));
+      expect(events[0]).toEqual({ type: 'text', content: 'ordinary chat reply' });
+      expect(capturedPrompt).toBe('/review current changes');
+      expect(invokeCommandCalled).toBe(false);
+    });
   });
 
   // ── Task REST API ──────────────────────────────────────

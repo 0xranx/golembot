@@ -31,7 +31,7 @@ import {
 
 export type { ChannelAdapter, ChannelMessage, ImageAttachment, ReadReceipt } from './channel.js';
 export { buildSessionKey, stripMention } from './channel.js';
-export { type CommandContext, type CommandResult, executeCommand, parseCommand } from './commands.js';
+export { type CommandContext, type CommandResult, executeCommand, isKnownCommand, parseCommand } from './commands.js';
 export type { ChannelStatus, DashboardContext, GatewayMetrics, RecentMessage } from './dashboard.js';
 export type { CompletionEvent, DiscoveredEngine, StreamEvent } from './engine.js';
 export { claudeProviderEnv, codexProviderEnv, cursorProviderEnv, openCodeProviderEnv } from './engine.js';
@@ -170,6 +170,14 @@ export interface Assistant {
    * this; other engines yield an error and a failed completion.
    */
   command(command: string, argumentsText?: string, opts?: CommandOpts): AsyncIterable<StreamEvent>;
+  /**
+   * Whether the currently active engine (respecting any runtime setEngine()
+   * override) implements native command support. Callers such as the
+   * gateway use this to decide between assistant.command() and ordinary
+   * assistant.chat() for unrecognized slash commands, without hard-coding
+   * engine names.
+   */
+  supportsNativeCommands(): Promise<boolean>;
   init(opts: { engine: string; name: string; role?: string }): Promise<void>;
   cancel(sessionKey?: string): Promise<boolean>;
   resetSession(sessionKey?: string): Promise<void>;
@@ -867,6 +875,13 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
 
     async discoverEngines(): Promise<DiscoveredEngine[]> {
       return discoverEngines();
+    },
+
+    async supportsNativeCommands(): Promise<boolean> {
+      const config = await loadConfig(dir);
+      const engineType = engineOverride || config.engine;
+      const engine = createEngine(engineType);
+      return Boolean(engine.invokeCommand);
     },
 
     setProvider(provider: ProviderConfig): void {

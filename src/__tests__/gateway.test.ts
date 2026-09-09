@@ -588,6 +588,147 @@ describe('Slack thread conversation keys', () => {
       clearGroupChatState('slack:C001:thread:1742920000.123456');
     }
   });
+
+  it('uses the thread-scoped conversation key for native Slack group commands', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-thread-native-group-'));
+    const commandCalls: Array<{ command: string; argumentsText: string; sessionKey?: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        throw new Error('chat should not run when a native command is dispatched');
+        // biome-ignore lint/correctness/noUnreachable: unreachable yield keeps TS generator type happy
+        yield { type: 'done' as const, sessionId: 'x' };
+      },
+      async *command(command: string, argumentsText: string, opts: { sessionKey?: string }) {
+        commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed the changes.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      },
+      async supportsNativeCommands() {
+        return true;
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'opencode', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'group',
+      text: '@GolemBot /review changes',
+      threadId: '1742920000.123456',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'opencode' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+
+      expect(commandCalls).toEqual([
+        { command: 'review', argumentsText: 'changes', sessionKey: 'slack:C001:thread:1742920000.123456' },
+      ]);
+      expect(replies).toEqual(['Reviewed the changes.']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      clearGroupChatState('slack:C001:thread:1742920000.123456');
+    }
+  });
+
+  it('uses the thread-scoped session key for native Slack DM commands', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'golem-thread-native-dm-'));
+    const commandCalls: Array<{ command: string; argumentsText: string; sessionKey?: string }> = [];
+    const replies: string[] = [];
+
+    const assistant = {
+      async *chat() {
+        throw new Error('chat should not run when a native command is dispatched');
+        // biome-ignore lint/correctness/noUnreachable: unreachable yield keeps TS generator type happy
+        yield { type: 'done' as const, sessionId: 'x' };
+      },
+      async *command(command: string, argumentsText: string, opts: { sessionKey?: string }) {
+        commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Plan drafted.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      },
+      async supportsNativeCommands() {
+        return true;
+      },
+      async setEngine() {},
+      async setModel() {},
+      async getStatus() {
+        return { engine: 'opencode', model: undefined, skills: [] };
+      },
+      async cancel() {
+        return false;
+      },
+      async resetSession() {},
+      async listModels() {
+        return [];
+      },
+    };
+
+    const adapter = {
+      async reply(_msg: ChannelMessage, text: string) {
+        replies.push(text);
+      },
+    };
+
+    const msg: ChannelMessage = {
+      channelType: 'slack',
+      senderId: 'U001',
+      senderName: 'Alice',
+      chatId: 'C001',
+      chatType: 'dm',
+      text: '/plan next steps',
+      threadId: '1742920000.123456',
+      raw: {},
+    };
+
+    try {
+      await handleMessage(
+        msg,
+        { name: 'GolemBot', engine: 'opencode' } as any,
+        assistant as any,
+        adapter,
+        'slack',
+        false,
+        dir,
+      );
+
+      expect(commandCalls).toEqual([
+        { command: 'plan', argumentsText: 'next steps', sessionKey: 'slack:C001:U001:thread:1742920000.123456' },
+      ]);
+      expect(replies).toEqual(['Plan drafted.']);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('clearGroupChatState', () => {

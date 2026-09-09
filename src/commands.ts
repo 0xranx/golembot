@@ -52,6 +52,14 @@ export interface CommandContext {
 interface ParsedCommand {
   name: string;
   args: string[];
+  /**
+   * Raw text after the command token, with the delimiter whitespace and
+   * outer whitespace removed. Unlike `args`, this preserves internal
+   * spacing/newlines so native engine commands (e.g. OpenCode's `review`)
+   * receive arguments verbatim instead of a whitespace-collapsed
+   * `args.join(' ')`.
+   */
+  argumentsText: string;
 }
 
 // ── Known engines (for validation) ──────────────────────
@@ -72,7 +80,20 @@ export function parseCommand(text: string): ParsedCommand | null {
   const name = parts[0].toLowerCase();
   const args = parts.slice(1);
 
-  return { name, args };
+  const firstWhitespace = trimmed.search(/\s/);
+  const argumentsText = firstWhitespace === -1 ? '' : trimmed.slice(firstWhitespace).trim();
+
+  return { name, args, argumentsText };
+}
+
+/**
+ * True when `name` matches a recognized Golem built-in slash command (e.g.
+ * '/help', '/status'). Lets callers decide whether to show upfront feedback
+ * (e.g. a typing indicator) before calling executeCommand(), without
+ * duplicating the built-in command list or executing it twice.
+ */
+export function isKnownCommand(name: string): boolean {
+  return name in COMMANDS;
 }
 
 // ── Execute ──────────────────────────────────────────────

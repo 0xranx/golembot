@@ -273,10 +273,24 @@ const mockAssistantStubs = {
   async listModels() {
     return ['mock-model-1', 'mock-model-2'];
   },
+  // Default: no native command support — media tests exercise ordinary chat.
+  async supportsNativeCommands() {
+    return false;
+  },
+  async *command(
+    _command: string,
+    _argumentsText?: string,
+    _opts?: { sessionKey?: string },
+  ): AsyncIterable<StreamEvent> {
+    yield { type: 'error' as const, message: 'not supported' };
+    yield { type: 'completion' as const, status: 'failed' as const, message: 'not supported' };
+  },
 };
 
 type MockAssistant = {
   chat(message: string, opts?: { sessionKey?: string }): AsyncIterable<StreamEvent>;
+  command(command: string, argumentsText?: string, opts?: { sessionKey?: string }): AsyncIterable<StreamEvent>;
+  supportsNativeCommands(): Promise<boolean>;
   setEngine(engine: string): void;
   setModel(model: string): void;
   getStatus(): Promise<{

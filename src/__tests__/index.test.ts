@@ -1422,3 +1422,53 @@ describe('command (native engine commands)', () => {
     });
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// assistant.supportsNativeCommands() — runtime capability check
+// ═══════════════════════════════════════════════════════
+
+describe('supportsNativeCommands', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'golem-test-capability-'));
+    await writeFile(join(dir, 'golem.yaml'), 'name: test-bot\nengine: opencode\n');
+    await mkdir(join(dir, 'skills', 'general'), { recursive: true });
+    await writeFile(
+      join(dir, 'skills', 'general', 'SKILL.md'),
+      '---\nname: general\ndescription: General assistant\n---\n# General\n',
+    );
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('reports native command support for an engine with invokeCommand', async () => {
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    await expect(assistant.supportsNativeCommands()).resolves.toBe(true);
+  });
+
+  it('reports no native command support after switching to an engine without invokeCommand', async () => {
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      // no invokeCommand
+    });
+
+    const assistant = createAssistant({ dir });
+    assistant.setEngine('cursor');
+    await expect(assistant.supportsNativeCommands()).resolves.toBe(false);
+  });
+});
