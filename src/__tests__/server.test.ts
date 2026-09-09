@@ -169,6 +169,160 @@ describe('Golem HTTP Server', () => {
     });
   });
 
+  describe('POST /command', () => {
+    it('returns SSE stream when the engine supports native commands', async () => {
+      vi.mocked(createEngine).mockReturnValue({
+        async *invoke(_p: string, _opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          yield { type: 'text', content: 'should not be used' };
+        },
+        async *invokeCommand(_c: string, _a: string, _opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          yield { type: 'text', content: 'reviewed' };
+          yield { type: 'done', sessionId: 'cmd-sess-1' };
+        },
+      } as any);
+
+      await startServer();
+      const res = await request(server, 'POST', '/command', { command: 'review', arguments: 'the current changes' });
+
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe('text/event-stream');
+      const events = res.body
+        .split('\n\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line.replace('data: ', '')));
+      expect(events[0]).toEqual({ type: 'text', content: 'reviewed' });
+      expect(events[1]).toEqual({ type: 'done', sessionId: 'cmd-sess-1' });
+      expect(events[2]).toMatchObject({ type: 'completion', status: 'completed' });
+    });
+
+    it('passes command, arguments, and sessionKey to the native engine command', async () => {
+      let capturedCommand: string | undefined;
+      let capturedArgs: string | undefined;
+      let capturedSessionId: string | undefined;
+      vi.mocked(createEngine).mockReturnValue({
+        async *invoke(): AsyncIterable<StreamEvent> {
+          yield { type: 'done', sessionId: 'x' };
+        },
+        async *invokeCommand(command: string, argumentsText: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          capturedCommand = command;
+          capturedArgs = argumentsText;
+          capturedSessionId = opts.sessionId;
+          yield { type: 'done', sessionId: 'cmd-sess-2' };
+        },
+      } as any);
+
+      await startServer();
+      const res = await request(server, 'POST', '/command', {
+        command: 'review',
+        arguments: 'the current changes',
+        sessionKey: 'user-abc',
+      });
+
+      expect(res.status).toBe(200);
+      expect(capturedCommand).toBe('review');
+      expect(capturedArgs).toBe('the current changes');
+      expect(capturedSessionId).toBeUndefined(); // no session mapped yet for 'user-abc'
+    });
+
+    it('respects an existing sessionKey mapping', async () => {
+      await writeFile(join(dir, 'golem.yaml'), 'name: srv-bot\nengine: opencode\n');
+      const { saveSession } = await import('../session.js');
+      await saveSession(dir, 'ses_existing', 'user-resume', 'opencode');
+
+      let capturedSessionId: string | undefined;
+      vi.mocked(createEngine).mockReturnValue({
+        async *invoke(): AsyncIterable<StreamEvent> {
+          yield { type: 'done', sessionId: 'x' };
+        },
+        async *invokeCommand(_c: string, _a: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+          capturedSessionId = opts.sessionId;
+          yield { type: 'done', sessionId: 'ses_existing' };
+        },
+      } as any);
+
+      await startServer();
+      const res = await request(server, 'POST', '/command', {
+        command: 'review',
+        arguments: 'x',
+        sessionKey: 'user-resume',
+      });
+
+      expect(res.status).toBe(200);
+      expect(capturedSessionId).toBe('ses_existing');
+    });
+
+    it('returns a clear SSE error for engines without native command support', async () => {
+      installDefaultEngineMock(); // only implements invoke(), no invokeCommand
+      await startServer();
+      const res = await request(server, 'POST', '/command', { command: 'review', arguments: 'x' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toContain('does not support native commands');
+      expect(res.body).toContain('"type":"completion"');
+      expect(res.body).toContain('"status":"failed"');
+    });
+
+    it('returns 400 for missing command', async () => {
+      await startServer();
+      const res = await request(server, 'POST', '/command', { arguments: 'x' });
+      expect(res.status).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('command');
+    });
+
+    it.each(['   ', '/review'])('returns 400 before invoking the engine for invalid command %j', async (command) => {
+      await startServer();
+      const res = await request(server, 'POST', '/command', { command });
+
+      expect(res.status).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('command');
+      expect(createEngine).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 for invalid JSON', async () => {
+      await startServer();
+      const addr = server.address() as { port: number };
+      const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port: addr.port,
+            path: '/command',
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          },
+          (r) => {
+            const chunks: Buffer[] = [];
+            r.on('data', (c: Buffer) => chunks.push(c));
+            r.on('end', () => resolve({ status: r.statusCode!, body: Buffer.concat(chunks).toString() }));
+          },
+        );
+        req.on('error', reject);
+        req.write('not json');
+        req.end();
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it.each([
+      null,
+      42,
+      [],
+    ])('returns 400 (not a thrown/hung request) for valid JSON that is not an object: %j', async (body) => {
+      await startServer();
+      const res = await request(server, 'POST', '/command', body);
+
+      expect(res.status).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('command');
+      expect(createEngine).not.toHaveBeenCalled();
+    });
+
+    it('requires auth like other protected routes', async () => {
+      await startServer('my-secret');
+      const res = await request(server, 'POST', '/command', { command: 'review' });
+      expect(res.status).toBe(401);
+    });
+  });
+
   describe('POST /reset', () => {
     it('returns 200', async () => {
       await startServer();

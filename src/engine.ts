@@ -79,6 +79,12 @@ export interface ListModelsOpts {
 
 export interface AgentEngine {
   invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent>;
+  /**
+   * Invoke a native engine command (e.g. an OpenCode custom slash command)
+   * rather than sending command text as an ordinary prompt. Optional because
+   * only engines with a native command API (currently OpenCode) implement it.
+   */
+  invokeCommand?(command: string, argumentsText: string, opts: InvokeOpts): AsyncIterable<StreamEvent>;
   listModels?(opts: ListModelsOpts): Promise<string[]>;
 }
 

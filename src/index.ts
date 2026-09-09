@@ -157,8 +157,19 @@ export interface ChatOpts {
   files?: FileAttachment[];
 }
 
+export interface CommandOpts {
+  sessionKey?: string;
+}
+
 export interface Assistant {
   chat(message: string, opts?: ChatOpts): AsyncIterable<StreamEvent>;
+  /**
+   * Invoke a native engine command (e.g. an OpenCode custom slash command
+   * such as `review`) rather than sending it as ordinary prompt text. Only
+   * engines with native command support (currently OpenCode) can execute
+   * this; other engines yield an error and a failed completion.
+   */
+  command(command: string, argumentsText?: string, opts?: CommandOpts): AsyncIterable<StreamEvent>;
   init(opts: { engine: string; name: string; role?: string }): Promise<void>;
   cancel(sessionKey?: string): Promise<boolean>;
   resetSession(sessionKey?: string): Promise<void>;
@@ -190,6 +201,19 @@ export interface CreateAssistantOpts {
 }
 
 const DEFAULT_SESSION_KEY = 'default';
+
+/**
+ * Validate a native engine command name at the public Assistant.command()
+ * boundary — not only in the HTTP route — so direct API callers cannot pass
+ * an empty/whitespace/leading-slash command and have it silently fall back
+ * to ordinary prompt execution instead of being rejected.
+ */
+function validateCommandName(command: string): string | undefined {
+  if (!command || command !== command.trim() || command.startsWith('/')) {
+    return `Invalid "command" value: ${JSON.stringify(command)}`;
+  }
+  return undefined;
+}
 
 function classifySilentReply(text: string): 'pass' | 'skip' | null {
   const trimmed = text.trim();
@@ -556,6 +580,148 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     });
   }
 
+  async function* doCommand(
+    command: string,
+    argumentsText: string,
+    sessionKey: string,
+    isRetry: boolean,
+    controller: AbortController,
+  ): AsyncIterable<StreamEvent> {
+    const invalidCommandMessage = validateCommandName(command);
+    if (invalidCommandMessage) {
+      yield { type: 'error', message: invalidCommandMessage };
+      yield { type: 'completion', status: 'failed', message: invalidCommandMessage };
+      return;
+    }
+
+    const { config, skills } = await ensureReady(dir);
+
+    const engineType = engineOverride || config.engine;
+    const baseProvider = providerOverride || config.provider;
+    const provider = usingFallback && baseProvider?.fallback ? baseProvider.fallback : baseProvider;
+    const model = provider?.models?.[engineType] || modelOverride || provider?.model || config.model;
+    const engine: AgentEngine = createEngine(engineType);
+
+    if (!engine.invokeCommand) {
+      const message = `Engine "${engineType}" does not support native commands`;
+      yield { type: 'error', message };
+      yield { type: 'completion', status: 'failed', message };
+      return;
+    }
+
+    const sessionId = await loadSession(dir, sessionKey, engineType);
+    const skillPaths = skills.map((s) => s.path);
+
+    const timeoutMs = timeoutMsOpt ?? (config.timeout ? config.timeout * 1000 : DEFAULT_TIMEOUT_SECONDS * 1000);
+    const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
+
+    let lastSessionId: string | undefined;
+    let gotError = false;
+    let errorMessage = '';
+    let fullReply = '';
+    let doneEvt: Extract<StreamEvent, { type: 'done' }> | undefined;
+
+    try {
+      for await (const event of engine.invokeCommand(command, argumentsText, {
+        workspace: dir,
+        skillPaths,
+        sessionId,
+        model,
+        apiKey: apiKey || provider?.apiKey,
+        skipPermissions: config.skipPermissions,
+        codex: config.codex,
+        signal: controller.signal,
+        hasPermissionsConfig: !!config.permissions,
+        provider,
+        oauthToken: config.oauthToken,
+        mcpConfig: config.mcp,
+      })) {
+        if (event.type === 'done') {
+          if (event.sessionId) lastSessionId = event.sessionId;
+          if (!fullReply.trim() && event.fullText) {
+            fullReply = event.fullText;
+          }
+          doneEvt = event;
+        }
+        if (event.type === 'error') {
+          gotError = true;
+          errorMessage = event.message;
+        }
+        if (event.type === 'text') {
+          fullReply += event.content;
+        }
+        yield event;
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (lastSessionId) {
+      await saveSession(dir, lastSessionId, sessionKey, engineType);
+    }
+
+    if (gotError && sessionId && !isRetry) {
+      const isResumeFail =
+        errorMessage.toLowerCase().includes('resume') || errorMessage.toLowerCase().includes('session');
+      if (isResumeFail) {
+        await clearSession(dir, sessionKey);
+        yield { type: 'warning' as const, message: 'Session could not be resumed. Starting fresh command.' };
+        yield* doCommand(command, argumentsText, sessionKey, true, controller);
+        return;
+      }
+    }
+
+    yield buildCompletionEvent({
+      fullReply,
+      doneEvt,
+      gotError,
+      errorMessage,
+      signal: controller.signal,
+      sessionId: lastSessionId,
+    });
+  }
+
+  async function* commandImpl(command: string, argumentsText: string, sessionKey: string): AsyncIterable<StreamEvent> {
+    const maxConcurrent = maxConcurrentOpt ?? 10;
+    const maxQueuePerSession = maxQueuePerSessionOpt ?? 3;
+
+    activeChatCount++;
+    if (activeChatCount > maxConcurrent) {
+      activeChatCount--;
+      const message = `Server busy: too many concurrent requests (limit: ${maxConcurrent}). Try again later.`;
+      yield { type: 'error', message };
+      yield { type: 'completion', status: 'failed', message };
+      return;
+    }
+
+    const acquired = await mutex.tryAcquire(sessionKey, maxQueuePerSession);
+    if (!acquired) {
+      activeChatCount--;
+      const message = `Too many pending requests for this session (limit: ${maxQueuePerSession}). Try again later.`;
+      yield { type: 'error', message };
+      yield { type: 'completion', status: 'failed', message };
+      return;
+    }
+
+    try {
+      const controller = new AbortController();
+      activeRuns.set(sessionKey, { controller });
+      try {
+        yield* doCommand(command, argumentsText, sessionKey, false, controller);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        yield { type: 'error', message };
+        yield { type: 'completion', status: 'failed', message };
+      } finally {
+        const active = activeRuns.get(sessionKey);
+        if (active?.controller === controller) activeRuns.delete(sessionKey);
+      }
+    } finally {
+      activeChatCount--;
+      mutex.release(sessionKey);
+    }
+  }
+
   async function* chatImpl(
     message: string,
     sessionKey: string,
@@ -611,6 +777,11 @@ export function createAssistant(opts: CreateAssistantOpts): Assistant {
     chat(message: string, chatOpts?: ChatOpts): AsyncIterable<StreamEvent> {
       const key = chatOpts?.sessionKey || DEFAULT_SESSION_KEY;
       return chatImpl(message, key, chatOpts?.images, chatOpts?.files);
+    },
+
+    command(command: string, argumentsText?: string, cmdOpts?: CommandOpts): AsyncIterable<StreamEvent> {
+      const key = cmdOpts?.sessionKey || DEFAULT_SESSION_KEY;
+      return commandImpl(command, argumentsText ?? '', key);
     },
 
     async init(initOpts: { engine: string; name: string; role?: string }): Promise<void> {

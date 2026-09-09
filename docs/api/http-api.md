@@ -116,6 +116,78 @@ For robust clients, keep reading until you receive `type === "completion"`. A tu
 - `aborted`
 :::
 
+### `POST /command`
+
+Invoke a **native engine command** — e.g. an OpenCode custom slash command like
+`review`, `plan`, or `implement` defined in `~/.config/opencode/commands/` or
+`.opencode/commands/` — and receive a Server-Sent Events (SSE) stream, using
+the same event/response model as `/chat`.
+
+This is materially different from sending `"/review ..."` as a normal chat
+message: `/chat` either intercepts Golem's own control commands (`/help`,
+`/status`, `/reset`, etc.) or forwards the text to the engine as an ordinary
+prompt, where it is interpreted semantically rather than executed as a real
+command. `/command` calls the engine's native command execution path
+directly, so the command's own configured agent/model/instructions take
+effect exactly as they would running `opencode run --command review` by hand.
+
+**Currently supported engines:** `opencode` only. Other engines return a
+clear error (see below) rather than silently converting the command to a
+prompt.
+
+**Headers:**
+```
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+**Body:**
+```json
+{
+  "command": "review",
+  "arguments": "the current changes",
+  "sessionKey": "user-123"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `command` | `string` | Yes | The native command name (e.g. `review`, `plan`, `implement`), without a leading `/` |
+| `arguments` | `string` | No | Text passed to the command as its arguments (e.g. OpenCode's `$ARGUMENTS`) |
+| `sessionKey` | `string` | No | Session identifier (default: `"default"`), matching `/chat`'s `sessionKey` semantics — reuses the same saved engine session for that key if one exists |
+
+**Response:** `text/event-stream`, using the same [StreamEvent](/api/stream-events) contract as `/chat`:
+
+```
+data: {"type":"text","content":"Reviewing the diff..."}
+
+data: {"type":"tool_call","name":"readFile","args":"{\"path\":\"src/foo.ts\"}"}
+
+data: {"type":"done","sessionId":"ses_abc123"}
+
+data: {"type":"completion","status":"completed","finalText":"Reviewing the diff...","sessionId":"ses_abc123"}
+
+```
+
+**Unsupported engine:**
+
+If the configured engine does not implement native commands, `/command` still
+returns `200 OK` with an SSE stream (consistent with `/chat`'s error
+contract), but the stream contains an `error` event followed by a failed
+`completion` — it never falls back to sending the command as prompt text:
+
+```
+data: {"type":"error","message":"Engine \"cursor\" does not support native commands"}
+
+data: {"type":"completion","status":"failed","message":"Engine \"cursor\" does not support native commands"}
+```
+
+::: tip Requires OpenCode with native command support
+`/command` shells out to `opencode run --format json --command <name>`.
+Requires an OpenCode CLI version that supports the `--command` flag
+(verified against OpenCode 1.18.30).
+:::
+
 ### `POST /reset`
 
 Clear a session and its accumulated history.

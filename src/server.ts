@@ -105,7 +105,10 @@ export function createGolemServer(
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(html);
       } else {
-        json(res, 200, { hint: 'Use POST /chat to interact', endpoints: ['/chat', '/abort', '/reset', '/health'] });
+        json(res, 200, {
+          hint: 'Use POST /chat to interact',
+          endpoints: ['/chat', '/command', '/abort', '/reset', '/health'],
+        });
       }
       return;
     }
@@ -249,6 +252,73 @@ export function createGolemServer(
           durationMs: durationMs ?? Date.now() - chatStartMs,
           costUsd,
         });
+      }
+
+      activeConnections.delete(res);
+      res.end();
+      return;
+    }
+
+    // POST /command — invoke a native engine command (e.g. OpenCode's `review`)
+    // via SSE, using the same event/response model as /chat. Unlike /chat's
+    // slash-command interception (Golem's own /help, /status, etc.), this
+    // executes the engine's own native command API rather than Golem control
+    // commands, and is materially different from sending "/review" as a
+    // normal chat prompt.
+    if (path === '/command' && req.method === 'POST') {
+      let body: { command?: string; arguments?: string; sessionKey?: string };
+      try {
+        body = JSON.parse(await readBody(req));
+      } catch {
+        json(res, 400, { error: 'Invalid JSON body' });
+        return;
+      }
+
+      // JSON.parse succeeds on non-object top-level values (null, numbers,
+      // arrays, strings, booleans); guard before touching body.command so
+      // those valid-JSON-but-wrong-shape bodies get a 400, not a thrown
+      // TypeError that leaves the request hanging.
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        json(res, 400, { error: 'Missing "command" field' });
+        return;
+      }
+
+      if (
+        !body.command ||
+        typeof body.command !== 'string' ||
+        body.command !== body.command.trim() ||
+        body.command.startsWith('/')
+      ) {
+        json(res, 400, { error: 'Missing "command" field' });
+        return;
+      }
+      if (body.arguments !== undefined && typeof body.arguments !== 'string') {
+        json(res, 400, { error: '"arguments" must be a string' });
+        return;
+      }
+      if (body.sessionKey !== undefined && typeof body.sessionKey !== 'string') {
+        json(res, 400, { error: '"sessionKey" must be a string' });
+        return;
+      }
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+
+      activeConnections.add(res);
+      res.on('close', () => activeConnections.delete(res));
+
+      try {
+        for await (const event of assistant.command(body.command, body.arguments, {
+          sessionKey: body.sessionKey,
+        })) {
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
+      } catch (e: unknown) {
+        const errEvent = { type: 'error', message: (e as Error).message };
+        res.write(`data: ${JSON.stringify(errEvent)}\n\n`);
       }
 
       activeConnections.delete(res);
@@ -550,6 +620,7 @@ export async function startServer(assistant: Assistant, opts: ServerOpts = {}, d
       const tokenStatus = opts.token || process.env.GOLEM_TOKEN ? 'enabled' : 'disabled (set --token or GOLEM_TOKEN)';
       console.log(`🤖 Golem server listening on http://${hostname}:${port}`);
       console.log(`   POST /chat    — SSE streaming chat`);
+      console.log(`   POST /command — invoke a native engine command (OpenCode only)`);
       console.log(`   POST /abort   — stop current task`);
       console.log(`   POST /reset   — reset session`);
       console.log(`   GET  /health  — health check`);

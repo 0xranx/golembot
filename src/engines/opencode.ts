@@ -272,7 +272,23 @@ function findOpenCodeBin(): string {
 }
 
 export class OpenCodeEngine implements AgentEngine {
-  async *invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+  invoke(prompt: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    return this.run(prompt, opts);
+  }
+
+  /**
+   * Invoke a native OpenCode command (e.g. the global `review` command
+   * defined in ~/.config/opencode/commands/review.md) via `opencode run
+   * --command <name>`, rather than sending "/review ..." as prompt text.
+   * `argumentsText` becomes the command's $ARGUMENTS via stdin, exactly like
+   * a normal prompt. The command's own Markdown selects its agent/model, so
+   * --model/--agent are intentionally not passed here.
+   */
+  invokeCommand(command: string, argumentsText: string, opts: InvokeOpts): AsyncIterable<StreamEvent> {
+    return this.run(argumentsText, opts, command);
+  }
+
+  private async *run(prompt: string, opts: InvokeOpts, command?: string): AsyncIterable<StreamEvent> {
     const debugEventsEnabled = isDebugEventsEnabled();
     await injectOpenCodeSkills(opts.workspace, opts.skillPaths);
     await ensureOpenCodeConfig(opts.workspace, opts.model, opts.mcpConfig);
@@ -283,7 +299,11 @@ export class OpenCodeEngine implements AgentEngine {
     // argument parsing on Windows, silently dropping --format json (issue #43).
     const args = ['run', '--format', 'json'];
     if (opts.sessionId) args.push('--session', opts.sessionId);
-    if (opts.model) args.push('--model', opts.model);
+    if (command) {
+      args.push('--command', command);
+    } else if (opts.model) {
+      args.push('--model', opts.model);
+    }
 
     const env: Record<string, string> = { ...(process.env as Record<string, string>) };
     if (opts.provider) Object.assign(env, openCodeProviderEnv(opts.provider, opts.model));
