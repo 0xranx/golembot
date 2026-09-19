@@ -268,6 +268,22 @@ export function clearGroupChatState(sessionKey: string): void {
 export const GROUP_TURN_RESET_MS = 60 * 60 * 1000; // 1 hour
 
 /**
+ * Reset a group's turn counter if it has been idle longer than
+ * `GROUP_TURN_RESET_MS`, then record the current activity timestamp. This
+ * makes `maxTurns` a per-conversation limit rather than a permanent
+ * process-lifetime ban. Must run before any `maxTurns` check that gates a
+ * group message (built-in unknown-command gate, native dispatch, and
+ * ordinary chat all share this single reset point).
+ */
+export function refreshGroupActivity(groupKey: string, now: number = Date.now()): void {
+  const lastActivity = groupLastActivity.get(groupKey) ?? 0;
+  if (now - lastActivity > GROUP_TURN_RESET_MS) {
+    groupTurnCounters.delete(groupKey);
+  }
+  groupLastActivity.set(groupKey, now);
+}
+
+/**
  * Purge all in-memory group state for groups that have been idle longer than
  * `GROUP_TURN_RESET_MS`. Called periodically to prevent unbounded memory growth
  * when a gateway process serves many dynamic groups over its lifetime.
@@ -559,7 +575,7 @@ export async function handleMessage(
     // don't get this upfront indicator — the shared typing setup below
     // (native dispatch or chat fallback) handles feedback for them instead,
     // so it isn't started twice.
-    const isStop = parsed.name === '/stop';
+    const isStop = parsed.name.toLowerCase() === '/stop';
     const isRecognizedBuiltin = isKnownCommand(parsed.name);
     if (adapter.typing && isRecognizedBuiltin && !isStop) {
       await adapter.typing(msg).catch(() => {});
@@ -599,6 +615,12 @@ export async function handleMessage(
       const mentionedForGate = detectMention(msg.text, config.name) || !!msg.mentioned;
       if (gcForGate.groupPolicy === 'mention-only' && !mentionedForGate) return;
       const groupKeyForGate = buildConversationKey(msg);
+      // Reset the turn counter first if the group has been idle for longer
+      // than GROUP_TURN_RESET_MS, so cooldown recovery applies to native
+      // dispatch and unsupported-command chat fallback exactly as it does
+      // for ordinary chat below — a stale counter must not block a message
+      // just because it happens to be an unrecognized slash command.
+      refreshGroupActivity(groupKeyForGate);
       if ((groupTurnCounters.get(groupKeyForGate) ?? 0) >= gcForGate.maxTurns) {
         log(
           verbose,
@@ -652,11 +674,7 @@ export async function handleMessage(
 
     // Reset turn counter if the group has been idle for longer than GROUP_TURN_RESET_MS.
     // This makes maxTurns a per-conversation limit rather than a permanent process-lifetime ban.
-    const lastActivity = groupLastActivity.get(groupKey) ?? 0;
-    if (Date.now() - lastActivity > GROUP_TURN_RESET_MS) {
-      groupTurnCounters.delete(groupKey);
-    }
-    groupLastActivity.set(groupKey, Date.now());
+    refreshGroupActivity(groupKey);
 
     // Always update history buffer, regardless of policy.
     // Skip history-fetch triage prompts — they are system messages, not real group conversation.
@@ -1212,11 +1230,19 @@ export async function handleMessage(
   try {
     if (nativeCommand) {
       // Native commands invoke the engine's own command API exactly once —
-      // no chat prompt wrapping, no attachments, no auto-continue relay, and
-      // no group history/turn-counter bookkeeping (matching how built-in
-      // slash commands above already bypass all of that).
+      // no chat prompt wrapping, no attachments, and no auto-continue relay
+      // (matching how built-in slash commands above already bypass all of
+      // that). A non-empty group reply still counts toward maxTurns, the
+      // same safety valve ordinary chat uses below, so a chain of native
+      // commands can't bypass the group turn limit — but the exchange is
+      // deliberately kept out of groupHistories, since native command I/O
+      // isn't conversational prompt context.
       const nc = nativeCommand;
-      await runOneRound(() => assistant.command(nc.command, nc.argumentsText, { sessionKey }), false);
+      const round = await runOneRound(() => assistant.command(nc.command, nc.argumentsText, { sessionKey }), false);
+      if (round.fullReply.trim() && msg.chatType === 'group') {
+        const groupKey = buildConversationKey(msg);
+        groupTurnCounters.set(groupKey, (groupTurnCounters.get(groupKey) ?? 0) + 1);
+      }
     } else {
       // ── Auto-continue relay loop (issue #37) ──
       // The agent signals unfinished work with a trailing [CONTINUE] line; the

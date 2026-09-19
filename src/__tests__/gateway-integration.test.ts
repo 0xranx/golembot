@@ -1702,6 +1702,24 @@ describe('handleMessage — full gateway pipeline', () => {
       expect(adapter.replies[0].text).toBe('Reviewed.');
     });
 
+    it('preserves native command name case for exact engine lookup', async () => {
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/ReviewAPI src/a.ts' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([
+        { command: 'ReviewAPI', argumentsText: 'src/a.ts', sessionKey: 'slack:C001:U001' },
+      ]);
+    });
+
     it('keeps Golem built-ins ahead of native commands', async () => {
       const assistant = makeMockAssistant('chat should not run');
       assistant.supportsNativeCommands = async () => true;
@@ -1809,12 +1827,107 @@ describe('handleMessage — full gateway pipeline', () => {
       };
       const adapter = makeMockAdapter();
       groupTurnCounters.set('slack:C123', 1);
+      // A missing lastActivity timestamp intentionally represents an idle
+      // group, which now resets the counter before the maxTurns check —
+      // set recent activity so this test still exercises the "blocked"
+      // path rather than the cooldown-recovery path (covered separately
+      // below).
+      groupLastActivity.set('slack:C123', Date.now());
       const msg = makeGroupMsg({ text: '/review changes' });
 
       await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
 
       expect(assistant.commandCalls).toEqual([]);
       expect(assistant.callCount).toBe(0);
+    });
+
+    it('keeps a recent maxTurns group blocked from native commands', async () => {
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now());
+      const msg = makeGroupMsg({ text: '/review changes' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('allows a native command after the group cooldown', async () => {
+      const { GROUP_TURN_RESET_MS } = await import('../gateway.js');
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now() - GROUP_TURN_RESET_MS - 1);
+      const msg = makeGroupMsg({ text: '/review changes' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toHaveLength(1);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('keeps a recent maxTurns group blocked from unsupported-command chat fallback', async () => {
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('fallback reply');
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now());
+      const msg = makeGroupMsg({ text: '/unknown-cmd' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('allows unsupported-command chat fallback after the group cooldown', async () => {
+      const { GROUP_TURN_RESET_MS } = await import('../gateway.js');
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('fallback reply');
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now() - GROUP_TURN_RESET_MS - 1);
+      const msg = makeGroupMsg({ text: '/unknown-cmd' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(1);
+    });
+
+    it('counts a native group reply toward maxTurns', async () => {
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+
+      await handleMessage(makeGroupMsg({ text: '/review first' }), config, assistant, adapter, 'slack', false, dir);
+      await handleMessage(makeGroupMsg({ text: '/review second' }), config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toHaveLength(1);
+      expect(groupTurnCounters.get('slack:C123')).toBe(1);
+      expect(groupHistories.get('slack:C123')).toBeUndefined();
     });
 
     it('dispatches a native command in a group when mentioned and eligible', async () => {

@@ -32,9 +32,13 @@ describe('parseCommand', () => {
     });
   });
 
-  it('normalizes command name to lowercase', () => {
-    expect(parseCommand('/HELP')).toEqual({ name: '/help', args: [], argumentsText: '' });
-    expect(parseCommand('/Engine Cursor')).toEqual({ name: '/engine', args: ['Cursor'], argumentsText: 'Cursor' });
+  it('preserves command name case', () => {
+    expect(parseCommand('/HELP')).toEqual({ name: '/HELP', args: [], argumentsText: '' });
+    expect(parseCommand('/ReviewAPI Cursor')).toEqual({
+      name: '/ReviewAPI',
+      args: ['Cursor'],
+      argumentsText: 'Cursor',
+    });
   });
 
   it('handles extra whitespace', () => {
@@ -102,6 +106,11 @@ describe('executeCommand', () => {
     expect(result!.text).toContain('/reset');
     expect(result!.text).toContain('/stop');
     expect(result!.data).toHaveProperty('commands');
+  });
+
+  it('executes built-in commands case-insensitively', async () => {
+    const result = await executeCommand({ name: '/HELP', args: [], argumentsText: '' }, makeCtx());
+    expect(result?.text).toContain('/help');
   });
 
   // ── /status ──
