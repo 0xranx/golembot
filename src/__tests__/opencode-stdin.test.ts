@@ -120,6 +120,96 @@ describe('OpenCodeEngine prompt delivery (issue #43)', () => {
   });
 });
 
+describe('OpenCodeEngine.invokeCommand (native OpenCode commands)', () => {
+  let workspace: string;
+  let child: StdinRecordingChild;
+  let capturedArgs: string[];
+
+  beforeEach(async () => {
+    vi.resetModules();
+    workspace = await mkdtemp(join(tmpdir(), 'golem-oc-command-'));
+    child = new StdinRecordingChild();
+    capturedArgs = [];
+    vi.doMock('../engines/shared.js', async (importOriginal) => {
+      const original = await importOriginal<typeof import('../engines/shared.js')>();
+      return {
+        ...original,
+        isOnPath: () => true,
+        resolveOnPath: () => 'opencode',
+        spawnCommand: vi.fn((_bin: string, args: string[]) => {
+          capturedArgs = args;
+          const ndjson = [
+            JSON.stringify({ type: 'text', sessionID: 's1', part: { type: 'text', text: 'reviewed' } }),
+            JSON.stringify({ type: 'step_finish', sessionID: 's1', part: { type: 'step-finish', cost: 0 } }),
+          ].join('\n');
+          setTimeout(() => {
+            child.stdout.emit('data', Buffer.from(`${ndjson}\n`));
+            child.emit('close', 0);
+          }, 10);
+          return child;
+        }),
+      };
+    });
+  });
+
+  afterEach(async () => {
+    vi.doUnmock('../engines/shared.js');
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  async function invokeCommandAndCollect(
+    command: string,
+    argumentsText: string,
+    opts: Record<string, unknown> = {},
+  ): Promise<StreamEvent[]> {
+    const { OpenCodeEngine } = await import('../engines/opencode.js');
+    const events: StreamEvent[] = [];
+    const engine = new OpenCodeEngine();
+    if (!engine.invokeCommand) throw new Error('invokeCommand not implemented');
+    for await (const evt of engine.invokeCommand(command, argumentsText, {
+      workspace,
+      skillPaths: [],
+      ...opts,
+    })) {
+      events.push(evt);
+    }
+    return events;
+  }
+
+  it('builds argv with --command and without --agent/--model', async () => {
+    await invokeCommandAndCollect('review', 'the current changes', { model: 'anthropic/claude-opus-4-6' });
+
+    expect(capturedArgs).toEqual(['run', '--format', 'json', '--command', 'review']);
+  });
+
+  it('adds --session when an existing session id is provided', async () => {
+    await invokeCommandAndCollect('review', 'the current changes', { sessionId: 'ses_123' });
+
+    expect(capturedArgs).toEqual(['run', '--format', 'json', '--session', 'ses_123', '--command', 'review']);
+  });
+
+  it('omits --session when no session id is provided', async () => {
+    await invokeCommandAndCollect('plan', 'add a login page');
+
+    expect(capturedArgs).not.toContain('--session');
+  });
+
+  it('pipes the arguments text via stdin, not as a prompt containing the slash command', async () => {
+    await invokeCommandAndCollect('review', 'the current changes');
+
+    expect(child.stdinChunks.join('')).toBe('the current changes');
+    expect(child.stdinEnded).toBe(true);
+    expect(capturedArgs.join(' ')).not.toContain('/review');
+  });
+
+  it('still parses NDJSON output into text/done events', async () => {
+    const events = await invokeCommandAndCollect('review', 'the current changes');
+
+    expect(events.some((e) => e.type === 'text' && e.content === 'reviewed')).toBe(true);
+    expect(events.some((e) => e.type === 'done')).toBe(true);
+  });
+});
+
 describe('findOpenCodeBin Windows .exe direct path (issue #7)', () => {
   let ws: string;
   let capturedArgs: string[];

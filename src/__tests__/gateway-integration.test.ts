@@ -395,6 +395,8 @@ describe('gateway integration', () => {
 // Use plain functions with a callCount counter to avoid vi.fn() ↔ typed-function mismatch.
 type MockAssistant = {
   chat(message: string, opts?: { sessionKey?: string }): AsyncIterable<StreamEvent>;
+  command(command: string, argumentsText?: string, opts?: { sessionKey?: string }): AsyncIterable<StreamEvent>;
+  supportsNativeCommands(): Promise<boolean>;
   setEngine(engine: string): void;
   setModel(model: string): void;
   getStatus(): Promise<{
@@ -410,6 +412,8 @@ type MockAssistant = {
   lastSessionKey: string | undefined;
   lastPrompt: string | undefined;
   canceledSessionKey?: string;
+  /** Native command invocations recorded when supportsNativeCommands resolves true. */
+  commandCalls: Array<{ command: string; argumentsText: string; sessionKey?: string }>;
 };
 
 /** Stubs for the new Assistant methods (shared by all mock factories). */
@@ -426,6 +430,19 @@ const mockAssistantStubs = {
   async listModels() {
     return ['mock-model-1', 'mock-model-2'];
   },
+  // Default: no native command support — matches every engine except OpenCode
+  // today. Tests that need native passthrough override this per-instance.
+  async supportsNativeCommands() {
+    return false;
+  },
+  async *command(
+    _command: string,
+    _argumentsText?: string,
+    _opts?: { sessionKey?: string },
+  ): AsyncIterable<StreamEvent> {
+    yield { type: 'error' as const, message: 'not supported' };
+    yield { type: 'completion' as const, status: 'failed' as const, message: 'not supported' };
+  },
 };
 
 function makeMockAssistant(replyText: string): MockAssistant {
@@ -435,6 +452,7 @@ function makeMockAssistant(replyText: string): MockAssistant {
     lastSessionKey: undefined,
     lastPrompt: undefined,
     canceledSessionKey: undefined,
+    commandCalls: [],
     async *chat(message: string, opts: { sessionKey?: string } = {}) {
       obj.callCount++;
       obj.lastPrompt = message;
@@ -453,6 +471,7 @@ function makeThrowingAssistant(): MockAssistant {
     lastSessionKey: undefined,
     lastPrompt: undefined,
     canceledSessionKey: undefined,
+    commandCalls: [],
     async *chat(message: string, opts: { sessionKey?: string } = {}) {
       obj.callCount++;
       obj.lastPrompt = message;
@@ -472,6 +491,7 @@ function makeErrorEventAssistant(): MockAssistant {
     lastSessionKey: undefined,
     lastPrompt: undefined,
     canceledSessionKey: undefined,
+    commandCalls: [],
     async *chat(message: string, opts: { sessionKey?: string } = {}) {
       obj.callCount++;
       obj.lastPrompt = message;
@@ -1173,6 +1193,7 @@ describe('handleMessage — full gateway pipeline', () => {
         callCount: 0,
         lastSessionKey: undefined,
         lastPrompt: undefined,
+        commandCalls: [],
         async *chat(message: string, opts: { sessionKey?: string } = {}) {
           obj.callCount++;
           obj.lastPrompt = message;
@@ -1427,6 +1448,7 @@ describe('handleMessage — full gateway pipeline', () => {
           callCount: 0,
           lastSessionKey: undefined,
           lastPrompt: undefined,
+          commandCalls: [],
           async *chat(message: string, opts: { sessionKey?: string } = {}) {
             assistant.callCount++;
             assistant.lastPrompt = message;
@@ -1462,6 +1484,7 @@ describe('handleMessage — full gateway pipeline', () => {
           callCount: 0,
           lastSessionKey: undefined,
           lastPrompt: undefined,
+          commandCalls: [],
           async *chat(message: string, opts: { sessionKey?: string } = {}) {
             assistant.callCount++;
             assistant.lastPrompt = message;
@@ -1650,12 +1673,280 @@ describe('handleMessage — full gateway pipeline', () => {
       expect(adapter.replies[0].text).toContain('switched');
     });
 
-    it('unknown slash command falls through to agent', async () => {
+    it('unknown slash command falls through to agent when native commands are unsupported', async () => {
       const assistant = makeMockAssistant('agent reply');
       const adapter = makeMockAdapter();
       const msg = makeDmMsg({ text: '/unknown-cmd' });
       await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
       expect(assistant.callCount).toBe(1);
+      expect(assistant.commandCalls).toEqual([]);
+    });
+
+    it('passes an unknown slash command to the native engine with the DM session key and raw arguments', async () => {
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/review  src/a.ts\n  src/b.ts' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.callCount).toBe(0);
+      expect(assistant.commandCalls).toEqual([
+        { command: 'review', argumentsText: 'src/a.ts\n  src/b.ts', sessionKey: 'slack:C001:U001' },
+      ]);
+      expect(adapter.replies[0].text).toBe('Reviewed.');
+    });
+
+    it('preserves native command name case for exact engine lookup', async () => {
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/ReviewAPI src/a.ts' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([
+        { command: 'ReviewAPI', argumentsText: 'src/a.ts', sessionKey: 'slack:C001:U001' },
+      ]);
+    });
+
+    it('keeps Golem built-ins ahead of native commands', async () => {
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/help' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies[0].text).toContain('/help');
+    });
+
+    it('does not auto-continue relay after a native command reply ending in [CONTINUE]', async () => {
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Still working.\n[CONTINUE]' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/plan next steps' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toHaveLength(1);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies[0].text).toBe('Still working.');
+    });
+
+    it('returns the normal gateway error when native capability detection throws', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      assistant.supportsNativeCommands = async () => {
+        throw new Error('capability lookup failed');
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeDmMsg({ text: '/unknown-cmd' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.callCount).toBe(0);
+      expect(assistant.commandCalls).toEqual([]);
+      expect(adapter.replies).toHaveLength(1);
+      expect(adapter.replies[0].text).toContain('Sorry, an error occurred');
+    });
+
+    it('starts typing once when an unsupported unknown slash command falls back to chat', async () => {
+      const assistant = makeMockAssistant('agent reply');
+      const adapter = makeMockAdapter() as MockAdapter & { typing: (m: ChannelMessage) => Promise<void> };
+      adapter.typing = vi.fn(async () => {});
+      const msg = makeDmMsg({ text: '/unknown-cmd' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.callCount).toBe(1);
+      expect(adapter.typing).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not dispatch a native command in a mention-only group when not mentioned', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeGroupMsg({ text: '/review changes' }); // no @mention
+      const config = makeConfig({ groupChat: { groupPolicy: 'mention-only' } } as any);
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+      expect(adapter.replies).toHaveLength(0);
+    });
+
+    it('does not dispatch a native command sent by the bot itself in a group', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeGroupMsg({ senderName: 'golem', text: '@golem /review changes' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('does not dispatch a native command after a group reaches maxTurns', async () => {
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('should not be called');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      // A missing lastActivity timestamp intentionally represents an idle
+      // group, which now resets the counter before the maxTurns check —
+      // set recent activity so this test still exercises the "blocked"
+      // path rather than the cooldown-recovery path (covered separately
+      // below).
+      groupLastActivity.set('slack:C123', Date.now());
+      const msg = makeGroupMsg({ text: '/review changes' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('keeps a recent maxTurns group blocked from native commands', async () => {
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now());
+      const msg = makeGroupMsg({ text: '/review changes' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('allows a native command after the group cooldown', async () => {
+      const { GROUP_TURN_RESET_MS } = await import('../gateway.js');
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now() - GROUP_TURN_RESET_MS - 1);
+      const msg = makeGroupMsg({ text: '/review changes' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toHaveLength(1);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('keeps a recent maxTurns group blocked from unsupported-command chat fallback', async () => {
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('fallback reply');
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now());
+      const msg = makeGroupMsg({ text: '/unknown-cmd' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(0);
+    });
+
+    it('allows unsupported-command chat fallback after the group cooldown', async () => {
+      const { GROUP_TURN_RESET_MS } = await import('../gateway.js');
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('fallback reply');
+      const adapter = makeMockAdapter();
+      groupTurnCounters.set('slack:C123', 1);
+      groupLastActivity.set('slack:C123', Date.now() - GROUP_TURN_RESET_MS - 1);
+      const msg = makeGroupMsg({ text: '/unknown-cmd' });
+
+      await handleMessage(msg, config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([]);
+      expect(assistant.callCount).toBe(1);
+    });
+
+    it('counts a native group reply toward maxTurns', async () => {
+      const config = makeConfig({ groupChat: { groupPolicy: 'always', maxTurns: 1 } } as any);
+      const assistant = makeMockAssistant('chat should not run');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+
+      await handleMessage(makeGroupMsg({ text: '/review first' }), config, assistant, adapter, 'slack', false, dir);
+      await handleMessage(makeGroupMsg({ text: '/review second' }), config, assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toHaveLength(1);
+      expect(groupTurnCounters.get('slack:C123')).toBe(1);
+      expect(groupHistories.get('slack:C123')).toBeUndefined();
+    });
+
+    it('dispatches a native command in a group when mentioned and eligible', async () => {
+      const assistant = makeMockAssistant('should not be called');
+      assistant.supportsNativeCommands = async () => true;
+      assistant.command = async function* (command: string, argumentsText = '', opts: { sessionKey?: string } = {}) {
+        assistant.commandCalls.push({ command, argumentsText, sessionKey: opts.sessionKey });
+        yield { type: 'text' as const, content: 'Reviewed.' };
+        yield { type: 'done' as const, sessionId: 'cmd-sid' };
+      };
+      const adapter = makeMockAdapter();
+      const msg = makeGroupMsg({ text: '@golem /review changes' });
+
+      await handleMessage(msg, makeConfig(), assistant, adapter, 'slack', false, dir);
+
+      expect(assistant.commandCalls).toEqual([
+        { command: 'review', argumentsText: 'changes', sessionKey: 'slack:C123' },
+      ]);
+      expect(adapter.replies[0].text).toBe('Reviewed.');
     });
 
     it('slash commands work in group chats (with @mention stripped)', async () => {
@@ -1998,6 +2289,7 @@ function makeScriptedAssistant(scripts: string[]): MockAssistant & { prompts: st
     lastSessionKey: undefined,
     lastPrompt: undefined,
     canceledSessionKey: undefined,
+    commandCalls: [],
     async *chat(message: string, opts: { sessionKey?: string } = {}) {
       const idx = obj.callCount++;
       obj.prompts.push(message);
@@ -2165,6 +2457,7 @@ describe('auto-continue relay ([CONTINUE] sentinel)', () => {
         callCount: 0,
         lastSessionKey: undefined,
         lastPrompt: undefined,
+        commandCalls: [],
         async *chat(message: string, opts: { sessionKey?: string } = {}) {
           obj.callCount++;
           obj.lastPrompt = message;
@@ -2199,6 +2492,7 @@ describe('auto-continue relay ([CONTINUE] sentinel)', () => {
         callCount: 0,
         lastSessionKey: undefined,
         lastPrompt: undefined,
+        commandCalls: [],
         async *chat(message: string, opts: { sessionKey?: string } = {}) {
           const round = obj.callCount++;
           obj.lastPrompt = message;
@@ -2234,6 +2528,7 @@ describe('auto-continue relay ([CONTINUE] sentinel)', () => {
         prompts: [],
         lastSessionKey: undefined,
         lastPrompt: undefined,
+        commandCalls: [],
         async *chat(message: string, opts: { sessionKey?: string } = {}) {
           const idx = obj.callCount++;
           obj.prompts.push(message);

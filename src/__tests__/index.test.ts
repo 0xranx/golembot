@@ -1230,3 +1230,245 @@ describe('listModels model resolution', () => {
     expect(capturedModel).toBe('opencode-go/deepseek-v4-flash');
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// assistant.command() — native engine command invocation
+// ═══════════════════════════════════════════════════════
+
+describe('command (native engine commands)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'golem-test-command-'));
+    await writeFile(join(dir, 'golem.yaml'), 'name: test-bot\nengine: opencode\n');
+    await mkdir(join(dir, 'skills', 'general'), { recursive: true });
+    await writeFile(
+      join(dir, 'skills', 'general', 'SKILL.md'),
+      '---\nname: general\ndescription: General assistant\n---\n# General\n',
+    );
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('passes command and arguments to engine.invokeCommand', async () => {
+    let capturedCommand: string | undefined;
+    let capturedArgs: string | undefined;
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand(command: string, argumentsText: string) {
+        capturedCommand = command;
+        capturedArgs = argumentsText;
+        yield { type: 'text', content: 'reviewed' } as StreamEvent;
+        yield { type: 'done', sessionId: 'cmd-sess-1' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    const events: StreamEvent[] = [];
+    for await (const evt of assistant.command('review', 'the current changes')) events.push(evt);
+
+    expect(capturedCommand).toBe('review');
+    expect(capturedArgs).toBe('the current changes');
+    expect(events.map((e) => e.type)).toEqual(['text', 'done', 'completion']);
+  });
+
+  it('resolves an existing sessionKey to its saved engine session id', async () => {
+    await saveSession(dir, 'ses_existing', 'user:alice', 'opencode');
+
+    let capturedSessionId: string | undefined;
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand(_c: string, _a: string, opts: InvokeOpts) {
+        capturedSessionId = opts.sessionId;
+        yield { type: 'done', sessionId: 'ses_existing' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    for await (const _ of assistant.command('review', 'x', { sessionKey: 'user:alice' })) {
+    }
+
+    expect(capturedSessionId).toBe('ses_existing');
+  });
+
+  it('uses "default" session key when none is provided and has no session id on first call', async () => {
+    let capturedSessionId: string | undefined = 'sentinel';
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand(_c: string, _a: string, opts: InvokeOpts) {
+        capturedSessionId = opts.sessionId;
+        yield { type: 'done', sessionId: 'new-default-sess' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    for await (const _ of assistant.command('plan', 'do the thing')) {
+    }
+
+    expect(capturedSessionId).toBeUndefined();
+    expect(await loadSession(dir, 'default')).toBe('new-default-sess');
+  });
+
+  it('saves the returned session id under the given sessionKey for future resume', async () => {
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand() {
+        yield { type: 'done', sessionId: 'ses_new_123' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    for await (const _ of assistant.command('review', 'x', { sessionKey: 'user:bob' })) {
+    }
+
+    expect(await loadSession(dir, 'user:bob')).toBe('ses_new_123');
+  });
+
+  it('clears an invalid saved session and retries the command without it', async () => {
+    await saveSession(dir, 'expired-session', 'user:alice', 'opencode');
+
+    const sessionIds: Array<string | undefined> = [];
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand(_c: string, _a: string, opts: InvokeOpts) {
+        sessionIds.push(opts.sessionId);
+        if (opts.sessionId) {
+          yield { type: 'error', message: 'Failed to resume session: session expired' } as StreamEvent;
+          return;
+        }
+        yield { type: 'text', content: 'fresh command result' } as StreamEvent;
+        yield { type: 'done', sessionId: 'fresh-command-session' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    const events: StreamEvent[] = [];
+    for await (const evt of assistant.command('review', 'x', { sessionKey: 'user:alice' })) events.push(evt);
+
+    expect(sessionIds).toEqual(['expired-session', undefined]);
+    expect(events.some((evt) => evt.type === 'warning' && evt.message.includes('could not be resumed'))).toBe(true);
+    expect(events.some((evt) => evt.type === 'text' && evt.content === 'fresh command result')).toBe(true);
+    expect(await loadSession(dir, 'user:alice')).toBe('fresh-command-session');
+  });
+
+  it('unsupported engines emit an error and a failed completion, never calling invoke()', async () => {
+    await writeFile(join(dir, 'golem.yaml'), 'name: test-bot\nengine: cursor\n');
+    let invokeCalled = false;
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        invokeCalled = true;
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      // no invokeCommand — cursor has no native command support
+    });
+
+    const assistant = createAssistant({ dir });
+    const events: StreamEvent[] = [];
+    for await (const evt of assistant.command('review', 'x')) events.push(evt);
+
+    expect(invokeCalled).toBe(false);
+    expect(events[0]).toEqual({
+      type: 'error',
+      message: 'Engine "cursor" does not support native commands',
+    });
+    expect(events[events.length - 1]).toMatchObject({
+      type: 'completion',
+      status: 'failed',
+    });
+  });
+
+  it.each([
+    '',
+    '   ',
+    ' review',
+    'review ',
+    '/review',
+  ])('rejects invalid command name %j without calling the engine', async (command) => {
+    let invokeCommandCalled = false;
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand() {
+        invokeCommandCalled = true;
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    const events: StreamEvent[] = [];
+    for await (const evt of assistant.command(command, 'x')) events.push(evt);
+
+    expect(invokeCommandCalled).toBe(false);
+    expect(mockedCreateEngine).not.toHaveBeenCalled();
+    expect(events[0]).toMatchObject({ type: 'error' });
+    expect((events[0] as { message: string }).message).toContain('command');
+    expect(events[events.length - 1]).toMatchObject({
+      type: 'completion',
+      status: 'failed',
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// assistant.supportsNativeCommands() — runtime capability check
+// ═══════════════════════════════════════════════════════
+
+describe('supportsNativeCommands', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'golem-test-capability-'));
+    await writeFile(join(dir, 'golem.yaml'), 'name: test-bot\nengine: opencode\n');
+    await mkdir(join(dir, 'skills', 'general'), { recursive: true });
+    await writeFile(
+      join(dir, 'skills', 'general', 'SKILL.md'),
+      '---\nname: general\ndescription: General assistant\n---\n# General\n',
+    );
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('reports native command support for an engine with invokeCommand', async () => {
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      async *invokeCommand() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+    });
+
+    const assistant = createAssistant({ dir });
+    await expect(assistant.supportsNativeCommands()).resolves.toBe(true);
+  });
+
+  it('reports no native command support after switching to an engine without invokeCommand', async () => {
+    mockedCreateEngine.mockReturnValue({
+      async *invoke() {
+        yield { type: 'done', sessionId: 'x' } as StreamEvent;
+      },
+      // no invokeCommand
+    });
+
+    const assistant = createAssistant({ dir });
+    assistant.setEngine('cursor');
+    await expect(assistant.supportsNativeCommands()).resolves.toBe(false);
+  });
+});

@@ -50,8 +50,23 @@ export interface CommandContext {
 }
 
 interface ParsedCommand {
+  /**
+   * The slash-prefixed command token exactly as typed by the user (e.g.
+   * '/ReviewAPI'), case preserved. Built-in recognition/execution normalize
+   * this to lowercase at their own boundaries (isKnownCommand,
+   * executeCommand); callers dispatching to a case-sensitive native command
+   * lookup (e.g. OpenCode) should use this value as-is.
+   */
   name: string;
   args: string[];
+  /**
+   * Raw text after the command token, with the delimiter whitespace and
+   * outer whitespace removed. Unlike `args`, this preserves internal
+   * spacing/newlines so native engine commands (e.g. OpenCode's `review`)
+   * receive arguments verbatim instead of a whitespace-collapsed
+   * `args.join(' ')`.
+   */
+  argumentsText: string;
 }
 
 // ── Known engines (for validation) ──────────────────────
@@ -69,10 +84,24 @@ export function parseCommand(text: string): ParsedCommand | null {
   if (!trimmed.startsWith('/')) return null;
 
   const parts = trimmed.split(/\s+/);
-  const name = parts[0].toLowerCase();
+  const name = parts[0];
   const args = parts.slice(1);
 
-  return { name, args };
+  const firstWhitespace = trimmed.search(/\s/);
+  const argumentsText = firstWhitespace === -1 ? '' : trimmed.slice(firstWhitespace).trim();
+
+  return { name, args, argumentsText };
+}
+
+/**
+ * True when `name` matches a recognized Golem built-in slash command (e.g.
+ * '/help', '/status'), case-insensitively. Lets callers decide whether to
+ * show upfront feedback (e.g. a typing indicator) before calling
+ * executeCommand(), without duplicating the built-in command list or
+ * executing it twice.
+ */
+export function isKnownCommand(name: string): boolean {
+  return name.toLowerCase() in COMMANDS;
 }
 
 // ── Execute ──────────────────────────────────────────────
@@ -92,10 +121,16 @@ const COMMANDS: Record<string, string> = {
  * Execute a parsed slash command. Returns a CommandResult with text output
  * and optional structured data.
  *
+ * Built-in command names are matched case-insensitively (e.g. '/HELP' and
+ * '/help' both execute cmdHelp()); `cmd.name`'s original case is otherwise
+ * preserved on the ParsedCommand for callers that need exact-case dispatch
+ * (e.g. native engine command lookup).
+ *
  * Returns null if the command is not recognized (caller should forward to agent).
  */
 export async function executeCommand(cmd: ParsedCommand, ctx: CommandContext): Promise<CommandResult | null> {
-  switch (cmd.name) {
+  const normalizedName = cmd.name.toLowerCase();
+  switch (normalizedName) {
     case '/help':
       return cmdHelp();
     case '/status':

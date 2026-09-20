@@ -20,10 +20,18 @@ import {
   recordMessage,
 } from './dashboard.js';
 import { debugEventLog, isDebugEventsEnabled, summarizeStreamEvent } from './debug-events.js';
+import type { StreamEvent } from './engine.js';
 import { listInstances, registerInstance, unregisterInstance } from './fleet.js';
 import { startHistoryFetcher } from './history-fetcher.js';
 import { type InboxEntry, InboxStore } from './inbox.js';
-import { type Assistant, type CommandContext, createAssistant, executeCommand, parseCommand } from './index.js';
+import {
+  type Assistant,
+  type CommandContext,
+  createAssistant,
+  executeCommand,
+  isKnownCommand,
+  parseCommand,
+} from './index.js';
 import { setPeerBase } from './peer-require.js';
 import { createProactiveCoordinator, type ProactiveCoordinator } from './proactive.js';
 import { Scheduler } from './scheduler.js';
@@ -260,6 +268,22 @@ export function clearGroupChatState(sessionKey: string): void {
 export const GROUP_TURN_RESET_MS = 60 * 60 * 1000; // 1 hour
 
 /**
+ * Reset a group's turn counter if it has been idle longer than
+ * `GROUP_TURN_RESET_MS`, then record the current activity timestamp. This
+ * makes `maxTurns` a per-conversation limit rather than a permanent
+ * process-lifetime ban. Must run before any `maxTurns` check that gates a
+ * group message (built-in unknown-command gate, native dispatch, and
+ * ordinary chat all share this single reset point).
+ */
+export function refreshGroupActivity(groupKey: string, now: number = Date.now()): void {
+  const lastActivity = groupLastActivity.get(groupKey) ?? 0;
+  if (now - lastActivity > GROUP_TURN_RESET_MS) {
+    groupTurnCounters.delete(groupKey);
+  }
+  groupLastActivity.set(groupKey, now);
+}
+
+/**
  * Purge all in-memory group state for groups that have been idle longer than
  * `GROUP_TURN_RESET_MS`. Called periodically to prevent unbounded memory growth
  * when a gateway process serves many dynamic groups over its lifetime.
@@ -485,7 +509,15 @@ export async function handleMessage(
   config: GolemConfig,
   assistant: Pick<
     Assistant,
-    'chat' | 'setEngine' | 'setModel' | 'getStatus' | 'resetSession' | 'cancel' | 'listModels'
+    | 'chat'
+    | 'command'
+    | 'supportsNativeCommands'
+    | 'setEngine'
+    | 'setModel'
+    | 'getStatus'
+    | 'resetSession'
+    | 'cancel'
+    | 'listModels'
   >,
   adapter: Pick<
     ChannelAdapter,
@@ -510,10 +542,18 @@ export async function handleMessage(
   const userText = msg.chatType === 'group' ? stripMention(msg.text) : msg.text;
   if (!userText && (!msg.images || msg.images.length === 0) && (!msg.files || msg.files.length === 0)) return;
 
+  // Session key is derived once up front — slash commands (built-in and
+  // native) and ordinary chat all resume the same per-conversation session.
+  const sessionKey = msg.chatType === 'group' ? buildConversationKey(msg) : buildSessionKey(msg);
+
+  // Set when an unrecognized slash command is dispatched to the engine's
+  // native command API (e.g. OpenCode's `review`) instead of ordinary chat.
+  // Populated below by the slash-command interception block.
+  let nativeCommand: { command: string; argumentsText: string } | undefined;
+
   // ── Slash command interception ──
   const parsed = parseCommand(userText);
   if (parsed) {
-    const sessionKey = msg.chatType === 'group' ? buildConversationKey(msg) : buildSessionKey(msg);
     // Any user activity (e.g. /stop, /reset) interrupts a pending auto-continue relay
     bumpInboundSeq(sessionKey);
     const cmdCtx: CommandContext = {
@@ -531,45 +571,102 @@ export async function handleMessage(
     };
 
     // Open the native loading stream immediately so the user sees feedback
-    // while the command executes (not after).
-    const isStop = parsed.name === 'stop';
-    if (adapter.typing && !isStop) {
+    // while a *recognized* built-in executes (not after). Unknown commands
+    // don't get this upfront indicator — the shared typing setup below
+    // (native dispatch or chat fallback) handles feedback for them instead,
+    // so it isn't started twice.
+    const isStop = parsed.name.toLowerCase() === '/stop';
+    const isRecognizedBuiltin = isKnownCommand(parsed.name);
+    if (adapter.typing && isRecognizedBuiltin && !isStop) {
       await adapter.typing(msg).catch(() => {});
     }
 
-    const result = await executeCommand(parsed, cmdCtx);
-    if (result) {
-      log(verbose, `[${channelType}] slash command: ${parsed.name}`);
-      if (isStop) {
-        // /stop is special: the aborted handler owns the finalText (⏹️ Stopped).
-        await adapter.reply(msg, result.text);
-      } else if (adapter.nativeStreaming) {
-        // nativeStreaming adapters (WeCom) implement a 3-arg clearStatus that
-        // carries the finalText — so slash output can be delivered in-place.
-        // Telegram/Slack use a 2-arg clearStatus that silently swallows text,
-        // so they must fall through to reply() below.
-        // executeCommand may have been fast — ensure the loading is visible
-        // for at least 200ms before closing with the command output.
-        await new Promise<void>((r) => setTimeout(r, 200));
-        await adapter.clearStatus!(msg, '', result.text.trim()).catch(() => {});
-      } else {
-        await adapter.reply(msg, result.text);
+    if (isRecognizedBuiltin) {
+      const result = await executeCommand(parsed, cmdCtx);
+      if (result) {
+        log(verbose, `[${channelType}] slash command: ${parsed.name}`);
+        if (isStop) {
+          // /stop is special: the aborted handler owns the finalText (⏹️ Stopped).
+          await adapter.reply(msg, result.text);
+        } else if (adapter.nativeStreaming) {
+          // nativeStreaming adapters (WeCom) implement a 3-arg clearStatus that
+          // carries the finalText — so slash output can be delivered in-place.
+          // Telegram/Slack use a 2-arg clearStatus that silently swallows text,
+          // so they must fall through to reply() below.
+          // executeCommand may have been fast — ensure the loading is visible
+          // for at least 200ms before closing with the command output.
+          await new Promise<void>((r) => setTimeout(r, 200));
+          await adapter.clearStatus!(msg, '', result.text.trim()).catch(() => {});
+        } else {
+          await adapter.reply(msg, result.text);
+        }
+        return;
+      }
+    }
+
+    // Unknown to Golem's built-ins. Apply the same group safety gates that
+    // ordinary chat uses (self-message / mention-only / maxTurns) before
+    // even considering native dispatch — an unrecognized slash command must
+    // not bypass these safeguards just because the active engine happens to
+    // support native commands.
+    if (msg.chatType === 'group') {
+      if (msg.senderName === config.name) return;
+      const gcForGate = resolveGroupChatConfig(config);
+      const mentionedForGate = detectMention(msg.text, config.name) || !!msg.mentioned;
+      if (gcForGate.groupPolicy === 'mention-only' && !mentionedForGate) return;
+      const groupKeyForGate = buildConversationKey(msg);
+      // Reset the turn counter first if the group has been idle for longer
+      // than GROUP_TURN_RESET_MS, so cooldown recovery applies to native
+      // dispatch and unsupported-command chat fallback exactly as it does
+      // for ordinary chat below — a stale counter must not block a message
+      // just because it happens to be an unrecognized slash command.
+      refreshGroupActivity(groupKeyForGate);
+      if ((groupTurnCounters.get(groupKeyForGate) ?? 0) >= gcForGate.maxTurns) {
+        log(
+          verbose,
+          `[${channelType}] maxTurns (${gcForGate.maxTurns}) reached for group ${groupKeyForGate}, skipping`,
+        );
+        return;
+      }
+    }
+
+    // If the active engine has its own native command API (e.g. OpenCode
+    // custom commands like `review`/`plan`), dispatch there with the raw
+    // argument text instead of the normalized args[] tokens. Never hard-code
+    // specific command names here: any engine exposing invokeCommand() gets
+    // generic passthrough for any command name. Capability detection is
+    // guarded so a thrown error surfaces the same user-facing message as any
+    // other processing failure, instead of crashing message handling.
+    try {
+      if (await assistant.supportsNativeCommands()) {
+        nativeCommand = { command: parsed.name.slice(1), argumentsText: parsed.argumentsText };
+        log(verbose, `[${channelType}] native command: ${nativeCommand.command}`);
+      }
+      // Unknown command with no native support — fall through to agent
+    } catch (e) {
+      console.error(`[${channelType}] Failed to detect native command support:`, e);
+      try {
+        await adapter.reply(msg, 'Sorry, an error occurred while processing your message. Please try again later.');
+      } catch {
+        // best effort
       }
       return;
     }
-    // Unknown command — fall through to agent
   }
 
   const senderLabel = msg.senderName || msg.senderId;
   const autoContinueMax = config.autoContinue ?? DEFAULT_AUTO_CONTINUE_ROUNDS;
   const relayEnabled = autoContinueMax > 0;
-  let sessionKey: string;
-  let fullText: string;
+  let fullText = '';
   let injectPass = false;
 
-  if (msg.chatType === 'group') {
+  if (nativeCommand) {
+    // Native commands bypass the group/DM prompt wrapping entirely — they
+    // are dispatched via assistant.command() with the raw command name and
+    // arguments, not as chat text. This mirrors how built-in slash commands
+    // above already bypass group mention-policy/history bookkeeping.
+  } else if (msg.chatType === 'group') {
     const groupKey = buildConversationKey(msg);
-    sessionKey = groupKey;
     const gc = resolveGroupChatConfig(config);
 
     // Skip messages sent by this bot itself (prevents feedback loops in broadcast adapters)
@@ -577,11 +674,7 @@ export async function handleMessage(
 
     // Reset turn counter if the group has been idle for longer than GROUP_TURN_RESET_MS.
     // This makes maxTurns a per-conversation limit rather than a permanent process-lifetime ban.
-    const lastActivity = groupLastActivity.get(groupKey) ?? 0;
-    if (Date.now() - lastActivity > GROUP_TURN_RESET_MS) {
-      groupTurnCounters.delete(groupKey);
-    }
-    groupLastActivity.set(groupKey, Date.now());
+    refreshGroupActivity(groupKey);
 
     // Always update history buffer, regardless of policy.
     // Skip history-fetch triage prompts — they are system messages, not real group conversation.
@@ -628,7 +721,6 @@ export async function handleMessage(
       !!adapter.sendMedia,
     );
   } else {
-    sessionKey = buildSessionKey(msg);
     const dmParts = [`[System: This is a private 1-on-1 conversation with ${senderLabel}.]`];
     if (relayEnabled) dmParts.push(TURN_END_CONTRACT);
     if (adapter.sendMedia) dmParts.push(MEDIA_PROTOCOL_HINT);
@@ -893,15 +985,16 @@ export async function handleMessage(
     sawContinue: boolean;
   }
 
-  // Run one agent invocation and deliver its output to IM.
+  // Run one agent invocation and deliver its output to IM. `invoke` supplies
+  // the event stream — ordinary chat rounds and native command rounds share
+  // this same consumption logic (buffering, status updates, chunking, error
+  // handling); only the stream source differs.
   // `mayRelay` signals that a [CONTINUE]-triggered follow-up round is still possible;
   // in that case the status message is left open instead of being finalized.
-  const runOneRound = async (promptText: string, mayRelay: boolean): Promise<RoundResult> => {
+  const runOneRound = async (invoke: () => AsyncIterable<StreamEvent>, mayRelay: boolean): Promise<RoundResult> => {
     let fullReply = '';
     let hasError = false;
     let lastErrorMessage = '';
-    // Attachments are only delivered with the original user message, not relay rounds
-    const chatOpts = promptText === fullText ? { sessionKey, images: msg.images, files: msg.files } : { sessionKey };
 
     if (effectiveMode === 'streaming') {
       // ── Streaming mode: send text at logical boundaries ──
@@ -922,7 +1015,7 @@ export async function handleMessage(
         buffer = '';
       };
 
-      for await (const event of assistant.chat(promptText, chatOpts)) {
+      for await (const event of invoke()) {
         debugEventLog(debugEventsEnabled, `[event-debug] gateway ${summarizeStreamEvent(event)}`);
         if (event.type === 'text') {
           fullReply += event.content;
@@ -1044,7 +1137,7 @@ export async function handleMessage(
 
     // ── Buffered mode (default): accumulate all text, send at end ──
     {
-      for await (const event of assistant.chat(promptText, chatOpts)) {
+      for await (const event of invoke()) {
         debugEventLog(debugEventsEnabled, `[event-debug] gateway ${summarizeStreamEvent(event)}`);
         if (event.type === 'text') {
           fullReply += event.content;
@@ -1135,46 +1228,66 @@ export async function handleMessage(
   };
 
   try {
-    // ── Auto-continue relay loop (issue #37) ──
-    // The agent signals unfinished work with a trailing [CONTINUE] line; the
-    // gateway mechanically re-invokes it, up to `autoContinue` extra rounds.
-    let promptText = fullText;
-    let relayRound = 0;
-    while (true) {
-      const mayRelay = relayEnabled && relayRound < autoContinueMax;
-      const round = await runOneRound(promptText, mayRelay);
-      if (round.silent) return;
-
-      // Update group history with this round's reply + increment turn counter
+    if (nativeCommand) {
+      // Native commands invoke the engine's own command API exactly once —
+      // no chat prompt wrapping, no attachments, and no auto-continue relay
+      // (matching how built-in slash commands above already bypass all of
+      // that). A non-empty group reply still counts toward maxTurns, the
+      // same safety valve ordinary chat uses below, so a chain of native
+      // commands can't bypass the group turn limit — but the exchange is
+      // deliberately kept out of groupHistories, since native command I/O
+      // isn't conversational prompt context.
+      const nc = nativeCommand;
+      const round = await runOneRound(() => assistant.command(nc.command, nc.argumentsText, { sessionKey }), false);
       if (round.fullReply.trim() && msg.chatType === 'group') {
         const groupKey = buildConversationKey(msg);
-        const gc = resolveGroupChatConfig(config);
-        const hist = groupHistories.get(groupKey) ?? [];
-        hist.push({ senderName: config.name, text: round.fullReply.trim(), isBot: true });
-        if (hist.length > gc.historyLimit) hist.shift();
-        groupHistories.set(groupKey, hist);
         groupTurnCounters.set(groupKey, (groupTurnCounters.get(groupKey) ?? 0) + 1);
       }
+    } else {
+      // ── Auto-continue relay loop (issue #37) ──
+      // The agent signals unfinished work with a trailing [CONTINUE] line; the
+      // gateway mechanically re-invokes it, up to `autoContinue` extra rounds.
+      let promptText = fullText;
+      let relayRound = 0;
+      while (true) {
+        const mayRelay = relayEnabled && relayRound < autoContinueMax;
+        // Attachments are only delivered with the original user message, not relay rounds
+        const chatOpts =
+          promptText === fullText ? { sessionKey, images: msg.images, files: msg.files } : { sessionKey };
+        const round = await runOneRound(() => assistant.chat(promptText, chatOpts), mayRelay);
+        if (round.silent) return;
 
-      if (!round.sawContinue || round.hasError || !mayRelay) {
-        if (round.sawContinue && !round.hasError && !mayRelay && relayEnabled) {
-          log(verbose, `[${channelType}] auto-continue cap (${autoContinueMax}) reached for session ${sessionKey}`);
+        // Update group history with this round's reply + increment turn counter
+        if (round.fullReply.trim() && msg.chatType === 'group') {
+          const groupKey = buildConversationKey(msg);
+          const gc = resolveGroupChatConfig(config);
+          const hist = groupHistories.get(groupKey) ?? [];
+          hist.push({ senderName: config.name, text: round.fullReply.trim(), isBot: true });
+          if (hist.length > gc.historyLimit) hist.shift();
+          groupHistories.set(groupKey, hist);
+          groupTurnCounters.set(groupKey, (groupTurnCounters.get(groupKey) ?? 0) + 1);
         }
-        break;
-      }
-      if (sessionInboundSeq.get(sessionKey) !== inboundSeq) {
-        log(verbose, `[${channelType}] auto-continue interrupted by a newer message for session ${sessionKey}`);
-        break;
-      }
 
-      relayRound++;
-      log(verbose, `[${channelType}] auto-continue round ${relayRound}/${autoContinueMax} for session ${sessionKey}`);
-      // Keep the typing indicator alive across relay rounds
-      if (adapter.typing && typingTimer === undefined) {
-        adapter.typing(msg).catch(() => {});
-        typingTimer = setInterval(() => adapter.typing!(msg).catch(() => {}), 4000);
+        if (!round.sawContinue || round.hasError || !mayRelay) {
+          if (round.sawContinue && !round.hasError && !mayRelay && relayEnabled) {
+            log(verbose, `[${channelType}] auto-continue cap (${autoContinueMax}) reached for session ${sessionKey}`);
+          }
+          break;
+        }
+        if (sessionInboundSeq.get(sessionKey) !== inboundSeq) {
+          log(verbose, `[${channelType}] auto-continue interrupted by a newer message for session ${sessionKey}`);
+          break;
+        }
+
+        relayRound++;
+        log(verbose, `[${channelType}] auto-continue round ${relayRound}/${autoContinueMax} for session ${sessionKey}`);
+        // Keep the typing indicator alive across relay rounds
+        if (adapter.typing && typingTimer === undefined) {
+          adapter.typing(msg).catch(() => {});
+          typingTimer = setInterval(() => adapter.typing!(msg).catch(() => {}), 4000);
+        }
+        promptText = AUTO_CONTINUE_PROMPT;
       }
-      promptText = AUTO_CONTINUE_PROMPT;
     }
   } catch (e) {
     console.error(`[${channelType}] Failed to process message:`, e);

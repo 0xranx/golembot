@@ -13,25 +13,59 @@ describe('parseCommand', () => {
   });
 
   it('parses simple command', () => {
-    expect(parseCommand('/help')).toEqual({ name: '/help', args: [] });
+    expect(parseCommand('/help')).toEqual({ name: '/help', args: [], argumentsText: '' });
   });
 
   it('parses command with args', () => {
-    expect(parseCommand('/engine claude-code')).toEqual({ name: '/engine', args: ['claude-code'] });
+    expect(parseCommand('/engine claude-code')).toEqual({
+      name: '/engine',
+      args: ['claude-code'],
+      argumentsText: 'claude-code',
+    });
   });
 
   it('parses command with multiple args', () => {
-    expect(parseCommand('/model claude-sonnet-4-6')).toEqual({ name: '/model', args: ['claude-sonnet-4-6'] });
+    expect(parseCommand('/model claude-sonnet-4-6')).toEqual({
+      name: '/model',
+      args: ['claude-sonnet-4-6'],
+      argumentsText: 'claude-sonnet-4-6',
+    });
   });
 
-  it('normalizes command name to lowercase', () => {
-    expect(parseCommand('/HELP')).toEqual({ name: '/help', args: [] });
-    expect(parseCommand('/Engine Cursor')).toEqual({ name: '/engine', args: ['Cursor'] });
+  it('preserves command name case', () => {
+    expect(parseCommand('/HELP')).toEqual({ name: '/HELP', args: [], argumentsText: '' });
+    expect(parseCommand('/ReviewAPI Cursor')).toEqual({
+      name: '/ReviewAPI',
+      args: ['Cursor'],
+      argumentsText: 'Cursor',
+    });
   });
 
   it('handles extra whitespace', () => {
-    expect(parseCommand('  /help  ')).toEqual({ name: '/help', args: [] });
-    expect(parseCommand('/engine   cursor  ')).toEqual({ name: '/engine', args: ['cursor'] });
+    expect(parseCommand('  /help  ')).toEqual({ name: '/help', args: [], argumentsText: '' });
+    expect(parseCommand('/engine   cursor  ')).toEqual({
+      name: '/engine',
+      args: ['cursor'],
+      argumentsText: 'cursor',
+    });
+  });
+
+  it('preserves internal whitespace/newlines but trims the delimiter and trailing whitespace', () => {
+    expect(parseCommand('/review  src/a.ts\n  src/b.ts  ')).toEqual({
+      name: '/review',
+      args: ['src/a.ts', 'src/b.ts'],
+      argumentsText: 'src/a.ts\n  src/b.ts',
+    });
+  });
+
+  it('preserves internal whitespace between simple args', () => {
+    expect(parseCommand('/review alpha  beta')).toMatchObject({
+      argumentsText: 'alpha  beta',
+    });
+  });
+
+  it('returns an empty argumentsText when there is no suffix', () => {
+    expect(parseCommand('/review')).toEqual({ name: '/review', args: [], argumentsText: '' });
   });
 });
 
@@ -62,7 +96,7 @@ function makeCtx(overrides?: Partial<CommandContext>): CommandContext {
 describe('executeCommand', () => {
   // ── /help ──
   it('/help returns command list', async () => {
-    const result = await executeCommand({ name: '/help', args: [] }, makeCtx());
+    const result = await executeCommand({ name: '/help', args: [], argumentsText: '' }, makeCtx());
     expect(result).not.toBeNull();
     expect(result!.text).toContain('/help');
     expect(result!.text).toContain('/status');
@@ -74,9 +108,14 @@ describe('executeCommand', () => {
     expect(result!.data).toHaveProperty('commands');
   });
 
+  it('executes built-in commands case-insensitively', async () => {
+    const result = await executeCommand({ name: '/HELP', args: [], argumentsText: '' }, makeCtx());
+    expect(result?.text).toContain('/help');
+  });
+
   // ── /status ──
   it('/status shows current config', async () => {
-    const result = await executeCommand({ name: '/status', args: [] }, makeCtx());
+    const result = await executeCommand({ name: '/status', args: [], argumentsText: '' }, makeCtx());
     expect(result).not.toBeNull();
     expect(result!.text).toContain('my-bot');
     expect(result!.text).toContain('cursor');
@@ -87,14 +126,14 @@ describe('executeCommand', () => {
 
   // ── /engine ──
   it('/engine without args shows current engine', async () => {
-    const result = await executeCommand({ name: '/engine', args: [] }, makeCtx());
+    const result = await executeCommand({ name: '/engine', args: [], argumentsText: '' }, makeCtx());
     expect(result!.text).toContain('cursor');
     expect(result!.text).toContain('Available');
   });
 
   it('/engine with valid name switches engine', async () => {
     const ctx = makeCtx();
-    const result = await executeCommand({ name: '/engine', args: ['claude-code'] }, ctx);
+    const result = await executeCommand({ name: '/engine', args: ['claude-code'], argumentsText: '' }, ctx);
     expect(result!.text).toContain('claude-code');
     expect(result!.text).toContain('switched');
     expect(ctx.setEngine).toHaveBeenCalledWith('claude-code', true);
@@ -102,14 +141,14 @@ describe('executeCommand', () => {
 
   it('/engine with invalid name returns error', async () => {
     const ctx = makeCtx();
-    const result = await executeCommand({ name: '/engine', args: ['invalid'] }, ctx);
+    const result = await executeCommand({ name: '/engine', args: ['invalid'], argumentsText: '' }, ctx);
     expect(result!.text).toContain('Unknown engine');
     expect(ctx.setEngine).not.toHaveBeenCalled();
   });
 
   // ── /model ──
   it('/model without args shows current model', async () => {
-    const result = await executeCommand({ name: '/model', args: [] }, makeCtx());
+    const result = await executeCommand({ name: '/model', args: [], argumentsText: '' }, makeCtx());
     expect(result!.text).toContain('sonnet-4.6');
   });
 
@@ -122,13 +161,13 @@ describe('executeCommand', () => {
         model: undefined,
       }),
     });
-    const result = await executeCommand({ name: '/model', args: [] }, ctx);
+    const result = await executeCommand({ name: '/model', args: [], argumentsText: '' }, ctx);
     expect(result!.text).toContain('No model override');
   });
 
   it('/model list fetches available models', async () => {
     const ctx = makeCtx();
-    const result = await executeCommand({ name: '/model', args: ['list'] }, ctx);
+    const result = await executeCommand({ name: '/model', args: ['list'], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('model-a');
     expect(result!.text).toContain('model-b');
@@ -140,21 +179,21 @@ describe('executeCommand', () => {
 
   it('/model list with no models returns empty message', async () => {
     const ctx = makeCtx({ listModels: vi.fn().mockResolvedValue([]) });
-    const result = await executeCommand({ name: '/model', args: ['list'] }, ctx);
+    const result = await executeCommand({ name: '/model', args: ['list'], argumentsText: '' }, ctx);
     expect(result!.text).toContain('No models found');
     expect(result!.data!.models).toEqual([]);
   });
 
   it('/model with args switches model', async () => {
     const ctx = makeCtx();
-    const result = await executeCommand({ name: '/model', args: ['claude-sonnet-4-6'] }, ctx);
+    const result = await executeCommand({ name: '/model', args: ['claude-sonnet-4-6'], argumentsText: '' }, ctx);
     expect(result!.text).toContain('claude-sonnet-4-6');
     expect(ctx.setModel).toHaveBeenCalledWith('claude-sonnet-4-6');
   });
 
   // ── /skill ──
   it('/skill lists installed skills', async () => {
-    const result = await executeCommand({ name: '/skill', args: [] }, makeCtx());
+    const result = await executeCommand({ name: '/skill', args: [], argumentsText: '' }, makeCtx());
     expect(result!.text).toContain('general');
     expect(result!.text).toContain('faq');
     expect(result!.data!.skills).toHaveLength(2);
@@ -169,14 +208,14 @@ describe('executeCommand', () => {
         model: undefined,
       }),
     });
-    const result = await executeCommand({ name: '/skill', args: [] }, ctx);
+    const result = await executeCommand({ name: '/skill', args: [], argumentsText: '' }, ctx);
     expect(result!.text).toContain('No skills');
   });
 
   // ── /reset ──
   it('/reset clears session and history', async () => {
     const ctx = makeCtx();
-    const result = await executeCommand({ name: '/reset', args: [] }, ctx);
+    const result = await executeCommand({ name: '/reset', args: [], argumentsText: '' }, ctx);
     expect(result!.text).toContain('Session and history reset');
     expect(ctx.resetSession).toHaveBeenCalledWith('test-session');
     expect(result!.data).toMatchObject({ ok: true, reset: true });
@@ -184,7 +223,7 @@ describe('executeCommand', () => {
 
   it('/stop cancels the current task', async () => {
     const ctx = makeCtx();
-    const result = await executeCommand({ name: '/stop', args: [] }, ctx);
+    const result = await executeCommand({ name: '/stop', args: [], argumentsText: '' }, ctx);
     expect(result!.text).toContain('Stopped');
     expect(ctx.cancelSession).toHaveBeenCalledWith('test-session');
     expect(result!.data).toMatchObject({ ok: true, stopped: true });
@@ -192,14 +231,14 @@ describe('executeCommand', () => {
 
   it('/stop reports when nothing is running', async () => {
     const ctx = makeCtx({ cancelSession: vi.fn().mockResolvedValue(false) });
-    const result = await executeCommand({ name: '/stop', args: [] }, ctx);
+    const result = await executeCommand({ name: '/stop', args: [], argumentsText: '' }, ctx);
     expect(result!.text).toContain('No running task');
     expect(result!.data).toMatchObject({ ok: true, stopped: false });
   });
 
   // ── Unknown command ──
   it('unknown command returns null', async () => {
-    const result = await executeCommand({ name: '/unknown', args: [] }, makeCtx());
+    const result = await executeCommand({ name: '/unknown', args: [], argumentsText: '' }, makeCtx());
     expect(result).toBeNull();
   });
 });
@@ -279,7 +318,7 @@ function makeCronCtx(overrides?: Partial<CommandContext>): CommandContext {
 describe('/cron', () => {
   it('/cron (no args) lists tasks', async () => {
     const ctx = makeCronCtx();
-    const result = await executeCommand({ name: '/cron', args: [] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: [], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('Daily Report');
     expect(result!.text).toContain('Weekly Cleanup');
@@ -288,7 +327,7 @@ describe('/cron', () => {
 
   it('/cron list lists tasks', async () => {
     const ctx = makeCronCtx();
-    const result = await executeCommand({ name: '/cron', args: ['list'] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: ['list'], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('Daily Report');
     expect(result!.text).toContain('Weekly Cleanup');
@@ -297,7 +336,7 @@ describe('/cron', () => {
 
   it('/cron run <id> runs the task and returns reply', async () => {
     const ctx = makeCronCtx();
-    const result = await executeCommand({ name: '/cron', args: ['run', 'task-1'] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: ['run', 'task-1'], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toBe('Task executed successfully.');
     expect(result!.data!.taskId).toBe('task-1');
@@ -306,7 +345,7 @@ describe('/cron', () => {
 
   it('/cron enable <id> enables the task', async () => {
     const ctx = makeCronCtx();
-    const result = await executeCommand({ name: '/cron', args: ['enable', 'task-1'] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: ['enable', 'task-1'], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('enabled');
     expect(ctx.taskStore!.updateTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('task-1', { enabled: true });
@@ -315,7 +354,7 @@ describe('/cron', () => {
 
   it('/cron disable <id> disables the task', async () => {
     const ctx = makeCronCtx();
-    const result = await executeCommand({ name: '/cron', args: ['disable', 'task-2'] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: ['disable', 'task-2'], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('disabled');
     expect(ctx.taskStore!.updateTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('task-2', { enabled: false });
@@ -324,7 +363,7 @@ describe('/cron', () => {
 
   it('/cron del <id> deletes the task', async () => {
     const ctx = makeCronCtx();
-    const result = await executeCommand({ name: '/cron', args: ['del', 'task-1'] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: ['del', 'task-1'], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('deleted');
     expect(ctx.taskStore!.removeTask as ReturnType<typeof vi.fn>).toHaveBeenCalledWith('task-1');
@@ -333,7 +372,7 @@ describe('/cron', () => {
 
   it('/cron history <id> returns execution history', async () => {
     const ctx = makeCronCtx();
-    const result = await executeCommand({ name: '/cron', args: ['history', 'task-1'] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: ['history', 'task-1'], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('History for task task-1');
     expect(result!.text).toContain('success');
@@ -344,7 +383,7 @@ describe('/cron', () => {
 
   it('/cron when taskStore is not available returns gateway mode message', async () => {
     const ctx = makeCtx(); // no taskStore
-    const result = await executeCommand({ name: '/cron', args: [] }, ctx);
+    const result = await executeCommand({ name: '/cron', args: [], argumentsText: '' }, ctx);
     expect(result).not.toBeNull();
     expect(result!.text).toContain('gateway mode');
   });
