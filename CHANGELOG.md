@@ -1,3 +1,16 @@
+# [0.50.0](https://github.com/0xranx/golembot/compare/v0.49.2...v0.50.0) (2026-09-21)
+
+
+### Bug Fixes
+
+* **gateway:** harden native command passthrough ([30f6db8](https://github.com/0xranx/golembot/commit/30f6db86e6bb067e48a6c1a051f61dc9a4e0bfa6))
+* **opencode:** address native command review feedback ([df8408c](https://github.com/0xranx/golembot/commit/df8408c22ae3375bac54dfb60e6a418b4dcafe9e))
+
+
+### Features
+
+* **opencode:** support native command invocation ([e892158](https://github.com/0xranx/golembot/commit/e8921586b9d7ebc1f247646a8474fe2fe5effc4a))
+
 ## [0.49.2](https://github.com/0xranx/golembot/compare/v0.49.1...v0.49.2) (2026-09-05)
 
 
