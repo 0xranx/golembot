@@ -60,7 +60,23 @@ jobs:
         run: npm publish --registry=https://registry.npmjs.org --tag latest --access public --provenance=false
 
       - name: Verify npm package
-        run: npm view golembot@0.50.0 version --registry=https://registry.npmjs.org
+        run: |
+          node --input-type=module <<'NODE'
+          import { setTimeout } from 'node:timers/promises';
+          for (let attempt = 1; attempt <= 30; attempt++) {
+            const response = await fetch('https://registry.npmjs.org/golembot/0.50.0');
+            if (response.ok) {
+              const pkg = await response.json();
+              if (pkg.name !== 'golembot' || pkg.version !== '0.50.0') throw new Error('Unexpected package identity');
+              console.log('golembot@0.50.0 is available on npm');
+              process.exit(0);
+            }
+            if (response.status !== 404) throw new Error(`npm registry returned ${response.status}`);
+            console.log(`Waiting for npm processing (${attempt}/30)`);
+            await setTimeout(10000);
+          }
+          throw new Error('Published package is not yet visible; do not republish without checking npm');
+          NODE
 
       - name: Create missing GitHub release
         env:
