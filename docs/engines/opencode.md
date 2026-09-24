@@ -37,6 +37,7 @@ OpenCode supports 75+ providers via the AI SDK. The canonical source for all val
 | `openai/gpt-5` | OpenAI | `OPENAI_API_KEY` |
 | `openai/gpt-4o` | OpenAI | `OPENAI_API_KEY` |
 | `openrouter/anthropic/claude-opus-4-6` | OpenRouter | `OPENROUTER_API_KEY` |
+| `requesty/openai/gpt-4o-mini` | Requesty | `REQUESTY_API_KEY` |
 | `google/gemini-2.5-flash` | Google | `GOOGLE_GENERATIVE_AI_API_KEY` |
 | `deepseek/deepseek-chat` | DeepSeek | `DEEPSEEK_API_KEY` |
 | `groq/llama-3.3-70b-versatile` | Groq | `GROQ_API_KEY` |
@@ -71,6 +72,7 @@ OpenCode supports many LLM providers. GolemBot automatically resolves the correc
 | `anthropic/` | `ANTHROPIC_API_KEY` |
 | `openai/` | `OPENAI_API_KEY` |
 | `openrouter/` | `OPENROUTER_API_KEY` |
+| `requesty/` | `REQUESTY_API_KEY` |
 | `groq/` | `GROQ_API_KEY` |
 | `azure/` | `AZURE_API_KEY` |
 | (others) | Passed through as-is |

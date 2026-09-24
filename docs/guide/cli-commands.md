@@ -306,6 +306,7 @@ Checks:
 | `ANTHROPIC_API_KEY` | Claude Code engine | Anthropic API key |
 | `OPENAI_API_KEY` | OpenCode engine | OpenAI API key |
 | `OPENROUTER_API_KEY` | OpenCode engine | OpenRouter API key |
+| `REQUESTY_API_KEY` | OpenCode engine | Requesty API key |
 | `GOLEM_TOKEN` | serve / gateway | HTTP bearer auth token |
 | `GOLEM_PORT` | serve / gateway | HTTP port override |
 
