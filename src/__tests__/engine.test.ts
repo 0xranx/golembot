@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StreamEvent } from '../engine.js';
 import {
   buildCodexExecArgs,
@@ -957,6 +957,12 @@ describe('resolveOpenCodeEnv', () => {
     });
   });
 
+  it('requesty model → REQUESTY_API_KEY', () => {
+    expect(resolveOpenCodeEnv('requesty/openai/gpt-4o-mini', 'rqsty-key')).toEqual({
+      REQUESTY_API_KEY: 'rqsty-key',
+    });
+  });
+
   it('google model → GOOGLE_GENERATIVE_AI_API_KEY', () => {
     expect(resolveOpenCodeEnv('google/gemini-2.5-pro', 'gkey')).toEqual({ GOOGLE_GENERATIVE_AI_API_KEY: 'gkey' });
   });
@@ -1220,6 +1226,17 @@ describe('ensureOpenCodeConfig', () => {
     expect(config.provider.openrouter).toEqual({
       options: { apiKey: '{env:OPENROUTER_API_KEY}' },
       models: { 'anthropic/claude-sonnet-4-5': {} },
+    });
+  });
+
+  it('registers provider block for requesty model', async () => {
+    await ensureOpenCodeConfig(workspace, 'requesty/openai/gpt-4o-mini');
+
+    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    expect(config.provider.requesty).toEqual({
+      options: { apiKey: '{env:REQUESTY_API_KEY}' },
+      models: { 'openai/gpt-4o-mini': {} },
     });
   });
 
@@ -2031,5 +2048,45 @@ describe('CodexEngine.listModels local model cache', () => {
       'gpt-5.1-codex-max',
       'codex-mini-latest',
     ]);
+  });
+});
+
+describe('OpenCodeEngine.listModels requesty', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('lists chat models from the Requesty managed endpoint', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: 'gpt-5.4-mini', api: 'chat' },
+            { id: 'claude-sonnet-4-5', api: 'chat' },
+            { id: 'text-embedding-3-small', api: 'embedding' },
+          ],
+        }),
+      ),
+    );
+
+    const engine = new OpenCodeEngine();
+
+    await expect(engine.listModels({ model: 'requesty/openai/gpt-4o-mini' })).resolves.toEqual([
+      'claude-sonnet-4-5',
+      'gpt-5.4-mini',
+    ]);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://router.requesty.ai/v1/models/managed');
+  });
+
+  it('falls back to the full Requesty catalog when the managed endpoint fails', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new Error('network down'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: 'openai/gpt-4o-mini', api: 'chat' }] })));
+
+    const engine = new OpenCodeEngine();
+
+    await expect(engine.listModels({ model: 'requesty/openai/gpt-4o-mini' })).resolves.toEqual(['openai/gpt-4o-mini']);
+    expect(fetchSpy.mock.calls[1][0]).toBe('https://router.requesty.ai/v1/models');
   });
 });

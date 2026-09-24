@@ -60,6 +60,14 @@ export const providerPresets: ProviderPreset[] = [
     description: 'OpenRouter unified gateway (100+ models)',
   },
   {
+    name: 'requesty',
+    displayName: 'Requesty',
+    baseUrl: 'https://router.requesty.ai/v1',
+    defaultModel: 'anthropic/claude-sonnet-4-5',
+    apiKeyEnvVar: 'REQUESTY_API_KEY',
+    description: 'Requesty LLM gateway (OpenAI-compatible). EU endpoint router.eu.requesty.ai/v1.',
+  },
+  {
     name: 'siliconflow',
     displayName: 'SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',

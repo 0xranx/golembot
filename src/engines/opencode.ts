@@ -13,6 +13,7 @@ const OPENCODE_PROVIDER_ENV: Record<string, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
+  requesty: 'REQUESTY_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
   mistral: 'MISTRAL_API_KEY',
@@ -445,6 +446,19 @@ export class OpenCodeEngine implements AgentEngine {
         if (data.data?.length) return data.data.map((m) => m.id).sort();
       } catch {
         /* fallback to CLI */
+      }
+    }
+    // Requesty: public API, no auth needed (managed policies first, full catalog as fallback)
+    if (provider === 'requesty') {
+      for (const url of ['https://router.requesty.ai/v1/models/managed', 'https://router.requesty.ai/v1/models']) {
+        try {
+          const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+          const data = (await resp.json()) as { data?: Array<{ id: string; api?: string }> };
+          const ids = data.data?.filter((m) => !m.api || m.api === 'chat').map((m) => m.id);
+          if (ids?.length) return ids.sort();
+        } catch {
+          /* try next endpoint */
+        }
       }
     }
     // Fallback: opencode CLI
