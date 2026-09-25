@@ -159,6 +159,7 @@ export async function ensureOpenCodeConfig(
   workspace: string,
   model?: string,
   mcpConfig?: Record<string, import('../workspace.js').McpServerConfig>,
+  providerBaseUrl?: string,
 ): Promise<void> {
   const configPath = join(workspace, 'opencode.json');
   let existing: Record<string, unknown> = {};
@@ -197,6 +198,10 @@ export async function ensureOpenCodeConfig(
       // Preserve existing apiKey; only set if absent
       const options = (entry.options ?? {}) as Record<string, unknown>;
       if (!options.apiKey) options.apiKey = `{env:${envVar}}`;
+      // OpenCode resolves the provider URL from options.baseURL (or its catalog default),
+      // not from OPENAI_BASE_URL, so a configured Requesty baseUrl (e.g. the EU router)
+      // has to be written here to take effect.
+      if (providerPrefix === 'requesty' && providerBaseUrl) options.baseURL = providerBaseUrl;
       entry.options = options;
 
       // Register the model; preserve existing model-level config if present
@@ -292,7 +297,7 @@ export class OpenCodeEngine implements AgentEngine {
   private async *run(prompt: string, opts: InvokeOpts, command?: string): AsyncIterable<StreamEvent> {
     const debugEventsEnabled = isDebugEventsEnabled();
     await injectOpenCodeSkills(opts.workspace, opts.skillPaths);
-    await ensureOpenCodeConfig(opts.workspace, opts.model, opts.mcpConfig);
+    await ensureOpenCodeConfig(opts.workspace, opts.model, opts.mcpConfig, opts.provider?.baseUrl);
 
     const bin = findOpenCodeBin();
     // The prompt is piped via stdin rather than passed as an argv element:

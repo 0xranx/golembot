@@ -1240,6 +1240,25 @@ describe('ensureOpenCodeConfig', () => {
     });
   });
 
+  it('writes provider.baseUrl into requesty options.baseURL', async () => {
+    await ensureOpenCodeConfig(workspace, 'requesty/openai/gpt-4o-mini', undefined, 'https://router.eu.requesty.ai/v1');
+
+    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    expect(config.provider.requesty.options).toEqual({
+      apiKey: '{env:REQUESTY_API_KEY}',
+      baseURL: 'https://router.eu.requesty.ai/v1',
+    });
+  });
+
+  it('does not write baseURL for non-requesty providers', async () => {
+    await ensureOpenCodeConfig(workspace, 'openrouter/anthropic/claude-sonnet-4', undefined, 'https://example.com/v1');
+
+    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    expect(config.provider.openrouter.options).toEqual({ apiKey: '{env:OPENROUTER_API_KEY}' });
+  });
+
   it('registers provider block for anthropic model', async () => {
     await ensureOpenCodeConfig(workspace, 'anthropic/claude-sonnet-4-5');
 
