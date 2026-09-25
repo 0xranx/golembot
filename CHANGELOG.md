@@ -1,3 +1,16 @@
+# [0.51.0](https://github.com/0xranx/golembot/compare/v0.50.0...v0.51.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* **opencode:** pass provider.baseUrl to Requesty via options.baseURL in opencode.json ([a1e50a2](https://github.com/0xranx/golembot/commit/a1e50a262b916368b275f2469b70f49a9e798892))
+* **opencode:** prefix Requesty model IDs with requesty/ in listModels ([879d998](https://github.com/0xranx/golembot/commit/879d99832aac97bf4c6fb71f9c781d6874282e89))
+
+
+### Features
+
+* **provider:** add Requesty preset and OpenCode provider mapping ([5cff3a3](https://github.com/0xranx/golembot/commit/5cff3a3a9e6101fbe38f99042a89e466222be30a))
+
 # [0.50.0](https://github.com/0xranx/golembot/compare/v0.49.2...v0.50.0) (2026-09-21)
 
 
