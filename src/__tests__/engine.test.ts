@@ -2072,8 +2072,8 @@ describe('OpenCodeEngine.listModels requesty', () => {
     const engine = new OpenCodeEngine();
 
     await expect(engine.listModels({ model: 'requesty/openai/gpt-4o-mini' })).resolves.toEqual([
-      'claude-sonnet-4-5',
-      'gpt-5.4-mini',
+      'requesty/claude-sonnet-4-5',
+      'requesty/gpt-5.4-mini',
     ]);
     expect(fetchSpy.mock.calls[0][0]).toBe('https://router.requesty.ai/v1/models/managed');
   });
@@ -2086,7 +2086,9 @@ describe('OpenCodeEngine.listModels requesty', () => {
 
     const engine = new OpenCodeEngine();
 
-    await expect(engine.listModels({ model: 'requesty/openai/gpt-4o-mini' })).resolves.toEqual(['openai/gpt-4o-mini']);
+    await expect(engine.listModels({ model: 'requesty/openai/gpt-4o-mini' })).resolves.toEqual([
+      'requesty/openai/gpt-4o-mini',
+    ]);
     expect(fetchSpy.mock.calls[1][0]).toBe('https://router.requesty.ai/v1/models');
   });
 });

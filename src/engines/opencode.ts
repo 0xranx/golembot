@@ -448,13 +448,14 @@ export class OpenCodeEngine implements AgentEngine {
         /* fallback to CLI */
       }
     }
-    // Requesty: public API, no auth needed (managed policies first, full catalog as fallback)
+    // Requesty: public API, no auth needed (managed policies first, full catalog as fallback).
+    // IDs are returned with the `requesty/` prefix so they can be passed to /model as-is.
     if (provider === 'requesty') {
       for (const url of ['https://router.requesty.ai/v1/models/managed', 'https://router.requesty.ai/v1/models']) {
         try {
           const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
           const data = (await resp.json()) as { data?: Array<{ id: string; api?: string }> };
-          const ids = data.data?.filter((m) => !m.api || m.api === 'chat').map((m) => m.id);
+          const ids = data.data?.filter((m) => !m.api || m.api === 'chat').map((m) => `requesty/${m.id}`);
           if (ids?.length) return ids.sort();
         } catch {
           /* try next endpoint */
