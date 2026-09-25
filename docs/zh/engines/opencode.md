@@ -36,6 +36,7 @@ OpenCode 通过 AI SDK 支持 75+ 个 Provider，所有有效模型字符串的�
 | `openai/gpt-5` | OpenAI | `OPENAI_API_KEY` |
 | `openai/gpt-4o` | OpenAI | `OPENAI_API_KEY` |
 | `openrouter/anthropic/claude-opus-4-6` | OpenRouter | `OPENROUTER_API_KEY` |
+| `requesty/openai/gpt-4o-mini` | Requesty | `REQUESTY_API_KEY` |
 | `google/gemini-2.5-flash` | Google | `GOOGLE_GENERATIVE_AI_API_KEY` |
 | `deepseek/deepseek-chat` | DeepSeek | `DEEPSEEK_API_KEY` |
 | `groq/llama-3.3-70b-versatile` | Groq | `GROQ_API_KEY` |
@@ -57,6 +58,7 @@ OpenCode 支持多种 LLM Provider。GolemBot 根据模型前缀自动解析正�
 | `anthropic/` | `ANTHROPIC_API_KEY` |
 | `openai/` | `OPENAI_API_KEY` |
 | `openrouter/` | `OPENROUTER_API_KEY` |
+| `requesty/` | `REQUESTY_API_KEY` |
 | `groq/` | `GROQ_API_KEY` |
 | `azure/` | `AZURE_API_KEY` |
 

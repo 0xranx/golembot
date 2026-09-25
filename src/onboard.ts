@@ -58,7 +58,7 @@ function detectEngineAuth(engine: string): { ok: boolean; detail: string } {
     return { ok: false, detail: '' };
   }
   if (engine === 'opencode') {
-    const keys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY'];
+    const keys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'REQUESTY_API_KEY'];
     const found = keys.find((k) => !!process.env[k]);
     if (found) return { ok: true, detail: found };
     const authFile = join(homedir(), '.local', 'share', 'opencode', 'auth.json');

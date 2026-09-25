@@ -88,6 +88,11 @@ describe('provider-env', () => {
       expect(env.OPENROUTER_API_KEY).toBe('sk-test');
     });
 
+    it('maps requesty prefix to REQUESTY_API_KEY', () => {
+      const env = openCodeProviderEnv({ apiKey: 'rqsty-test' }, 'requesty/openai/gpt-4o-mini');
+      expect(env.REQUESTY_API_KEY).toBe('rqsty-test');
+    });
+
     it('maps baseUrl to OPENAI_BASE_URL', () => {
       const env = openCodeProviderEnv({ baseUrl: 'https://api.example.com' });
       expect(env.OPENAI_BASE_URL).toBe('https://api.example.com');
@@ -340,6 +345,14 @@ describe('provider-presets', () => {
     expect(config!.baseUrl).toBe('https://api.minimax.io/v1');
     expect(config!.model).toBe('MiniMax-M3');
     expect(config!.apiKey).toBe('${MINIMAX_API_KEY}');
+  });
+
+  it('createProviderFromPreset returns config for requesty preset', () => {
+    const config = createProviderFromPreset('requesty');
+    expect(config).toBeDefined();
+    expect(config!.baseUrl).toBe('https://router.requesty.ai/v1');
+    expect(config!.model).toBe('anthropic/claude-sonnet-4-5');
+    expect(config!.apiKey).toBe('${REQUESTY_API_KEY}');
   });
 
   it('createProviderFromPreset returns undefined for unknown preset', () => {

@@ -173,6 +173,15 @@ provider:
 
 Note: OpenCode models use `provider/model` format. For OpenRouter, the prefix is `openrouter`.
 
+Requesty works the same way with the `requesty` prefix (get a key at https://app.requesty.ai/api-keys):
+
+```yaml
+provider:
+  baseUrl: "https://router.requesty.ai/v1"    # EU: https://router.eu.requesty.ai/v1
+  apiKey: "${REQUESTY_API_KEY}"
+  model: "requesty/openai/gpt-4o-mini"
+```
+
 ### Case 4: Claude Code + MiniMax (Anthropic-Compatible Provider)
 
 ```yaml

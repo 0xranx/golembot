@@ -262,6 +262,7 @@ OpenCode 支持 75+ LLM 提供商；认证方式取决于选择的提供商：
 | OpenAI | `OPENAI_API_KEY` | `openai/gpt-5` |
 | Google | `GOOGLE_GENERATIVE_AI_API_KEY` | `google/gemini-2.5-pro` |
 | OpenRouter | `OPENROUTER_API_KEY` | `openrouter/anthropic/claude-sonnet-4-5` |
+| Requesty | `REQUESTY_API_KEY` | `requesty/openai/gpt-4o-mini` |
 | Amazon Bedrock | `AWS_*` 系列 | `amazon-bedrock/...` |
 
 **与 Cursor/Claude Code 的区别**：Cursor 只需 `CURSOR_API_KEY`，Claude Code 只需 `ANTHROPIC_API_KEY`。由于 OpenCode 支持多个提供商，你必须设置**所选提供商对应的**环境变量。在与 GolemBot 的 `InvokeOpts.apiKey` 集成时，需要知道目标提供商才能设置正确的环境变量名。

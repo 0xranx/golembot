@@ -13,6 +13,7 @@ const OPENCODE_PROVIDER_ENV: Record<string, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
+  requesty: 'REQUESTY_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
   mistral: 'MISTRAL_API_KEY',
@@ -158,6 +159,7 @@ export async function ensureOpenCodeConfig(
   workspace: string,
   model?: string,
   mcpConfig?: Record<string, import('../workspace.js').McpServerConfig>,
+  providerBaseUrl?: string,
 ): Promise<void> {
   const configPath = join(workspace, 'opencode.json');
   let existing: Record<string, unknown> = {};
@@ -196,6 +198,10 @@ export async function ensureOpenCodeConfig(
       // Preserve existing apiKey; only set if absent
       const options = (entry.options ?? {}) as Record<string, unknown>;
       if (!options.apiKey) options.apiKey = `{env:${envVar}}`;
+      // OpenCode resolves the provider URL from options.baseURL (or its catalog default),
+      // not from OPENAI_BASE_URL, so a configured Requesty baseUrl (e.g. the EU router)
+      // has to be written here to take effect.
+      if (providerPrefix === 'requesty' && providerBaseUrl) options.baseURL = providerBaseUrl;
       entry.options = options;
 
       // Register the model; preserve existing model-level config if present
@@ -291,7 +297,7 @@ export class OpenCodeEngine implements AgentEngine {
   private async *run(prompt: string, opts: InvokeOpts, command?: string): AsyncIterable<StreamEvent> {
     const debugEventsEnabled = isDebugEventsEnabled();
     await injectOpenCodeSkills(opts.workspace, opts.skillPaths);
-    await ensureOpenCodeConfig(opts.workspace, opts.model, opts.mcpConfig);
+    await ensureOpenCodeConfig(opts.workspace, opts.model, opts.mcpConfig, opts.provider?.baseUrl);
 
     const bin = findOpenCodeBin();
     // The prompt is piped via stdin rather than passed as an argv element:
@@ -445,6 +451,20 @@ export class OpenCodeEngine implements AgentEngine {
         if (data.data?.length) return data.data.map((m) => m.id).sort();
       } catch {
         /* fallback to CLI */
+      }
+    }
+    // Requesty: public API, no auth needed (managed policies first, full catalog as fallback).
+    // IDs are returned with the `requesty/` prefix so they can be passed to /model as-is.
+    if (provider === 'requesty') {
+      for (const url of ['https://router.requesty.ai/v1/models/managed', 'https://router.requesty.ai/v1/models']) {
+        try {
+          const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+          const data = (await resp.json()) as { data?: Array<{ id: string; api?: string }> };
+          const ids = data.data?.filter((m) => !m.api || m.api === 'chat').map((m) => `requesty/${m.id}`);
+          if (ids?.length) return ids.sort();
+        } catch {
+          /* try next endpoint */
+        }
       }
     }
     // Fallback: opencode CLI

@@ -173,6 +173,15 @@ provider:
 
 注意：OpenCode 模型使用 `provider/model` 格式。对于 OpenRouter，前缀为 `openrouter`。
 
+Requesty 用法相同，前缀为 `requesty`（在 https://app.requesty.ai/api-keys 获取 Key）：
+
+```yaml
+provider:
+  baseUrl: "https://router.requesty.ai/v1"    # 欧盟区：https://router.eu.requesty.ai/v1
+  apiKey: "${REQUESTY_API_KEY}"
+  model: "requesty/openai/gpt-4o-mini"
+```
+
 ### 案例 4：Claude Code + MiniMax（Anthropic 兼容 Provider）
 
 ```yaml
