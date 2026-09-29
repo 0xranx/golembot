@@ -73,7 +73,7 @@ Embed into Slack bots, internal tools, SaaS products, customer support — anyth
 | **Auto-upgrade** | Agent gets smarter? Your assistant gets smarter. Zero code changes. | You maintain everything yourself |
 | **Transparency** | `ls` the directory = see what the assistant knows and does | Black box pipelines |
 | **Engine lock-in** | Change one line in config to swap engines | Rewrite everything |
-| **Provider freedom** | 4 engines × any provider — OpenRouter, MiniMax, DeepSeek, SiliconFlow. One config block. | Locked to one LLM provider per framework |
+| **Provider freedom** | 4 engines × any provider — OpenRouter, Requesty, MiniMax, DeepSeek, SiliconFlow. One config block. | Locked to one LLM provider per framework |
 | **Skills** | 13,000+ community skills from ClawHub, one command to install | Write your own tools and prompts from scratch |
 | **Scheduled tasks** | Built-in cron scheduler — daily standups, dependency audits, test reports pushed to IM | Build your own job system |
 | **Multimodal** | Image messages from IM → saved to disk → agent reads and analyzes. All 7 channels supported. | Parse platform APIs yourself |
