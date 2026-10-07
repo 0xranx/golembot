@@ -182,6 +182,17 @@ provider:
   model: "requesty/openai/gpt-4o-mini"
 ```
 
+Opper works the same way with the `opper` prefix (get a key at https://platform.opper.ai):
+
+```yaml
+provider:
+  baseUrl: "https://api.opper.ai/v3/compat"
+  apiKey: "${OPPER_API_KEY}"
+  model: "opper/claude-sonnet-4-6"
+```
+
+The same Opper base URL also serves the Anthropic Messages API, so Claude Code can use it unchanged with `model: "claude-sonnet-4-6"`.
+
 ### Case 4: Claude Code + MiniMax (Anthropic-Compatible Provider)
 
 ```yaml

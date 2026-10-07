@@ -14,6 +14,7 @@ const OPENCODE_PROVIDER_ENV: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
   requesty: 'REQUESTY_API_KEY',
+  opper: 'OPPER_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
   mistral: 'MISTRAL_API_KEY',
@@ -465,6 +466,18 @@ export class OpenCodeEngine implements AgentEngine {
         } catch {
           /* try next endpoint */
         }
+      }
+    }
+    // Opper: public catalogue, no auth needed. Only pooled chat models (a pool is every route serving
+    // that model). IDs are returned with the `opper/` prefix so they can be passed to /model as-is.
+    if (provider === 'opper') {
+      try {
+        const resp = await fetch('https://api.opper.ai/v3/models?limit=2000', { signal: AbortSignal.timeout(10_000) });
+        const data = (await resp.json()) as { models?: Array<{ model: string; type?: string; pooled?: boolean }> };
+        const ids = data.models?.filter((m) => m.pooled && m.type === 'llm').map((m) => `opper/${m.model}`);
+        if (ids?.length) return [...new Set(ids)].sort();
+      } catch {
+        /* fallback to CLI */
       }
     }
     // Fallback: opencode CLI

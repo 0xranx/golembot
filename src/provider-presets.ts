@@ -68,6 +68,14 @@ export const providerPresets: ProviderPreset[] = [
     description: 'Requesty LLM gateway (OpenAI-compatible). EU endpoint router.eu.requesty.ai/v1.',
   },
   {
+    name: 'opper',
+    displayName: 'Opper',
+    baseUrl: 'https://api.opper.ai/v3/compat',
+    defaultModel: 'claude-sonnet-4-6',
+    apiKeyEnvVar: 'OPPER_API_KEY',
+    description: 'Opper EU-hosted AI gateway (700+ models). One base URL for OpenAI and Anthropic clients.',
+  },
+  {
     name: 'siliconflow',
     displayName: 'SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',
