@@ -343,8 +343,19 @@ describe('provider-presets', () => {
     const config = createProviderFromPreset('minimax');
     expect(config).toBeDefined();
     expect(config!.baseUrl).toBe('https://api.minimax.io/v1');
-    expect(config!.model).toBe('MiniMax-M3');
+    expect(config!.model).toBe('MiniMax-M3.1-Flash');
     expect(config!.apiKey).toBe('${MINIMAX_API_KEY}');
+  });
+
+  it('lists only the current MiniMax models', () => {
+    const preset = providerPresets.find((p) => p.name === 'minimax');
+    expect(preset!.availableModels).toEqual(['MiniMax-M3.1-Flash', 'MiniMax-M3']);
+  });
+
+  it.each(['MiniMax-M3', 'custom-model'])('preserves the MiniMax model override %s', (model) => {
+    const config = createProviderFromPreset('minimax', 'my-key', model);
+    expect(config!.model).toBe(model);
+    expect(config!.apiKey).toBe('my-key');
   });
 
   it('createProviderFromPreset returns config for requesty preset', () => {
