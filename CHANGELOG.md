@@ -1,3 +1,10 @@
+## [0.51.1](https://github.com/0xranx/golembot/compare/v0.51.0...v0.51.1) (2026-10-25)
+
+
+### Bug Fixes
+
+* **provider:** default MiniMax preset to M3.1 Flash ([#65](https://github.com/0xranx/golembot/issues/65)) ([42288b3](https://github.com/0xranx/golembot/commit/42288b3089f005d405695bca7dea35b9fbe7e231))
+
 # [0.51.0](https://github.com/0xranx/golembot/compare/v0.50.0...v0.51.0) (2026-09-25)
 
 
