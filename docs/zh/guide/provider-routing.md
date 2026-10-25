@@ -191,7 +191,7 @@ engine: claude-code
 provider:
   baseUrl: "https://api.minimax.io/anthropic"
   apiKey: "${MINIMAX_API_KEY}"
-  model: "MiniMax-M3"
+  model: "MiniMax-M3.1-Flash"
 ```
 
 ### 案例 5：多引擎 + 按引擎指定模型
@@ -270,7 +270,7 @@ curl -s https://your-provider/v1/responses \
 provider:
   apiKey: ${MINIMAX_API_KEY}
   baseUrl: https://api.minimax.io/anthropic
-  model: MiniMax-M3
+  model: MiniMax-M3.1-Flash
   failoverThreshold: 3          # 连续错误多少次后切换（默认：3）
   fallback:
     apiKey: ${OPENROUTER_API_KEY}

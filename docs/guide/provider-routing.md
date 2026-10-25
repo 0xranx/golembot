@@ -191,7 +191,7 @@ engine: claude-code
 provider:
   baseUrl: "https://api.minimax.io/anthropic"
   apiKey: "${MINIMAX_API_KEY}"
-  model: "MiniMax-M3"
+  model: "MiniMax-M3.1-Flash"
 ```
 
 ### Case 5: Multi-Engine with Per-Engine Models
@@ -270,7 +270,7 @@ When a provider becomes unreliable, GolemBot can automatically switch to a backu
 provider:
   apiKey: ${MINIMAX_API_KEY}
   baseUrl: https://api.minimax.io/anthropic
-  model: MiniMax-M3
+  model: MiniMax-M3.1-Flash
   failoverThreshold: 3          # consecutive errors before switching (default: 3)
   fallback:
     apiKey: ${OPENROUTER_API_KEY}
