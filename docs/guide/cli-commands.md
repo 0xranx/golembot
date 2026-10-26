@@ -307,6 +307,7 @@ Checks:
 | `OPENAI_API_KEY` | OpenCode engine | OpenAI API key |
 | `OPENROUTER_API_KEY` | OpenCode engine | OpenRouter API key |
 | `REQUESTY_API_KEY` | OpenCode engine | Requesty API key |
+| `CHEAPER_INFERENCE_API_KEY` | OpenCode engine | Cheaper Inference API key |
 | `GOLEM_TOKEN` | serve / gateway | HTTP bearer auth token |
 | `GOLEM_PORT` | serve / gateway | HTTP port override |
 

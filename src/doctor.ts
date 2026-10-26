@@ -85,7 +85,14 @@ export async function runDoctor(dir: string): Promise<void> {
       authDetail = 'none — run `codex login` or set CODEX_API_KEY';
     }
   } else {
-    const keyVars = ['ANTHROPIC_API_KEY', 'CURSOR_API_KEY', 'OPENROUTER_API_KEY', 'REQUESTY_API_KEY', 'OPENAI_API_KEY'];
+    const keyVars = [
+      'ANTHROPIC_API_KEY',
+      'CURSOR_API_KEY',
+      'OPENROUTER_API_KEY',
+      'REQUESTY_API_KEY',
+      'CHEAPER_INFERENCE_API_KEY',
+      'OPENAI_API_KEY',
+    ];
     const foundVars = keyVars.filter((k) => !!process.env[k]);
     authOk = foundVars.length > 0;
     authDetail = authOk

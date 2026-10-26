@@ -68,6 +68,14 @@ export const providerPresets: ProviderPreset[] = [
     description: 'Requesty LLM gateway (OpenAI-compatible). EU endpoint router.eu.requesty.ai/v1.',
   },
   {
+    name: 'cheaperinference',
+    displayName: 'Cheaper Inference',
+    baseUrl: 'https://api.cheaperinference.com/v1',
+    defaultModel: 'gpt-5.4-mini',
+    apiKeyEnvVar: 'CHEAPER_INFERENCE_API_KEY',
+    description: 'Cheaper Inference LLM gateway (OpenAI-compatible).',
+  },
+  {
     name: 'siliconflow',
     displayName: 'SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',
