@@ -182,6 +182,15 @@ provider:
   model: "requesty/openai/gpt-4o-mini"
 ```
 
+Cheaper Inference 用法相同，前缀为 `cheaperinference`（在 https://cheaperinference.com/signup 获取 Key）：
+
+```yaml
+provider:
+  baseUrl: "https://api.cheaperinference.com/v1"
+  apiKey: "${CHEAPER_INFERENCE_API_KEY}"
+  model: "cheaperinference/gpt-5.4-mini"
+```
+
 ### 案例 4：Claude Code + MiniMax（Anthropic 兼容 Provider）
 
 ```yaml

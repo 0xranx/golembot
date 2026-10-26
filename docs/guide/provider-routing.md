@@ -182,6 +182,15 @@ provider:
   model: "requesty/openai/gpt-4o-mini"
 ```
 
+Cheaper Inference works the same way with the `cheaperinference` prefix (get a key at https://cheaperinference.com/signup):
+
+```yaml
+provider:
+  baseUrl: "https://api.cheaperinference.com/v1"
+  apiKey: "${CHEAPER_INFERENCE_API_KEY}"
+  model: "cheaperinference/gpt-5.4-mini"
+```
+
 ### Case 4: Claude Code + MiniMax (Anthropic-Compatible Provider)
 
 ```yaml

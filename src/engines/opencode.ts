@@ -14,6 +14,7 @@ const OPENCODE_PROVIDER_ENV: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
   requesty: 'REQUESTY_API_KEY',
+  cheaperinference: 'CHEAPER_INFERENCE_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
   mistral: 'MISTRAL_API_KEY',
@@ -464,6 +465,24 @@ export class OpenCodeEngine implements AgentEngine {
           if (ids?.length) return ids.sort();
         } catch {
           /* try next endpoint */
+        }
+      }
+    }
+    // Cheaper Inference: list the account's text chat models from /v1/models (key required).
+    // IDs are returned with the `cheaperinference/` prefix so they can be passed to /model as-is.
+    if (provider === 'cheaperinference') {
+      const key = process.env.CHEAPER_INFERENCE_API_KEY;
+      if (key) {
+        try {
+          const resp = await fetch('https://api.cheaperinference.com/v1/models', {
+            headers: { authorization: `Bearer ${key}` },
+            signal: AbortSignal.timeout(10_000),
+          });
+          const data = (await resp.json()) as { data?: Array<{ id: string; type?: string }> };
+          const ids = data.data?.filter((m) => !m.type || m.type === 'text').map((m) => `cheaperinference/${m.id}`);
+          if (ids?.length) return ids.sort();
+        } catch {
+          /* fallback to CLI */
         }
       }
     }

@@ -93,6 +93,11 @@ describe('provider-env', () => {
       expect(env.REQUESTY_API_KEY).toBe('rqsty-test');
     });
 
+    it('maps cheaperinference prefix to CHEAPER_INFERENCE_API_KEY', () => {
+      const env = openCodeProviderEnv({ apiKey: 'ci-test' }, 'cheaperinference/gpt-5.4-mini');
+      expect(env.CHEAPER_INFERENCE_API_KEY).toBe('ci-test');
+    });
+
     it('maps baseUrl to OPENAI_BASE_URL', () => {
       const env = openCodeProviderEnv({ baseUrl: 'https://api.example.com' });
       expect(env.OPENAI_BASE_URL).toBe('https://api.example.com');
@@ -353,6 +358,14 @@ describe('provider-presets', () => {
     expect(config!.baseUrl).toBe('https://router.requesty.ai/v1');
     expect(config!.model).toBe('anthropic/claude-sonnet-4-5');
     expect(config!.apiKey).toBe('${REQUESTY_API_KEY}');
+  });
+
+  it('createProviderFromPreset returns config for cheaperinference preset', () => {
+    const config = createProviderFromPreset('cheaperinference');
+    expect(config).toBeDefined();
+    expect(config!.baseUrl).toBe('https://api.cheaperinference.com/v1');
+    expect(config!.model).toBe('gpt-5.4-mini');
+    expect(config!.apiKey).toBe('${CHEAPER_INFERENCE_API_KEY}');
   });
 
   it('createProviderFromPreset returns undefined for unknown preset', () => {

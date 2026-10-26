@@ -963,6 +963,12 @@ describe('resolveOpenCodeEnv', () => {
     });
   });
 
+  it('cheaperinference model → CHEAPER_INFERENCE_API_KEY', () => {
+    expect(resolveOpenCodeEnv('cheaperinference/gpt-5.4-mini', 'ci-key')).toEqual({
+      CHEAPER_INFERENCE_API_KEY: 'ci-key',
+    });
+  });
+
   it('google model → GOOGLE_GENERATIVE_AI_API_KEY', () => {
     expect(resolveOpenCodeEnv('google/gemini-2.5-pro', 'gkey')).toEqual({ GOOGLE_GENERATIVE_AI_API_KEY: 'gkey' });
   });
@@ -1237,6 +1243,17 @@ describe('ensureOpenCodeConfig', () => {
     expect(config.provider.requesty).toEqual({
       options: { apiKey: '{env:REQUESTY_API_KEY}' },
       models: { 'openai/gpt-4o-mini': {} },
+    });
+  });
+
+  it('registers provider block for cheaperinference model', async () => {
+    await ensureOpenCodeConfig(workspace, 'cheaperinference/gpt-5.4-mini');
+
+    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    expect(config.provider.cheaperinference).toEqual({
+      options: { apiKey: '{env:CHEAPER_INFERENCE_API_KEY}' },
+      models: { 'gpt-5.4-mini': {} },
     });
   });
 
@@ -2109,5 +2126,35 @@ describe('OpenCodeEngine.listModels requesty', () => {
       'requesty/openai/gpt-4o-mini',
     ]);
     expect(fetchSpy.mock.calls[1][0]).toBe('https://router.requesty.ai/v1/models');
+  });
+});
+
+describe('OpenCodeEngine.listModels cheaperinference', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.CHEAPER_INFERENCE_API_KEY;
+  });
+
+  it('lists text chat models from the Cheaper Inference endpoint', async () => {
+    process.env.CHEAPER_INFERENCE_API_KEY = 'ci_live_test';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: 'gpt-5.4-mini', type: 'text' },
+            { id: 'claude-sonnet-5', type: 'text' },
+            { id: 'text-embedding-3-small', type: 'embedding' },
+          ],
+        }),
+      ),
+    );
+
+    const engine = new OpenCodeEngine();
+
+    await expect(engine.listModels({ model: 'cheaperinference/gpt-5.4-mini' })).resolves.toEqual([
+      'cheaperinference/claude-sonnet-5',
+      'cheaperinference/gpt-5.4-mini',
+    ]);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.cheaperinference.com/v1/models');
   });
 });
