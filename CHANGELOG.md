@@ -1,3 +1,10 @@
+# [0.52.0](https://github.com/0xranx/golembot/compare/v0.51.1...v0.52.0) (2026-10-31)
+
+
+### Features
+
+* **provider:** add Opper preset and OpenCode provider mapping ([7581584](https://github.com/0xranx/golembot/commit/7581584e23b465dfda6af7a64a95472e72ac311f))
+
 ## [0.51.1](https://github.com/0xranx/golembot/compare/v0.51.0...v0.51.1) (2026-10-25)
 
 
