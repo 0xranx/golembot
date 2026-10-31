@@ -263,6 +263,7 @@ OpenCode supports 75+ LLM Providers; the authentication method depends on the ch
 | Google | `GOOGLE_GENERATIVE_AI_API_KEY` | `google/gemini-2.5-pro` |
 | OpenRouter | `OPENROUTER_API_KEY` | `openrouter/anthropic/claude-sonnet-4-5` |
 | Requesty | `REQUESTY_API_KEY` | `requesty/openai/gpt-4o-mini` |
+| Opper | `OPPER_API_KEY` | `opper/claude-sonnet-4-6` |
 | Amazon Bedrock | `AWS_*` series | `amazon-bedrock/...` |
 
 **Difference from Cursor/Claude Code**: Cursor only needs `CURSOR_API_KEY`, Claude Code only needs `ANTHROPIC_API_KEY`. Because OpenCode supports multiple Providers, you must set the environment variable **corresponding to the chosen Provider**. When integrating with GolemBot's `InvokeOpts.apiKey`, you need to know the target Provider to set the correct environment variable name.

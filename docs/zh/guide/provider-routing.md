@@ -182,6 +182,17 @@ provider:
   model: "requesty/openai/gpt-4o-mini"
 ```
 
+Opper 用法相同，前缀为 `opper`（在 https://platform.opper.ai 获取 Key）：
+
+```yaml
+provider:
+  baseUrl: "https://api.opper.ai/v3/compat"
+  apiKey: "${OPPER_API_KEY}"
+  model: "opper/claude-sonnet-4-6"
+```
+
+同一个 Opper Base URL 也提供 Anthropic Messages API，Claude Code 可以直接使用，配置 `model: "claude-sonnet-4-6"` 即可。
+
 ### 案例 4：Claude Code + MiniMax（Anthropic 兼容 Provider）
 
 ```yaml

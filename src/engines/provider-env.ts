@@ -60,6 +60,7 @@ const OPENCODE_PROVIDER_ENV: Record<string, string> = {
   openai: 'OPENAI_API_KEY',
   openrouter: 'OPENROUTER_API_KEY',
   requesty: 'REQUESTY_API_KEY',
+  opper: 'OPPER_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
   mistral: 'MISTRAL_API_KEY',

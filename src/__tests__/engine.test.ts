@@ -963,6 +963,12 @@ describe('resolveOpenCodeEnv', () => {
     });
   });
 
+  it('opper model → OPPER_API_KEY', () => {
+    expect(resolveOpenCodeEnv('opper/claude-sonnet-4-6', 'op-key')).toEqual({
+      OPPER_API_KEY: 'op-key',
+    });
+  });
+
   it('google model → GOOGLE_GENERATIVE_AI_API_KEY', () => {
     expect(resolveOpenCodeEnv('google/gemini-2.5-pro', 'gkey')).toEqual({ GOOGLE_GENERATIVE_AI_API_KEY: 'gkey' });
   });
@@ -1237,6 +1243,17 @@ describe('ensureOpenCodeConfig', () => {
     expect(config.provider.requesty).toEqual({
       options: { apiKey: '{env:REQUESTY_API_KEY}' },
       models: { 'openai/gpt-4o-mini': {} },
+    });
+  });
+
+  it('registers provider block for opper model', async () => {
+    await ensureOpenCodeConfig(workspace, 'opper/claude-sonnet-4-6');
+
+    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    expect(config.provider.opper).toEqual({
+      options: { apiKey: '{env:OPPER_API_KEY}' },
+      models: { 'claude-sonnet-4-6': {} },
     });
   });
 
@@ -2109,5 +2126,35 @@ describe('OpenCodeEngine.listModels requesty', () => {
       'requesty/openai/gpt-4o-mini',
     ]);
     expect(fetchSpy.mock.calls[1][0]).toBe('https://router.requesty.ai/v1/models');
+  });
+});
+
+describe('OpenCodeEngine.listModels opper', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('lists pooled chat models from the Opper public catalogue', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          models: [
+            { model: 'gpt-5.4-mini', type: 'llm', pooled: true },
+            { model: 'claude-sonnet-4-6', type: 'llm', pooled: true },
+            { model: 'claude-sonnet-4-6', type: 'llm', pooled: true },
+            { model: 'claude-sonnet-4-6-eu', type: 'llm', pooled: false },
+            { model: 'text-embedding-3-small', type: 'embedding', pooled: true },
+          ],
+        }),
+      ),
+    );
+
+    const engine = new OpenCodeEngine();
+
+    await expect(engine.listModels({ model: 'opper/claude-sonnet-4-6' })).resolves.toEqual([
+      'opper/claude-sonnet-4-6',
+      'opper/gpt-5.4-mini',
+    ]);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.opper.ai/v3/models?limit=2000');
   });
 });
