@@ -27,11 +27,35 @@ export interface GolemServer extends HttpServer {
   forceClose(): void;
 }
 
+/** Largest request body the server will buffer. Without a cap, every chunk of
+ *  every request is retained until the stream ends; a body past V8's maximum
+ *  string length (536,870,888 characters) makes the `toString` below throw
+ *  ERR_STRING_TOO_LONG inside the stream's 'end' callback, where no route's
+ *  try/catch can see it, and the process exits. */
+const MAX_BODY_BYTES = 16 * 1024 * 1024;
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+    let received = 0;
+    let tooLarge = false;
+    req.on('data', (c: Buffer) => {
+      if (tooLarge) return;
+      received += c.length;
+      if (received > MAX_BODY_BYTES) {
+        tooLarge = true;
+        chunks.length = 0;
+        const err = new Error(`Request body exceeds ${MAX_BODY_BYTES} bytes`) as Error & { statusCode: number };
+        err.statusCode = 413;
+        reject(err);
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      if (tooLarge) return;
+      resolve(Buffer.concat(chunks).toString('utf-8'));
+    });
     req.on('error', reject);
   });
 }
@@ -39,6 +63,16 @@ function readBody(req: IncomingMessage): Promise<string> {
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
+}
+
+/** Answer a rejected body read: 413 when readBody refused an oversized body,
+ *  the route's existing 400 for anything else (a JSON syntax error). */
+function replyBodyError(res: ServerResponse, err: unknown): void {
+  if ((err as { statusCode?: number } | null)?.statusCode === 413) {
+    json(res, 413, { error: (err as Error).message });
+    return;
+  }
+  json(res, 400, { error: 'Invalid JSON body' });
 }
 
 /** Reload all tasks from the store into the scheduler after a CUD operation. */
@@ -129,8 +163,8 @@ export function createGolemServer(
       };
       try {
         body = JSON.parse(await readBody(req));
-      } catch {
-        json(res, 400, { error: 'Invalid JSON body' });
+      } catch (err) {
+        replyBodyError(res, err);
         return;
       }
 
@@ -269,8 +303,8 @@ export function createGolemServer(
       let body: { command?: string; arguments?: string; sessionKey?: string };
       try {
         body = JSON.parse(await readBody(req));
-      } catch {
-        json(res, 400, { error: 'Invalid JSON body' });
+      } catch (err) {
+        replyBodyError(res, err);
         return;
       }
 
@@ -332,8 +366,8 @@ export function createGolemServer(
       try {
         const raw = await readBody(req);
         if (raw.trim()) body = JSON.parse(raw);
-      } catch {
-        json(res, 400, { error: 'Invalid JSON body' });
+      } catch (err) {
+        replyBodyError(res, err);
         return;
       }
 
@@ -348,8 +382,8 @@ export function createGolemServer(
       try {
         const raw = await readBody(req);
         if (raw.trim()) body = JSON.parse(raw);
-      } catch {
-        json(res, 400, { error: 'Invalid JSON body' });
+      } catch (err) {
+        replyBodyError(res, err);
         return;
       }
 
@@ -374,12 +408,11 @@ export function createGolemServer(
         json(res, 503, { error: 'Config editing not available (no working directory)' });
         return;
       }
-      const raw = await readBody(req);
       let patch: Record<string, unknown>;
       try {
-        patch = JSON.parse(raw);
-      } catch {
-        json(res, 400, { error: 'Invalid JSON body' });
+        patch = JSON.parse(await readBody(req));
+      } catch (err) {
+        replyBodyError(res, err);
         return;
       }
       if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
@@ -420,8 +453,8 @@ export function createGolemServer(
       let body: Record<string, unknown>;
       try {
         body = JSON.parse(await readBody(req));
-      } catch {
-        json(res, 400, { error: 'Invalid JSON body' });
+      } catch (err) {
+        replyBodyError(res, err);
         return;
       }
       if (!body.name || !body.schedule || !body.prompt) {
@@ -475,8 +508,8 @@ export function createGolemServer(
         let body: Record<string, unknown>;
         try {
           body = JSON.parse(await readBody(req));
-        } catch {
-          json(res, 400, { error: 'Invalid JSON body' });
+        } catch (err) {
+          replyBodyError(res, err);
           return;
         }
         const ok = await cronCtx.taskStore.updateTask(taskId, body as any);
@@ -513,8 +546,8 @@ export function createGolemServer(
       let body: { channel: string; chatId: string; text: string };
       try {
         body = JSON.parse(await readBody(req));
-      } catch {
-        json(res, 400, { error: 'Invalid JSON body' });
+      } catch (err) {
+        replyBodyError(res, err);
         return;
       }
       if (!body.channel || !body.chatId || !body.text) {
