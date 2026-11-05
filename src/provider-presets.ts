@@ -76,6 +76,14 @@ export const providerPresets: ProviderPreset[] = [
     description: 'Opper EU-hosted AI gateway (700+ models). One base URL for OpenAI and Anthropic clients.',
   },
   {
+    name: 'atlascloud',
+    displayName: 'Atlas Cloud',
+    baseUrl: 'https://api.atlascloud.ai/v1',
+    defaultModel: 'deepseek-ai/deepseek-v4-flash',
+    apiKeyEnvVar: 'ATLASCLOUD_API_KEY',
+    description: 'Atlas Cloud OpenAI-compatible gateway (DeepSeek, Kimi, GLM, Qwen and more).',
+  },
+  {
     name: 'siliconflow',
     displayName: 'SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',

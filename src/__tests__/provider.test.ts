@@ -363,6 +363,14 @@ describe('provider-presets', () => {
     expect(config!.apiKey).toBe('my-key');
   });
 
+  it('createProviderFromPreset returns config for atlascloud preset', () => {
+    const config = createProviderFromPreset('atlascloud');
+    expect(config).toBeDefined();
+    expect(config!.baseUrl).toBe('https://api.atlascloud.ai/v1');
+    expect(config!.model).toBe('deepseek-ai/deepseek-v4-flash');
+    expect(config!.apiKey).toBe('${ATLASCLOUD_API_KEY}');
+  });
+
   it('createProviderFromPreset returns config for requesty preset', () => {
     const config = createProviderFromPreset('requesty');
     expect(config).toBeDefined();
