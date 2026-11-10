@@ -91,6 +91,7 @@ export async function runDoctor(dir: string): Promise<void> {
       'OPENROUTER_API_KEY',
       'REQUESTY_API_KEY',
       'OPPER_API_KEY',
+      'UBERLLM_API_KEY',
       'OPENAI_API_KEY',
     ];
     const foundVars = keyVars.filter((k) => !!process.env[k]);

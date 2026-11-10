@@ -193,6 +193,17 @@ provider:
 
 同一个 Opper Base URL 也提供 Anthropic Messages API，Claude Code 可以直接使用，配置 `model: "claude-sonnet-4-6"` 即可。
 
+UberLLM 用法相同，前缀为 `uberllm`（在 https://uberllm.dev/signup 获取 Key）。它不在 models.dev 中，GolemBot 会在 `opencode.json` 中将其写为自定义 OpenAI 兼容 Provider：
+
+```yaml
+provider:
+  baseUrl: "https://api.uberllm.dev/v1"
+  apiKey: "${UBERLLM_API_KEY}"
+  model: "uberllm/deepseek/deepseek-v4.1-flash"
+```
+
+同一个 Key 也可通过 UberLLM 的 Anthropic 兼容接口用于 Claude Code：配置 `baseUrl: "https://api.uberllm.dev"`（不带 `/v1`），模型如 `model: "anthropic/claude-sonnet-4.6"`。
+
 ### 案例 4：Claude Code + MiniMax（Anthropic 兼容 Provider）
 
 ```yaml

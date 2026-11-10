@@ -308,6 +308,7 @@ Checks:
 | `OPENROUTER_API_KEY` | OpenCode engine | OpenRouter API key |
 | `REQUESTY_API_KEY` | OpenCode engine | Requesty API key |
 | `OPPER_API_KEY` | OpenCode engine | Opper API key |
+| `UBERLLM_API_KEY` | OpenCode engine | UberLLM API key |
 | `GOLEM_TOKEN` | serve / gateway | HTTP bearer auth token |
 | `GOLEM_PORT` | serve / gateway | HTTP port override |
 

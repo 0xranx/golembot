@@ -61,6 +61,7 @@ const OPENCODE_PROVIDER_ENV: Record<string, string> = {
   openrouter: 'OPENROUTER_API_KEY',
   requesty: 'REQUESTY_API_KEY',
   opper: 'OPPER_API_KEY',
+  uberllm: 'UBERLLM_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
   mistral: 'MISTRAL_API_KEY',
