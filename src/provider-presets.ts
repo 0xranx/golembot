@@ -76,6 +76,14 @@ export const providerPresets: ProviderPreset[] = [
     description: 'Opper EU-hosted AI gateway (700+ models). One base URL for OpenAI and Anthropic clients.',
   },
   {
+    name: 'uberllm',
+    displayName: 'UberLLM',
+    baseUrl: 'https://api.uberllm.dev/v1',
+    defaultModel: 'anthropic/claude-sonnet-4.6',
+    apiKeyEnvVar: 'UBERLLM_API_KEY',
+    description: 'UberLLM gateway (OpenAI-compatible). Anthropic-compatible base: https://api.uberllm.dev.',
+  },
+  {
     name: 'siliconflow',
     displayName: 'SiliconFlow',
     baseUrl: 'https://api.siliconflow.cn/v1',

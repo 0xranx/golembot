@@ -98,6 +98,11 @@ describe('provider-env', () => {
       expect(env.OPPER_API_KEY).toBe('op-test');
     });
 
+    it('maps uberllm prefix to UBERLLM_API_KEY', () => {
+      const env = openCodeProviderEnv({ apiKey: 'ul-test' }, 'uberllm/deepseek/deepseek-v4.1-flash');
+      expect(env.UBERLLM_API_KEY).toBe('ul-test');
+    });
+
     it('maps baseUrl to OPENAI_BASE_URL', () => {
       const env = openCodeProviderEnv({ baseUrl: 'https://api.example.com' });
       expect(env.OPENAI_BASE_URL).toBe('https://api.example.com');
@@ -377,6 +382,14 @@ describe('provider-presets', () => {
     expect(config!.baseUrl).toBe('https://api.opper.ai/v3/compat');
     expect(config!.model).toBe('claude-sonnet-4-6');
     expect(config!.apiKey).toBe('${OPPER_API_KEY}');
+  });
+
+  it('createProviderFromPreset returns config for uberllm preset', () => {
+    const config = createProviderFromPreset('uberllm');
+    expect(config).toBeDefined();
+    expect(config!.baseUrl).toBe('https://api.uberllm.dev/v1');
+    expect(config!.model).toBe('anthropic/claude-sonnet-4.6');
+    expect(config!.apiKey).toBe('${UBERLLM_API_KEY}');
   });
 
   it('createProviderFromPreset returns undefined for unknown preset', () => {

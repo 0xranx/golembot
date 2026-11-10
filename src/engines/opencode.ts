@@ -15,11 +15,18 @@ const OPENCODE_PROVIDER_ENV: Record<string, string> = {
   openrouter: 'OPENROUTER_API_KEY',
   requesty: 'REQUESTY_API_KEY',
   opper: 'OPPER_API_KEY',
+  uberllm: 'UBERLLM_API_KEY',
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
   'amazon-bedrock': 'AWS_ACCESS_KEY_ID',
   mistral: 'MISTRAL_API_KEY',
   deepseek: 'DEEPSEEK_API_KEY',
   groq: 'GROQ_API_KEY',
+};
+
+// Providers OpenCode does not know from models.dev. They are written to opencode.json as custom
+// OpenAI-compatible providers (npm package + baseURL), see https://opencode.ai/docs/providers/#custom-provider
+const OPENCODE_CUSTOM_PROVIDERS: Record<string, { name: string; baseURL: string }> = {
+  uberllm: { name: 'UberLLM', baseURL: 'https://api.uberllm.dev/v1' },
 };
 
 export function resolveOpenCodeEnv(model?: string, apiKey?: string): Record<string, string> {
@@ -203,6 +210,14 @@ export async function ensureOpenCodeConfig(
       // not from OPENAI_BASE_URL, so a configured Requesty baseUrl (e.g. the EU router)
       // has to be written here to take effect.
       if (providerPrefix === 'requesty' && providerBaseUrl) options.baseURL = providerBaseUrl;
+      // Custom providers need the AI SDK package and a baseURL; a configured provider.baseUrl wins.
+      const custom = OPENCODE_CUSTOM_PROVIDERS[providerPrefix];
+      if (custom) {
+        if (!entry.npm) entry.npm = '@ai-sdk/openai-compatible';
+        if (!entry.name) entry.name = custom.name;
+        if (providerBaseUrl) options.baseURL = providerBaseUrl;
+        else if (!options.baseURL) options.baseURL = custom.baseURL;
+      }
       entry.options = options;
 
       // Register the model; preserve existing model-level config if present
@@ -476,6 +491,18 @@ export class OpenCodeEngine implements AgentEngine {
         const data = (await resp.json()) as { models?: Array<{ model: string; type?: string; pooled?: boolean }> };
         const ids = data.models?.filter((m) => m.pooled && m.type === 'llm').map((m) => `opper/${m.model}`);
         if (ids?.length) return [...new Set(ids)].sort();
+      } catch {
+        /* fallback to CLI */
+      }
+    }
+    // UberLLM: public /v1/models, no auth needed (chat models only by default).
+    // IDs are returned with the `uberllm/` prefix so they can be passed to /model as-is.
+    if (provider === 'uberllm') {
+      try {
+        const resp = await fetch('https://api.uberllm.dev/v1/models', { signal: AbortSignal.timeout(10_000) });
+        const data = (await resp.json()) as { data?: Array<{ id: string; available?: boolean }> };
+        const ids = data.data?.filter((m) => m.available !== false).map((m) => `uberllm/${m.id}`);
+        if (ids?.length) return ids.sort();
       } catch {
         /* fallback to CLI */
       }

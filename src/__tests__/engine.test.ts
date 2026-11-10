@@ -969,6 +969,12 @@ describe('resolveOpenCodeEnv', () => {
     });
   });
 
+  it('uberllm model → UBERLLM_API_KEY', () => {
+    expect(resolveOpenCodeEnv('uberllm/deepseek/deepseek-v4.1-flash', 'ul-key')).toEqual({
+      UBERLLM_API_KEY: 'ul-key',
+    });
+  });
+
   it('google model → GOOGLE_GENERATIVE_AI_API_KEY', () => {
     expect(resolveOpenCodeEnv('google/gemini-2.5-pro', 'gkey')).toEqual({ GOOGLE_GENERATIVE_AI_API_KEY: 'gkey' });
   });
@@ -1254,6 +1260,35 @@ describe('ensureOpenCodeConfig', () => {
     expect(config.provider.opper).toEqual({
       options: { apiKey: '{env:OPPER_API_KEY}' },
       models: { 'claude-sonnet-4-6': {} },
+    });
+  });
+
+  it('registers a custom OpenAI-compatible provider block for uberllm model', async () => {
+    await ensureOpenCodeConfig(workspace, 'uberllm/deepseek/deepseek-v4.1-flash');
+
+    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    expect(config.provider.uberllm).toEqual({
+      npm: '@ai-sdk/openai-compatible',
+      name: 'UberLLM',
+      options: { apiKey: '{env:UBERLLM_API_KEY}', baseURL: 'https://api.uberllm.dev/v1' },
+      models: { 'deepseek/deepseek-v4.1-flash': {} },
+    });
+  });
+
+  it('writes provider.baseUrl into uberllm options.baseURL', async () => {
+    await ensureOpenCodeConfig(
+      workspace,
+      'uberllm/deepseek/deepseek-v4.1-flash',
+      undefined,
+      'https://uberllm.example.com/v1',
+    );
+
+    const raw = await readFile(join(workspace, 'opencode.json'), 'utf-8');
+    const config = JSON.parse(raw);
+    expect(config.provider.uberllm.options).toEqual({
+      apiKey: '{env:UBERLLM_API_KEY}',
+      baseURL: 'https://uberllm.example.com/v1',
     });
   });
 
@@ -2156,5 +2191,33 @@ describe('OpenCodeEngine.listModels opper', () => {
       'opper/gpt-5.4-mini',
     ]);
     expect(fetchSpy.mock.calls[0][0]).toBe('https://api.opper.ai/v3/models?limit=2000');
+  });
+});
+
+describe('OpenCodeEngine.listModels uberllm', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('lists available chat models from the public UberLLM catalogue', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            { id: 'deepseek/deepseek-v4.1-flash', available: true },
+            { id: 'anthropic/claude-sonnet-4.6', available: true },
+            { id: 'example/retired-model', available: false },
+          ],
+        }),
+      ),
+    );
+
+    const engine = new OpenCodeEngine();
+
+    await expect(engine.listModels({ model: 'uberllm/deepseek/deepseek-v4.1-flash' })).resolves.toEqual([
+      'uberllm/anthropic/claude-sonnet-4.6',
+      'uberllm/deepseek/deepseek-v4.1-flash',
+    ]);
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.uberllm.dev/v1/models');
   });
 });

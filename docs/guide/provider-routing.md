@@ -193,6 +193,17 @@ provider:
 
 The same Opper base URL also serves the Anthropic Messages API, so Claude Code can use it unchanged with `model: "claude-sonnet-4-6"`.
 
+UberLLM works the same way with the `uberllm` prefix (get a key at https://uberllm.dev/signup). It is not in models.dev, so GolemBot writes it to `opencode.json` as a custom OpenAI-compatible provider:
+
+```yaml
+provider:
+  baseUrl: "https://api.uberllm.dev/v1"
+  apiKey: "${UBERLLM_API_KEY}"
+  model: "uberllm/deepseek/deepseek-v4.1-flash"
+```
+
+The same key works for Claude Code through UberLLM's Anthropic-compatible endpoint: use `baseUrl: "https://api.uberllm.dev"` (without `/v1`) and a model such as `model: "anthropic/claude-sonnet-4.6"`.
+
 ### Case 4: Claude Code + MiniMax (Anthropic-Compatible Provider)
 
 ```yaml
