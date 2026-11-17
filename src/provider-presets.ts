@@ -83,6 +83,15 @@ export const providerPresets: ProviderPreset[] = [
     apiKeyEnvVar: 'SILICONFLOW_API_KEY',
     description: 'SiliconFlow API',
   },
+  {
+    name: 'teapotrouter',
+    displayName: 'TeaPotRouter',
+    baseUrl: 'https://api.teapotrouter.com',
+    defaultModel: 'claude-sonnet-5-5',
+    availableModels: ['claude-sonnet-5-5', 'claude-fable-5-2', 'claude-opus-5-5', 'claude-haiku-4-5', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra'],
+    apiKeyEnvVar: 'TEAPOTROUTER_API_KEY',
+    description: 'TeaPotRouter API-key gateway: Anthropic protocol at the root path, OpenAI-compatible at /v1, one key for both.',
+  },
 ];
 
 /** Create a ProviderConfig from a preset name */
